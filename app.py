@@ -123,6 +123,8 @@ def classify_activity(active_window, ociosidade, user_department_id=None):
     except Exception as e:
         print(f"❌ Erro na classificação automática: {e}")
         print(f"🔍 Tipo do erro: {type(e)}")
+        # Fazer rollback em caso de erro na transação
+        conn.rollback()
 
     # Classificação baseada em ociosidade
     print(f"🔍 Usando classificação por ociosidade: {ociosidade}")
@@ -156,10 +158,14 @@ def token_required(f):
         try:
             # Verificar se a conexão está ativa
             cursor.execute('SELECT 1;')
-        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, psycopg2.InternalError):
             # Reconectar se necessário
+            conn.rollback()
             conn = get_db_connection()
             cursor = conn.cursor()
+        except psycopg2.errors.InFailedSqlTransaction:
+            # Rollback da transação falhada
+            conn.rollback()
 
         try:
             # Verificar se o usuário ainda existe
