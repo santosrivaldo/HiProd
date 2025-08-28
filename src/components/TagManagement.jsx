@@ -6,6 +6,7 @@ const TagManagement = () => {
   const { user } = useAuth()
   const [tags, setTags] = useState([])
   const [filteredTags, setFilteredTags] = useState([])
+  const [departments, setDepartments] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingTag, setEditingTag] = useState(null)
   const [showForm, setShowForm] = useState(false)
@@ -14,7 +15,6 @@ const TagManagement = () => {
   const [filterCategoria, setFilterCategoria] = useState('')
   const [filterProdutividade, setFilterProdutividade] = useState('')
   const [filterAtivo, setFilterAtivo] = useState('')
-  const [departments, setDepartments] = useState([])
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
@@ -24,6 +24,14 @@ const TagManagement = () => {
     palavras_chave: [''],
     tier: 3
   })
+  const [editForm, setEditForm] = useState({
+    nome: '',
+    descricao: '',
+    cor: '#6B7280',
+    produtividade: 'neutral',
+    departamento_id: '',
+    palavras_chave: []
+  });
 
   useEffect(() => {
     fetchData()
@@ -65,7 +73,7 @@ const TagManagement = () => {
       }
 
       if (editingTag) {
-        await api.put(`/tags/${editingTag.id}`, dataToSend)
+        await api.put(`/tags/${editingTag}`, dataToSend)
         setMessage('Tag atualizada com sucesso!')
       } else {
         await api.post('/tags', dataToSend)
@@ -83,18 +91,32 @@ const TagManagement = () => {
   }
 
   const handleEdit = (tag) => {
-    setEditingTag(tag)
-    setFormData({
+    setEditingTag(tag.id);
+    setEditForm({
       nome: tag.nome,
       descricao: tag.descricao || '',
-      cor: tag.cor,
+      cor: tag.cor || '#6B7280',
       produtividade: tag.produtividade,
       departamento_id: tag.departamento_id || '',
-      palavras_chave: tag.palavras_chave?.map(p => p.palavra) || [''],
-      tier: tag.tier || 3
-    })
-    setShowForm(true)
-  }
+      palavras_chave: tag.palavras_chave || []
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    setLoading(true);
+    try {
+      await api.put(`/tags/${editingTag}`, editForm);
+      setEditingTag(null);
+      fetchData(); // Refetch data after successful submission
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Erro ao atualizar tag:', error);
+      setMessage('Erro ao atualizar tag: ' + (error.response?.data?.message || error.message))
+      setTimeout(() => setMessage(''), 5000)
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDelete = async (tagId) => {
     if (window.confirm('Tem certeza que deseja excluir esta tag?')) {
@@ -475,9 +497,21 @@ const TagManagement = () => {
                           className="w-4 h-4 rounded-full mr-3"
                           style={{ backgroundColor: tag.cor }}
                         />
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {tag.nome}
-                        </div>
+                        {editingTag === tag.id ? (
+                          <div className="space-y-2 w-full">
+                            <input
+                              type="text"
+                              value={editForm.nome}
+                              onChange={(e) => setEditForm({...editForm, nome: e.target.value})}
+                              className="px-2 py-1 border rounded text-sm font-medium"
+                              placeholder="Nome da tag"
+                            />
+                          </div>
+                        ) : (
+                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                            {tag.nome}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -511,10 +545,70 @@ const TagManagement = () => {
                       {tag.departamento_nome || 'Global'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {tag.palavras_chave?.length > 0 
-                        ? tag.palavras_chave.map(p => p.palavra).join(', ')
-                        : 'Nenhuma'
-                      }
+                      <div className="flex flex-wrap gap-2">
+                        {editingTag === tag.id ? (
+                          <div className="space-y-2 w-full">
+                            {editForm.palavras_chave.map((palavra, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={palavra.palavra}
+                                  onChange={(e) => {
+                                    const newPalavras = [...editForm.palavras_chave];
+                                    newPalavras[idx].palavra = e.target.value;
+                                    setEditForm({...editForm, palavras_chave: newPalavras});
+                                  }}
+                                  className="px-2 py-1 border rounded text-xs"
+                                  placeholder="Palavra-chave"
+                                />
+                                <input
+                                  type="number"
+                                  value={palavra.peso}
+                                  onChange={(e) => {
+                                    const newPalavras = [...editForm.palavras_chave];
+                                    newPalavras[idx].peso = parseInt(e.target.value) || 1;
+                                    setEditForm({...editForm, palavras_chave: newPalavras});
+                                  }}
+                                  className="px-2 py-1 border rounded text-xs w-16"
+                                  placeholder="Peso"
+                                  min="1"
+                                  max="10"
+                                />
+                                <button
+                                  onClick={() => {
+                                    const newPalavras = editForm.palavras_chave.filter((_, i) => i !== idx);
+                                    setEditForm({...editForm, palavras_chave: newPalavras});
+                                  }}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => {
+                                const newPalavras = [...editForm.palavras_chave, { palavra: '', peso: 1 }];
+                                setEditForm({...editForm, palavras_chave: newPalavras});
+                              }}
+                              className="text-sm text-blue-500 hover:text-blue-700"
+                            >
+                              + Adicionar palavra-chave
+                            </button>
+                          </div>
+                        ) : (
+                          tag.palavras_chave?.map((palavra, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800"
+                            >
+                              {palavra.palavra}
+                              <span className="ml-1 px-1 bg-blue-200 rounded text-xs">
+                                {palavra.peso}
+                              </span>
+                            </span>
+                          ))
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -526,19 +620,40 @@ const TagManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleEdit(tag)}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleDelete(tag.id)}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900"
-                        >
-                          Excluir
-                        </button>
+                      <div className="flex items-center space-x-2">
+                        {editingTag === tag.id ? (
+                          <>
+                            <button
+                              onClick={handleSaveEdit}
+                              className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                              disabled={loading}
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => setEditingTag(null)}
+                              className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleEdit(tag)}
+                              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleDelete(tag.id)}
+                              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                              disabled={loading}
+                            >
+                              Excluir
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

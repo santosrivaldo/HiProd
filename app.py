@@ -828,6 +828,9 @@ def add_activity(current_user):
             ))
 
             activity_id = db.cursor.fetchone()[0]
+            
+            # Fazer commit da atividade antes de tentar classificar
+            db.conn.commit()
 
             try:
                 categoria, produtividade = classify_activity_with_tags(active_window, ociosidade, user_department_id, activity_id)
