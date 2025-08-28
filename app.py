@@ -103,6 +103,8 @@ def classify_activity(active_window, ociosidade):
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        global conn, cursor
+        
         token = request.headers.get('Authorization')
         if not token:
             return jsonify({'message': 'Token não fornecido!'}), 401
@@ -117,11 +119,22 @@ def token_required(f):
         if not user_id:
             return jsonify({'message': 'Token inválido ou expirado!'}), 401
         
-        # Verificar se o usuário ainda existe
-        cursor.execute("SELECT * FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
-        current_user = cursor.fetchone()
-        if not current_user:
-            return jsonify({'message': 'Usuário não encontrado!'}), 401
+        try:
+            # Verificar se a conexão está ativa
+            cursor.execute('SELECT 1;')
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            # Reconectar se necessário
+            conn = get_db_connection()
+            cursor = conn.cursor()
+        
+        try:
+            # Verificar se o usuário ainda existe
+            cursor.execute("SELECT * FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
+            current_user = cursor.fetchone()
+            if not current_user:
+                return jsonify({'message': 'Usuário não encontrado!'}), 401
+        except psycopg2.ProgrammingError:
+            return jsonify({'message': 'Erro interno do servidor!'}), 500
         
         return f(current_user, *args, **kwargs)
     return decorated
@@ -477,19 +490,33 @@ def get_all_activities(current_user):
 @app.route('/usuarios', methods=['GET'])
 @token_required
 def get_users(current_user):
+    global conn, cursor
+    
     try:
-        cursor.execute("SELECT id, nome, created_at FROM usuarios;")
+        # Verificar se a conexão está ativa
+        cursor.execute('SELECT 1;')
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Reconectar se necessário
+        conn = get_db_connection()
+        cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT id, nome, created_at FROM usuarios WHERE ativo = TRUE;")
         usuarios = cursor.fetchall()
         
+        result = []
         if usuarios:
-            result = [{'usuario_id': str(usuario[0]), 'usuario': usuario[1], 'created_at': usuario[2].isoformat() if usuario[2] else None} for usuario in usuarios]
-        else:
-            result = []
+            for usuario in usuarios:
+                result.append({
+                    'usuario_id': str(usuario[0]), 
+                    'usuario': usuario[1], 
+                    'created_at': usuario[2].isoformat() if usuario[2] else None
+                })
             
         return jsonify(result)
     except psycopg2.Error as e:
         print(f"Erro na consulta de usuários: {e}")
-        return jsonify({'message': 'Erro ao buscar usuários'}), 500
+        return jsonify([]), 200  # Return empty array instead of error
 
 # Rota para obter categorias
 @app.route('/categorias', methods=['GET'])
