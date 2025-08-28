@@ -54,7 +54,7 @@ export default function Dashboard() {
     try {
       setLoading(true)
       const [activitiesRes, usuariosRes, departamentosRes] = await Promise.all([
-        api.get('/atividades'),
+        api.get('/atividades?agrupar=true'),
         api.get('/usuarios-monitorados'),
         api.get('/departamentos')
       ])

@@ -24,6 +24,7 @@ export default function ActivityManagement() {
   const [userFilter, setUserFilter] = useState('all')
   const [users, setUsers] = useState([])
   const [message, setMessage] = useState('')
+  const [agruparAtividades, setAgruparAtividades] = useState(true)
 
   useEffect(() => {
     fetchData()
@@ -36,7 +37,7 @@ export default function ActivityManagement() {
   const fetchData = async () => {
     try {
       const [activitiesRes, usersRes] = await Promise.all([
-        api.get('/atividades'),
+        api.get(`/atividades?limite=500&agrupar=${agruparAtividades}`),
         api.get('/usuarios')
       ])
 
@@ -258,12 +259,26 @@ export default function ActivityManagement() {
           <div className="text-sm text-gray-500 dark:text-gray-400">
             Mostrando {filteredActivities.length} de {activities.length} registros
           </div>
-          <button
-            onClick={fetchData}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700"
-          >
-            Atualizar
-          </button>
+          <div className="flex items-center space-x-4">
+            <label className="flex items-center text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={agruparAtividades}
+                onChange={(e) => {
+                  setAgruparAtividades(e.target.checked)
+                  fetchData() // Re-fetch data when grouping preference changes
+                }}
+                className="form-checkbox h-4 w-4 text-indigo-600"
+              />
+              <span className="ml-2">Agrupar Atividades</span>
+            </label>
+            <button
+              onClick={fetchData}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700"
+            >
+              Atualizar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -295,6 +310,11 @@ export default function ActivityManagement() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Classificação
                   </th>
+                  {agruparAtividades && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                      Eventos Agrupados
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Ações
                   </th>
@@ -360,7 +380,14 @@ export default function ActivityManagement() {
                           </select>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {agruparAtividades && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                            {activity.eventos_agrupados || 1} eventos
+                          </span>
+                        </td>
+                      )}
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button 
                           onClick={() => deleteActivity(activity.id)}
                           className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
