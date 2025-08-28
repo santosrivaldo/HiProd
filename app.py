@@ -163,7 +163,7 @@ def token_required(f):
             conn.rollback()
             conn = get_db_connection()
             cursor = conn.cursor()
-        except psycopg2.errors.InFailedSqlTransaction:
+        except (psycopg2.errors.InFailedSqlTransaction, psycopg2.ProgrammingError):
             # Rollback da transação falhada
             conn.rollback()
 
@@ -173,7 +173,9 @@ def token_required(f):
             current_user = cursor.fetchone()
             if not current_user:
                 return jsonify({'message': 'Usuário não encontrado!'}), 401
-        except psycopg2.ProgrammingError:
+        except (psycopg2.ProgrammingError, psycopg2.errors.InFailedSqlTransaction) as e:
+            conn.rollback()
+            print(f"Erro ao verificar usuário: {e}")
             return jsonify({'message': 'Erro interno do servidor!'}), 500
 
         return f(current_user, *args, **kwargs)
@@ -549,17 +551,36 @@ def register():
 # Rota para login
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.json
+    global conn, cursor
+    
+    try:
+        # Verificar se a conexão está ativa e fazer rollback se necessário
+        try:
+            cursor.execute('SELECT 1;')
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, psycopg2.InternalError):
+            # Reconectar se necessário
+            conn.rollback()
+            conn = get_db_connection()
+            cursor = conn.cursor()
+        except psycopg2.errors.InFailedSqlTransaction:
+            # Rollback da transação falhada
+            conn.rollback()
+        
+        data = request.json
 
-    if not data or 'nome' not in data or 'senha' not in data:
-        return jsonify({'message': 'Nome de usuário e senha são obrigatórios!'}), 400
+        if not data or 'nome' not in data or 'senha' not in data:
+            return jsonify({'message': 'Nome de usuário e senha são obrigatórios!'}), 400
 
-    nome = data['nome'].strip()
-    senha = data['senha']
+        nome = data['nome'].strip()
+        senha = data['senha']
 
-    # Buscar usuário
-    cursor.execute("SELECT * FROM usuarios WHERE nome = %s;", (nome,))
-    usuario = cursor.fetchone()
+        # Buscar usuário
+        cursor.execute("SELECT * FROM usuarios WHERE nome = %s;", (nome,))
+        usuario = cursor.fetchone()
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro na preparação do login: {e}")
+        return jsonify({'message': 'Erro interno do servidor'}), 500
 
     if not usuario:
         return jsonify({'message': 'Credenciais inválidas!'}), 401
@@ -1111,7 +1132,19 @@ def get_monitored_users(current_user):
 @app.route('/departamentos', methods=['GET'])
 @token_required
 def get_departments(current_user):
+    global conn, cursor
+    
     try:
+        # Verificar e reconectar se necessário
+        try:
+            cursor.execute('SELECT 1;')
+        except (psycopg2.OperationalError, psycopg2.InterfaceError, psycopg2.InternalError):
+            conn.rollback()
+            conn = get_db_connection()
+            cursor = conn.cursor()
+        except (psycopg2.errors.InFailedSqlTransaction, psycopg2.ProgrammingError):
+            conn.rollback()
+        
         cursor.execute("SELECT * FROM departamentos WHERE ativo = TRUE ORDER BY nome;")
         departamentos = cursor.fetchall()
         result = []
@@ -1139,9 +1172,11 @@ def get_departments(current_user):
 
         return jsonify(result)
     except psycopg2.Error as e:
+        conn.rollback()
         print(f"Erro na consulta de departamentos: {e}")
         return jsonify([]), 200
     except Exception as e:
+        conn.rollback()
         print(f"Erro inesperado em departamentos: {e}")
         return jsonify([]), 200
 
