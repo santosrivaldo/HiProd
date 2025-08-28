@@ -603,57 +603,95 @@ def verify_token_route():
 @app.route('/atividade', methods=['POST'])
 @token_required
 def add_activity(current_user):
-    data = request.json
+    try:
+        data = request.json
+        print(f"📥 Recebendo atividade: {data}")
 
-    # Valida se os dados necessários estão presentes
-    if 'ociosidade' not in data or 'active_window' not in data or 'usuario_monitorado_id' not in data:
-        return jsonify({'message': 'Dados inválidos! usuario_monitorado_id, ociosidade e active_window são obrigatórios!'}), 400
+        # Valida se os dados necessários estão presentes
+        if not data:
+            print("❌ Nenhum dado JSON recebido")
+            return jsonify({'message': 'Dados JSON não fornecidos!'}), 400
 
-    usuario_monitorado_id = data['usuario_monitorado_id']
+        required_fields = ['ociosidade', 'active_window', 'usuario_monitorado_id']
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            print(f"❌ Campos obrigatórios ausentes: {missing_fields}")
+            return jsonify({
+                'message': f'Campos obrigatórios ausentes: {", ".join(missing_fields)}',
+                'required_fields': required_fields,
+                'received_data': list(data.keys()) if data else []
+            }), 400
 
-    # Verificar se o usuário monitorado existe
-    cursor.execute("SELECT * FROM usuarios_monitorados WHERE id = %s AND ativo = TRUE;", (usuario_monitorado_id,))
-    usuario_monitorado = cursor.fetchone()
-    if not usuario_monitorado:
-        return jsonify({'message': 'Usuário monitorado não encontrado ou inativo!'}), 404
+        usuario_monitorado_id = data['usuario_monitorado_id']
 
-    # Obter departamento do usuário monitorado
-    user_department_id = usuario_monitorado[2] if usuario_monitorado and len(usuario_monitorado) > 2 else None
+        # Verificar se o usuário monitorado existe
+        cursor.execute("SELECT * FROM usuarios_monitorados WHERE id = %s AND ativo = TRUE;", (usuario_monitorado_id,))
+        usuario_monitorado = cursor.fetchone()
+        if not usuario_monitorado:
+            print(f"❌ Usuário monitorado não encontrado: ID {usuario_monitorado_id}")
+            return jsonify({'message': f'Usuário monitorado não encontrado ou inativo! ID: {usuario_monitorado_id}'}), 404
 
-    # Classificar atividade automaticamente
-    ociosidade = int(data.get('ociosidade', 0))
-    active_window = data['active_window']
-    categoria, produtividade = classify_activity(active_window, ociosidade, user_department_id)
+        print(f"✅ Usuário monitorado encontrado: {usuario_monitorado[1]} (ID: {usuario_monitorado[0]})")
 
-    # Extrair informações adicionais
-    titulo_janela = data.get('titulo_janela', active_window)
-    duracao = data.get('duracao', 0)
-    ip_address = request.remote_addr
-    user_agent = request.headers.get('User-Agent', '')
+        # Obter departamento do usuário monitorado
+        user_department_id = usuario_monitorado[2] if usuario_monitorado and len(usuario_monitorado) > 2 else None
 
-    # Adiciona a atividade no PostgreSQL
-    cursor.execute('''
-        INSERT INTO atividades 
-        (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
-         horario, duracao, ip_address, user_agent) 
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
-        RETURNING id;
-    ''', (
-        usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
-        categoria, produtividade, datetime.now(timezone.utc), 
-        duracao, ip_address, user_agent
-    ))
+        # Classificar atividade automaticamente
+        ociosidade = int(data.get('ociosidade', 0))
+        active_window = data['active_window']
+        categoria, produtividade = classify_activity(active_window, ociosidade, user_department_id)
 
-    activity_id = cursor.fetchone()[0]
-    conn.commit()
+        print(f"🏷️ Atividade classificada: {categoria} ({produtividade})")
 
-    return jsonify({
-        'message': 'Atividade salva com sucesso!',
-        'id': activity_id,
-        'categoria': categoria,
-        'produtividade': produtividade,
-        'usuario_monitorado': usuario_monitorado[1]  # Nome do usuário monitorado
-    }), 201
+        # Extrair informações adicionais
+        titulo_janela = data.get('titulo_janela', active_window)
+        duracao = data.get('duracao', 0)
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent', '')
+
+        # Adiciona a atividade no PostgreSQL
+        cursor.execute('''
+            INSERT INTO atividades 
+            (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
+             horario, duracao, ip_address, user_agent) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
+            RETURNING id;
+        ''', (
+            usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
+            categoria, produtividade, datetime.now(timezone.utc), 
+            duracao, ip_address, user_agent
+        ))
+
+        activity_id = cursor.fetchone()[0]
+        conn.commit()
+
+        response_data = {
+            'message': 'Atividade salva com sucesso!',
+            'id': activity_id,
+            'categoria': categoria,
+            'produtividade': produtividade,
+            'usuario_monitorado': usuario_monitorado[1],  # Nome do usuário monitorado
+            'usuario_monitorado_id': usuario_monitorado_id,
+            'horario': datetime.now(timezone.utc).isoformat()
+        }
+
+        print(f"✅ Atividade salva: ID {activity_id}")
+        return jsonify(response_data), 201
+
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(f"❌ Erro de banco de dados ao salvar atividade: {e}")
+        return jsonify({
+            'message': 'Erro interno do servidor - banco de dados',
+            'error': str(e)
+        }), 500
+    except Exception as e:
+        print(f"❌ Erro inesperado ao salvar atividade: {e}")
+        return jsonify({
+            'message': 'Erro interno do servidor',
+            'error': str(e)
+        }), 500
 
 # Rota para obter atividades (protegida)
 @app.route('/atividades', methods=['GET'])
