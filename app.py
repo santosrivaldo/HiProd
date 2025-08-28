@@ -626,7 +626,11 @@ def add_activity(current_user):
         usuario_monitorado_id = data['usuario_monitorado_id']
 
         # Verificar se o usuário monitorado existe
-        cursor.execute("SELECT * FROM usuarios_monitorados WHERE id = %s AND ativo = TRUE;", (usuario_monitorado_id,))
+        cursor.execute("""
+            SELECT id, nome, departamento_id, cargo, ativo, created_at, updated_at 
+            FROM usuarios_monitorados 
+            WHERE id = %s AND ativo = TRUE;
+        """, (usuario_monitorado_id,))
         usuario_monitorado = cursor.fetchone()
         if not usuario_monitorado:
             print(f"❌ Usuário monitorado não encontrado: ID {usuario_monitorado_id}")
@@ -634,7 +638,7 @@ def add_activity(current_user):
 
         print(f"✅ Usuário monitorado encontrado: {usuario_monitorado[1]} (ID: {usuario_monitorado[0]})")
 
-        # Obter departamento do usuário monitorado
+        # Obter departamento do usuário monitorado (índice 2 é departamento_id)
         user_department_id = usuario_monitorado[2] if usuario_monitorado and len(usuario_monitorado) > 2 else None
 
         # Classificar atividade automaticamente
