@@ -791,7 +791,6 @@ def get_activities(current_user):
             FROM atividades a 
             JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
             LEFT JOIN departamentos d ON um.departamento_id = d.id
-            WHERE 1=1
         '''
         params = []
         conditions = ['um.ativo = TRUE']
