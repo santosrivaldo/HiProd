@@ -1167,10 +1167,10 @@ def update_activity(current_user, activity_id):
     # Atualizar a atividade
     query = f'''
         UPDATE atividades 
-        SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
+        SET {', '.join(update_fields)}
         WHERE id = %s;
     '''
-    update_values.extend([activity_id])
+    update_values.append(activity_id)
 
     cursor.execute(query, update_values)
     conn.commit()
