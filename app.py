@@ -413,7 +413,8 @@ def init_db():
             departamento_id INTEGER REFERENCES departamentos(id),
             ativo BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(nome, departamento_id)
         );
         ''')
 
@@ -495,179 +496,210 @@ def init_db():
         print("📋 Inserindo dados padrão...")
 
         # Categorias globais padrão
-        cursor.execute('''
-        INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao, is_global)
-        VALUES
-            ('Sistema', 'neutral', '#6B7280', 'Atividades do sistema operacional', TRUE),
-            ('Entretenimento', 'nonproductive', '#EF4444', 'Jogos, vídeos e redes sociais', TRUE),
-            ('Navegação Geral', 'neutral', '#F59E0B', 'Navegação web geral', TRUE)
-        ON CONFLICT (nome, departamento_id) DO NOTHING;
-        ''')
+        cursor.execute("SELECT COUNT(*) FROM categorias_app WHERE is_global = TRUE;")
+        global_categories_count = cursor.fetchone()[0]
+        
+        if global_categories_count == 0:
+            cursor.execute('''
+            INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao, is_global)
+            VALUES
+                ('Sistema', 'neutral', '#6B7280', 'Atividades do sistema operacional', TRUE),
+                ('Entretenimento', 'nonproductive', '#EF4444', 'Jogos, vídeos e redes sociais', TRUE),
+                ('Navegação Geral', 'neutral', '#F59E0B', 'Navegação web geral', TRUE);
+            ''')
+        else:
+            print("⏭️ Categorias globais já existem, pulando inserção...")
 
         # Categorias específicas por departamento
-        cursor.execute('''
-        INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao)
-        SELECT 'Desenvolvimento', d.id, 'productive', '#10B981', 'Atividades de programação e desenvolvimento'
-        FROM departamentos d WHERE d.nome = 'TI'
-        UNION ALL
-        SELECT 'DevOps', d.id, 'productive', '#059669', 'Atividades de infraestrutura e deploy'
-        FROM departamentos d WHERE d.nome = 'TI'
-        UNION ALL
-        SELECT 'Design Gráfico', d.id, 'productive', '#7C3AED', 'Criação de materiais visuais'
-        FROM departamentos d WHERE d.nome = 'Marketing'
-        UNION ALL
-        SELECT 'Mídias Sociais', d.id, 'productive', '#EC4899', 'Gestão de redes sociais'
-        FROM departamentos d WHERE d.nome = 'Marketing'
-        UNION ALL
-        SELECT 'Recrutamento', d.id, 'productive', '#DC2626', 'Atividades de contratação'
-        FROM departamentos d WHERE d.nome = 'RH'
-        UNION ALL
-        SELECT 'Treinamento', d.id, 'productive', '#EA580C', 'Capacitação de funcionários'
-        FROM departamentos d WHERE d.nome = 'RH'
-        UNION ALL
-        SELECT 'Análise Financeira', d.id, 'productive', '#DC2626', 'Análise de dados financeiros'
-        FROM departamentos d WHERE d.nome = 'Financeiro'
-        UNION ALL
-        SELECT 'Vendas Online', d.id, 'productive', '#8B5CF6', 'Vendas através de plataformas digitais'
-        FROM departamentos d WHERE d.nome = 'Vendas'
-        ON CONFLICT (nome, departamento_id) DO NOTHING;
-        ''')
+        cursor.execute("SELECT COUNT(*) FROM categorias_app WHERE departamento_id IS NOT NULL;")
+        dept_categories_count = cursor.fetchone()[0]
+        
+        if dept_categories_count == 0:
+            cursor.execute('''
+            INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao)
+            SELECT 'Desenvolvimento', d.id, 'productive', '#10B981', 'Atividades de programação e desenvolvimento'
+            FROM departamentos d WHERE d.nome = 'TI'
+            UNION ALL
+            SELECT 'DevOps', d.id, 'productive', '#059669', 'Atividades de infraestrutura e deploy'
+            FROM departamentos d WHERE d.nome = 'TI'
+            UNION ALL
+            SELECT 'Design Gráfico', d.id, 'productive', '#7C3AED', 'Criação de materiais visuais'
+            FROM departamentos d WHERE d.nome = 'Marketing'
+            UNION ALL
+            SELECT 'Mídias Sociais', d.id, 'productive', '#EC4899', 'Gestão de redes sociais'
+            FROM departamentos d WHERE d.nome = 'Marketing'
+            UNION ALL
+            SELECT 'Recrutamento', d.id, 'productive', '#DC2626', 'Atividades de contratação'
+            FROM departamentos d WHERE d.nome = 'RH'
+            UNION ALL
+            SELECT 'Treinamento', d.id, 'productive', '#EA580C', 'Capacitação de funcionários'
+            FROM departamentos d WHERE d.nome = 'RH'
+            UNION ALL
+            SELECT 'Análise Financeira', d.id, 'productive', '#DC2626', 'Análise de dados financeiros'
+            FROM departamentos d WHERE d.nome = 'Financeiro'
+            UNION ALL
+            SELECT 'Vendas Online', d.id, 'productive', '#8B5CF6', 'Vendas através de plataformas digitais'
+            FROM departamentos d WHERE d.nome = 'Vendas';
+            ''')
+        else:
+            print("⏭️ Categorias de departamento já existem, pulando inserção...")
 
         # Regras de classificação padrão por departamento
-        cursor.execute('''
-        INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo)
-        SELECT 'Visual Studio Code', c.id, c.departamento_id, 'application_name'
-        FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'IntelliJ', c.id, c.departamento_id, 'application_name'
-        FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'PyCharm', c.id, c.departamento_id, 'application_name'
-        FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'Docker', c.id, c.departamento_id, 'application_name'
-        FROM categorias_app c WHERE c.nome = 'DevOps' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'Photoshop', c.id, c.departamento_id, 'application_name'
-        FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'Figma', c.id, c.departamento_id, 'window_title'
-        FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'LinkedIn', c.id, c.departamento_id, 'window_title'
-        FROM categorias_app c WHERE c.nome = 'Recrutamento' AND c.departamento_id IS NOT NULL
-        UNION ALL
-        SELECT 'Excel', c.id, c.departamento_id, 'application_name'
-        FROM categorias_app c WHERE c.nome = 'Análise Financeira' AND c.departamento_id IS NOT NULL
-        ON CONFLICT DO NOTHING;
-        ''')
+        cursor.execute("SELECT COUNT(*) FROM regras_classificacao WHERE departamento_id IS NOT NULL;")
+        dept_rules_count = cursor.fetchone()[0]
+        
+        if dept_rules_count == 0:
+            cursor.execute('''
+            INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo)
+            SELECT 'Visual Studio Code', c.id, c.departamento_id, 'application_name'
+            FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'IntelliJ', c.id, c.departamento_id, 'application_name'
+            FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'PyCharm', c.id, c.departamento_id, 'application_name'
+            FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'Docker', c.id, c.departamento_id, 'application_name'
+            FROM categorias_app c WHERE c.nome = 'DevOps' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'Photoshop', c.id, c.departamento_id, 'application_name'
+            FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'Figma', c.id, c.departamento_id, 'window_title'
+            FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'LinkedIn', c.id, c.departamento_id, 'window_title'
+            FROM categorias_app c WHERE c.nome = 'Recrutamento' AND c.departamento_id IS NOT NULL
+            UNION ALL
+            SELECT 'Excel', c.id, c.departamento_id, 'application_name'
+            FROM categorias_app c WHERE c.nome = 'Análise Financeira' AND c.departamento_id IS NOT NULL;
+            ''')
+        else:
+            print("⏭️ Regras de departamento já existem, pulando inserção...")
 
         # Regras globais
-        cursor.execute('''
-        INSERT INTO regras_classificacao (pattern, categoria_id, tipo)
-        SELECT 'YouTube', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
-        UNION ALL
-        SELECT 'Docker Desktop', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
-        UNION ALL
-        SELECT 'Windows Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
-        UNION ALL
-        SELECT 'File Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
-        UNION ALL
-        SELECT 'Google Chrome', id, 'window_title' FROM categorias_app WHERE nome = 'Navegação Geral' AND is_global = TRUE
-        UNION ALL
-        SELECT 'WhatsApp', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
-        UNION ALL
-        SELECT 'Replit', id, 'window_title' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
-        ON CONFLICT DO NOTHING;
-        ''')
+        cursor.execute("SELECT COUNT(*) FROM regras_classificacao WHERE departamento_id IS NULL;")
+        global_rules_count = cursor.fetchone()[0]
+        
+        if global_rules_count == 0:
+            cursor.execute('''
+            INSERT INTO regras_classificacao (pattern, categoria_id, tipo)
+            SELECT 'YouTube', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
+            UNION ALL
+            SELECT 'Docker Desktop', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+            UNION ALL
+            SELECT 'Windows Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+            UNION ALL
+            SELECT 'File Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+            UNION ALL
+            SELECT 'Google Chrome', id, 'window_title' FROM categorias_app WHERE nome = 'Navegação Geral' AND is_global = TRUE
+            UNION ALL
+            SELECT 'WhatsApp', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
+            UNION ALL
+            SELECT 'Replit', id, 'window_title' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE;
+            ''')
+        else:
+            print("⏭️ Regras globais já existem, pulando inserção...")
 
         # Inserir tags padrão
         print("📋 Inserindo tags padrão...")
-        cursor.execute('''
-        INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor)
-        SELECT 'Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', d.id, '#10B981'
-        FROM departamentos d WHERE d.nome = 'TI'
-        UNION ALL
-        SELECT 'Banco de Dados', 'Administração e desenvolvimento de bancos de dados', 'productive', d.id, '#059669'
-        FROM departamentos d WHERE d.nome = 'TI'
-        UNION ALL
-        SELECT 'Design UI/UX', 'Design de interfaces e experiência do usuário', 'productive', d.id, '#8B5CF6'
-        FROM departamentos d WHERE d.nome = 'Marketing'
-        UNION ALL
-        SELECT 'Análise de Dados', 'Análise e processamento de dados', 'productive', d.id, '#3B82F6'
-        FROM departamentos d WHERE d.nome = 'Financeiro'
-        UNION ALL
-        SELECT 'Redes Sociais', 'Gerenciamento de mídias sociais', 'productive', d.id, '#EC4899'
-        FROM departamentos d WHERE d.nome = 'Marketing'
-        UNION ALL
-        SELECT 'Entretenimento', 'Atividades de entretenimento e lazer', 'nonproductive', NULL, '#EF4444'
-        UNION ALL
-        SELECT 'Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', NULL, '#06B6D4'
-        UNION ALL
-        SELECT 'Navegação Web', 'Navegação geral na internet', 'neutral', NULL, '#F59E0B'
-        ON CONFLICT (nome, departamento_id) DO NOTHING;
-        ''')
+        # Primeiro, verificar se já existem tags para evitar duplicatas
+        cursor.execute("SELECT COUNT(*) FROM tags;")
+        tag_count = cursor.fetchone()[0]
+        
+        if tag_count == 0:
+            cursor.execute('''
+            INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor)
+            SELECT 'Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', d.id, '#10B981'
+            FROM departamentos d WHERE d.nome = 'TI'
+            UNION ALL
+            SELECT 'Banco de Dados', 'Administração e desenvolvimento de bancos de dados', 'productive', d.id, '#059669'
+            FROM departamentos d WHERE d.nome = 'TI'
+            UNION ALL
+            SELECT 'Design UI/UX', 'Design de interfaces e experiência do usuário', 'productive', d.id, '#8B5CF6'
+            FROM departamentos d WHERE d.nome = 'Marketing'
+            UNION ALL
+            SELECT 'Análise de Dados', 'Análise e processamento de dados', 'productive', d.id, '#3B82F6'
+            FROM departamentos d WHERE d.nome = 'Financeiro'
+            UNION ALL
+            SELECT 'Redes Sociais', 'Gerenciamento de mídias sociais', 'productive', d.id, '#EC4899'
+            FROM departamentos d WHERE d.nome = 'Marketing'
+            UNION ALL
+            SELECT 'Entretenimento', 'Atividades de entretenimento e lazer', 'nonproductive', NULL, '#EF4444'
+            UNION ALL
+            SELECT 'Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', NULL, '#06B6D4'
+            UNION ALL
+            SELECT 'Navegação Web', 'Navegação geral na internet', 'neutral', NULL, '#F59E0B';
+            ''')
+        else:
+            print("⏭️ Tags já existem, pulando inserção...")
 
         # Inserir palavras-chave para as tags
-        cursor.execute('''
-        INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
-        SELECT t.id, 'Visual Studio Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-        UNION ALL
-        SELECT t.id, 'VS Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-        UNION ALL
-        SELECT t.id, 'GitHub', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-        UNION ALL
-        SELECT t.id, 'React', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-        UNION ALL
-        SELECT t.id, 'Node.js', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-        UNION ALL
-        SELECT t.id, 'Replit', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-        UNION ALL
-        SELECT t.id, 'pgAdmin', 5 FROM tags t WHERE t.nome = 'Banco de Dados'
-        UNION ALL
-        SELECT t.id, 'PostgreSQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
-        UNION ALL
-        SELECT t.id, 'MySQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
-        UNION ALL
-        SELECT t.id, 'MongoDB', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
-        UNION ALL
-        SELECT t.id, 'Figma', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
-        UNION ALL
-        SELECT t.id, 'Adobe XD', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
-        UNION ALL
-        SELECT t.id, 'Photoshop', 4 FROM tags t WHERE t.nome = 'Design UI/UX'
-        UNION ALL
-        SELECT t.id, 'Excel', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
-        UNION ALL
-        SELECT t.id, 'Power BI', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
-        UNION ALL
-        SELECT t.id, 'Instagram', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
-        UNION ALL
-        SELECT t.id, 'Facebook', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
-        UNION ALL
-        SELECT t.id, 'LinkedIn', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
-        UNION ALL
-        SELECT t.id, 'YouTube', 3 FROM tags t WHERE t.nome = 'Entretenimento'
-        UNION ALL
-        SELECT t.id, 'Netflix', 3 FROM tags t WHERE t.nome = 'Entretenimento'
-        UNION ALL
-        SELECT t.id, 'Spotify', 3 FROM tags t WHERE t.nome = 'Entretenimento'
-        UNION ALL
-        SELECT t.id, 'WhatsApp', 4 FROM tags t WHERE t.nome = 'Comunicação'
-        UNION ALL
-        SELECT t.id, 'Slack', 4 FROM tags t WHERE t.nome = 'Comunicação'
-        UNION ALL
-        SELECT t.id, 'Teams', 4 FROM tags t WHERE t.nome = 'Comunicação'
-        UNION ALL
-        SELECT t.id, 'Zoom', 4 FROM tags t WHERE t.nome = 'Comunicação'
-        UNION ALL
-        SELECT t.id, 'Google Chrome', 3 FROM tags t WHERE t.nome = 'Navegação Web'
-        UNION ALL
-        SELECT t.id, 'Firefox', 3 FROM tags t WHERE t.nome = 'Navegação Web'
-        UNION ALL
-        SELECT t.id, 'Edge', 3 FROM tags t WHERE t.nome = 'Navegação Web'
-        ON CONFLICT DO NOTHING;
-        ''')
+        cursor.execute("SELECT COUNT(*) FROM tag_palavras_chave;")
+        keyword_count = cursor.fetchone()[0]
+        
+        if keyword_count == 0:
+            cursor.execute('''
+            INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+            SELECT t.id, 'Visual Studio Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+            UNION ALL
+            SELECT t.id, 'VS Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+            UNION ALL
+            SELECT t.id, 'GitHub', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+            UNION ALL
+            SELECT t.id, 'React', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+            UNION ALL
+            SELECT t.id, 'Node.js', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+            UNION ALL
+            SELECT t.id, 'Replit', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+            UNION ALL
+            SELECT t.id, 'pgAdmin', 5 FROM tags t WHERE t.nome = 'Banco de Dados'
+            UNION ALL
+            SELECT t.id, 'PostgreSQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
+            UNION ALL
+            SELECT t.id, 'MySQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
+            UNION ALL
+            SELECT t.id, 'MongoDB', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
+            UNION ALL
+            SELECT t.id, 'Figma', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
+            UNION ALL
+            SELECT t.id, 'Adobe XD', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
+            UNION ALL
+            SELECT t.id, 'Photoshop', 4 FROM tags t WHERE t.nome = 'Design UI/UX'
+            UNION ALL
+            SELECT t.id, 'Excel', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
+            UNION ALL
+            SELECT t.id, 'Power BI', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
+            UNION ALL
+            SELECT t.id, 'Instagram', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
+            UNION ALL
+            SELECT t.id, 'Facebook', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
+            UNION ALL
+            SELECT t.id, 'LinkedIn', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
+            UNION ALL
+            SELECT t.id, 'YouTube', 3 FROM tags t WHERE t.nome = 'Entretenimento'
+            UNION ALL
+            SELECT t.id, 'Netflix', 3 FROM tags t WHERE t.nome = 'Entretenimento'
+            UNION ALL
+            SELECT t.id, 'Spotify', 3 FROM tags t WHERE t.nome = 'Entretenimento'
+            UNION ALL
+            SELECT t.id, 'WhatsApp', 4 FROM tags t WHERE t.nome = 'Comunicação'
+            UNION ALL
+            SELECT t.id, 'Slack', 4 FROM tags t WHERE t.nome = 'Comunicação'
+            UNION ALL
+            SELECT t.id, 'Teams', 4 FROM tags t WHERE t.nome = 'Comunicação'
+            UNION ALL
+            SELECT t.id, 'Zoom', 4 FROM tags t WHERE t.nome = 'Comunicação'
+            UNION ALL
+            SELECT t.id, 'Google Chrome', 3 FROM tags t WHERE t.nome = 'Navegação Web'
+            UNION ALL
+            SELECT t.id, 'Firefox', 3 FROM tags t WHERE t.nome = 'Navegação Web'
+            UNION ALL
+            SELECT t.id, 'Edge', 3 FROM tags t WHERE t.nome = 'Navegação Web';
+            ''')
+        else:
+            print("⏭️ Palavras-chave já existem, pulando inserção...")
 
         # Não inserir usuários monitorados de demonstração
         # Os usuários serão criados automaticamente conforme necessário
