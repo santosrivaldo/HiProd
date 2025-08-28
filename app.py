@@ -192,14 +192,25 @@ def token_required(f):
 
         try:
             # Verificar se o usuário ainda existe
-            cursor.execute("SELECT * FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
+            cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
             current_user = cursor.fetchone()
             if not current_user:
+                print(f"❌ Usuário não encontrado para token: {user_id}")
                 return jsonify({'message': 'Usuário não encontrado!'}), 401
-        except (psycopg2.ProgrammingError, psycopg2.errors.InFailedSqlTransaction) as e:
+        except (psycopg2.ProgrammingError, psycopg2.errors.InFailedSqlTransaction, psycopg2.Error) as e:
             conn.rollback()
             print(f"Erro ao verificar usuário: {e}")
-            return jsonify({'message': 'Erro interno do servidor!'}), 500
+            # Try to reconnect and verify again
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
+                current_user = cursor.fetchone()
+                if not current_user:
+                    return jsonify({'message': 'Usuário não encontrado após reconexão!'}), 401
+            except Exception as reconnect_error:
+                print(f"Erro na reconexão: {reconnect_error}")
+                return jsonify({'message': 'Erro interno do servidor!'}), 500
 
         return f(current_user, *args, **kwargs)
     return decorated
@@ -1400,9 +1411,9 @@ def get_departments(current_user):
                 result.append({
                     'id': dept[0], 
                     'nome': dept[1], 
-                    'descricao': dept[2] if len(dept) > 2 else '',
-                    'cor': dept[3] if len(dept) > 3 else '#6B7280', 
-                    'ativo': dept[4] if len(dept) > 4 else True,
+                    'descricao': dept[2] if len(dept) > 2 and dept[2] else '',
+                    'cor': dept[3] if len(dept) > 3 and dept[3] else '#6B7280', 
+                    'ativo': dept[4] if len(dept) > 4 and dept[4] is not None else True,
                     'created_at': created_at_value
                 })
             except (IndexError, AttributeError) as e:
@@ -1413,7 +1424,13 @@ def get_departments(current_user):
     except (psycopg2.Error, psycopg2.ProgrammingError) as e:
         conn.rollback()
         print(f"Erro na consulta de departamentos: {e}")
-        return jsonify([]), 200
+        # Try to reconnect
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            return jsonify([]), 200
+        except:
+            return jsonify([]), 200
     except Exception as e:
         conn.rollback()
         print(f"Erro inesperado em departamentos: {e}")
@@ -1718,8 +1735,13 @@ def get_tags(current_user):
             })
 
         return jsonify(result)
-    except Exception as e:
+    except (psycopg2.Error, psycopg2.ProgrammingError) as e:
+        conn.rollback()
         print(f"Erro ao buscar tags: {e}")
+        return jsonify([]), 200
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro inesperado ao buscar tags: {e}")
         return jsonify([]), 200
 
 @app.route('/tags', methods=['POST'])
