@@ -826,7 +826,16 @@ def add_activity(current_user):
         usuario_monitorado = cursor.fetchone()
         if not usuario_monitorado:
             print(f"❌ Usuário monitorado não encontrado: ID {usuario_monitorado_id}")
-            return jsonify({'message': f'Usuário monitorado não encontrado ou inativo! ID: {usuario_monitorado_id}'}), 404
+            
+            # Listar usuários existentes para debug
+            cursor.execute("SELECT id, nome FROM usuarios_monitorados WHERE ativo = TRUE;")
+            usuarios_existentes = cursor.fetchall()
+            print(f"🔍 Usuários monitorados existentes: {usuarios_existentes}")
+            
+            return jsonify({
+                'message': f'Usuário monitorado não encontrado ou inativo! ID: {usuario_monitorado_id}',
+                'suggestion': 'Verifique se o usuário existe ou recrie-o através do endpoint /usuarios-monitorados'
+            }), 404
 
         print(f"✅ Usuário monitorado encontrado: {usuario_monitorado[1]} (ID: {usuario_monitorado[0]})")
         print(f"🔍 Debug - usuário monitorado tuple: {usuario_monitorado}")

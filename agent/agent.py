@@ -84,6 +84,22 @@ def get_usuario_monitorado_id(usuario_nome):
         print(f"❌ Erro ao consultar usuário monitorado: {e}")
         return None
 
+def verificar_usuario_ativo(usuario_id):
+    """Verifica se o usuário monitorado ainda existe e está ativo"""
+    try:
+        resp = requests.get(USUARIOS_MONITORADOS_URL,
+                            headers=get_headers())
+        if resp.status_code == 200:
+            usuarios = resp.json()
+            for usuario in usuarios:
+                if usuario.get('id') == usuario_id and usuario.get('ativo', True):
+                    return True
+            return False
+        return False
+    except Exception as e:
+        print(f"❌ Erro ao verificar usuário ativo: {e}")
+        return False
+
 
 def enviar_atividade(registro):
     try:
@@ -96,11 +112,18 @@ def enviar_atividade(registro):
             print("⚠️ Token expirado, renovando...")
             login()
             enviar_atividade(registro)
+        elif resp.status_code == 404 and "Usuário monitorado não encontrado" in resp.text:
+            print(f"❌ Usuário monitorado ID {registro['usuario_monitorado_id']} não encontrado!")
+            print("🔄 Tentando recriar usuário monitorado...")
+            # Não podemos recriar aqui pois não temos o nome, mas podemos marcar para verificação
+            return False
         else:
-            print(
-                f"❌ Erro ao enviar atividade: {resp.status_code} {resp.text}")
+            print(f"❌ Erro ao enviar atividade: {resp.status_code} {resp.text}")
+            return False
     except Exception as e:
         print(f"❌ Erro ao enviar atividade: {e}")
+        return False
+    return True
 
 
 def main():
@@ -109,6 +132,9 @@ def main():
 
     last_usuario_nome = get_logged_user()
     usuario_monitorado_id = get_usuario_monitorado_id(last_usuario_nome)
+    
+    # Contador para verificação periódica do usuário
+    verificacao_contador = 0
 
     last_window_title = ""
     ociosidade = 0
@@ -120,10 +146,21 @@ def main():
         current_window_title = get_active_window_title()
         current_usuario_nome = get_logged_user()
 
+        # Verificar se o nome do usuário mudou
         if current_usuario_nome != last_usuario_nome:
+            print(f"🔄 Usuário do sistema mudou de '{last_usuario_nome}' para '{current_usuario_nome}'")
             last_usuario_nome = current_usuario_nome
-            usuario_monitorado_id = get_usuario_monitorado_id(
-                current_usuario_nome)
+            usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
+            verificacao_contador = 0  # Reset contador
+
+        # Verificar periodicamente se o usuário ainda existe (a cada 10 ciclos = ~100 segundos)
+        verificacao_contador += 1
+        if verificacao_contador >= 10:
+            print(f"🔍 Verificando se usuário {usuario_monitorado_id} ainda existe...")
+            if not verificar_usuario_ativo(usuario_monitorado_id):
+                print(f"⚠️ Usuário {usuario_monitorado_id} não encontrado, recriando...")
+                usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
+            verificacao_contador = 0
 
         if current_window_title != last_window_title:
             ociosidade = 0
@@ -132,13 +169,21 @@ def main():
             ociosidade += 10
 
         if ociosidade % 10 == 0:
-            registro = {
-                'usuario_monitorado_id': usuario_monitorado_id,
-                'ociosidade': ociosidade,
-                'active_window': current_window_title,
-                'horario': datetime.now(tz).isoformat()
-            }
-            registros.append(registro)
+            # Verificar se temos um ID válido antes de criar o registro
+            if usuario_monitorado_id is None:
+                print("⚠️ ID do usuário monitorado é None, tentando recriar...")
+                usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
+                
+            if usuario_monitorado_id is not None:
+                registro = {
+                    'usuario_monitorado_id': usuario_monitorado_id,
+                    'ociosidade': ociosidade,
+                    'active_window': current_window_title,
+                    'horario': datetime.now(tz).isoformat()
+                }
+                registros.append(registro)
+            else:
+                print("❌ Não foi possível obter ID do usuário monitorado, pulando registro...")
 
         if len(registros) >= 6:
             for r in registros:
