@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import psycopg2
@@ -25,7 +24,7 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 # Função para conectar ao banco de dados
 def get_db_connection():
     database_url = os.getenv('DATABASE_URL')
-    
+
     if database_url:
         print(f"Tentando conectar com DATABASE_URL...")
         try:
@@ -84,13 +83,13 @@ def classify_activity(active_window, ociosidade):
     ORDER BY LENGTH(r.pattern) DESC 
     LIMIT 1;
     ''', (active_window,))
-    
+
     result = cursor.fetchone()
-    
+
     if result:
         categoria, produtividade = result
         return categoria, produtividade
-    
+
     # Classificação baseada em ociosidade
     if ociosidade >= 600:  # 10 minutos
         return 'idle', 'nonproductive'
@@ -104,21 +103,21 @@ def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         global conn, cursor
-        
+
         token = request.headers.get('Authorization')
         if not token:
             return jsonify({'message': 'Token não fornecido!'}), 401
-        
+
         try:
             if token.startswith('Bearer '):
                 token = token.split(' ')[1]
         except IndexError:
             return jsonify({'message': 'Formato de token inválido!'}), 401
-        
+
         user_id = verify_token(token)
         if not user_id:
             return jsonify({'message': 'Token inválido ou expirado!'}), 401
-        
+
         try:
             # Verificar se a conexão está ativa
             cursor.execute('SELECT 1;')
@@ -126,7 +125,7 @@ def token_required(f):
             # Reconectar se necessário
             conn = get_db_connection()
             cursor = conn.cursor()
-        
+
         try:
             # Verificar se o usuário ainda existe
             cursor.execute("SELECT * FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
@@ -135,7 +134,7 @@ def token_required(f):
                 return jsonify({'message': 'Usuário não encontrado!'}), 401
         except psycopg2.ProgrammingError:
             return jsonify({'message': 'Erro interno do servidor!'}), 500
-        
+
         return f(current_user, *args, **kwargs)
     return decorated
 
@@ -148,10 +147,10 @@ def init_db():
     except (psycopg2.OperationalError, psycopg2.InterfaceError):
         conn = get_db_connection()
         cursor = conn.cursor()
-    
+
     # Registrar adaptador para UUID
     psycopg2.extras.register_uuid()
-    
+
     # Tabela de usuários
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -161,6 +160,19 @@ def init_db():
         email VARCHAR(255),
         ativo BOOLEAN DEFAULT TRUE,
         ultimo_login TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+
+    # Tabela de usuários monitorados (para login de administradores/operadores)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS usuarios_monitorados (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL UNIQUE,
+        departamento VARCHAR(100),
+        cargo VARCHAR(100),
+        ativo BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -215,6 +227,7 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_categoria ON atividades(categoria);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_nome ON usuarios(nome);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_ativo ON usuarios(ativo);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_monitorados_nome ON usuarios_monitorados(nome);')
 
     # Inserir categorias padrão
     cursor.execute('''
@@ -241,33 +254,43 @@ def init_db():
     ON CONFLICT DO NOTHING;
     ''')
 
+    # Inserir usuários monitorados padrão
+    cursor.execute('''
+    INSERT INTO usuarios_monitorados (nome, departamento, cargo) 
+    VALUES 
+        ('João Silva', 'TI', 'Desenvolvedor'),
+        ('Maria Santos', 'Marketing', 'Analista'),
+        ('Pedro Costa', 'RH', 'Assistente')
+    ON CONFLICT (nome) DO NOTHING;
+    ''')
+
     conn.commit()
 
 # Rota para registro de usuário
 @app.route('/register', methods=['POST'])
 def register():
     data = request.json
-    
+
     if not data or 'nome' not in data or 'senha' not in data:
         return jsonify({'message': 'Nome de usuário e senha são obrigatórios!'}), 400
-    
+
     nome = data['nome'].strip()
     senha = data['senha']
-    
+
     if len(nome) < 3:
         return jsonify({'message': 'Nome de usuário deve ter pelo menos 3 caracteres!'}), 400
-    
+
     if len(senha) < 6:
         return jsonify({'message': 'Senha deve ter pelo menos 6 caracteres!'}), 400
-    
+
     # Verificar se o usuário já existe
     cursor.execute("SELECT * FROM usuarios WHERE nome = %s;", (nome,))
     if cursor.fetchone():
         return jsonify({'message': 'Usuário já existe!'}), 409
-    
+
     # Hash da senha
     hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt())
-    
+
     # Criar novo usuário
     new_user_id = uuid.uuid4()
     cursor.execute(
@@ -275,10 +298,10 @@ def register():
         (new_user_id, nome, hashed_password.decode('utf-8'))
     )
     conn.commit()
-    
+
     # Gerar token
     token = generate_token(new_user_id)
-    
+
     return jsonify({
         'message': 'Usuário criado com sucesso!',
         'usuario_id': str(new_user_id),
@@ -290,20 +313,20 @@ def register():
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json
-    
+
     if not data or 'nome' not in data or 'senha' not in data:
         return jsonify({'message': 'Nome de usuário e senha são obrigatórios!'}), 400
-    
+
     nome = data['nome'].strip()
     senha = data['senha']
-    
+
     # Buscar usuário
     cursor.execute("SELECT * FROM usuarios WHERE nome = %s;", (nome,))
     usuario = cursor.fetchone()
-    
+
     if not usuario:
         return jsonify({'message': 'Credenciais inválidas!'}), 401
-    
+
     # Verificar senha - lidar com diferentes tipos de dados
     senha_hash = usuario[2]
     if isinstance(senha_hash, bool):
@@ -319,17 +342,17 @@ def login():
             senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s;", (senha_hash, usuario[0]))
             conn.commit()
-    
+
     # Verificar senha
     try:
         if not bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8')):
             return jsonify({'message': 'Credenciais inválidas!'}), 401
     except (ValueError, TypeError):
         return jsonify({'message': 'Erro interno do servidor. Tente novamente.'}), 500
-    
+
     # Gerar token
     token = generate_token(usuario[0])
-    
+
     return jsonify({
         'usuario_id': str(usuario[0]),
         'usuario': usuario[1],
@@ -352,7 +375,7 @@ def verify_token_route():
     data = request.json
     if not data or 'token' not in data:
         return jsonify({'valid': False}), 400
-    
+
     user_id = verify_token(data['token'])
     if user_id:
         cursor.execute("SELECT * FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
@@ -363,7 +386,7 @@ def verify_token_route():
                 'usuario_id': str(usuario[0]),
                 'usuario': usuario[1]
             }), 200
-    
+
     return jsonify({'valid': False}), 401
 
 # Rota para adicionar atividade (protegida)
@@ -371,7 +394,7 @@ def verify_token_route():
 @token_required
 def add_activity(current_user):
     data = request.json
-    
+
     # Valida se os dados necessários estão presentes
     if 'ociosidade' not in data or 'active_window' not in data:
         return jsonify({'message': 'Dados inválidos!'}), 400
@@ -380,7 +403,7 @@ def add_activity(current_user):
     ociosidade = int(data.get('ociosidade', 0))
     active_window = data['active_window']
     categoria, produtividade = classify_activity(active_window, ociosidade)
-    
+
     # Extrair informações adicionais
     titulo_janela = data.get('titulo_janela', active_window)
     duracao = data.get('duracao', 0)
@@ -399,10 +422,10 @@ def add_activity(current_user):
         categoria, produtividade, datetime.now(timezone.utc), 
         duracao, ip_address, user_agent
     ))
-    
+
     activity_id = cursor.fetchone()[0]
     conn.commit()
-    
+
     return jsonify({
         'message': 'Atividade salva com sucesso!',
         'id': activity_id,
@@ -415,7 +438,7 @@ def add_activity(current_user):
 @token_required
 def get_activities(current_user):
     global conn, cursor
-    
+
     try:
         # Verificar se a conexão está ativa
         cursor.execute('SELECT 1;')
@@ -423,14 +446,14 @@ def get_activities(current_user):
         # Reconectar se necessário
         conn = get_db_connection()
         cursor = conn.cursor()
-    
+
     try:
         # Parâmetros de filtro
         limite = request.args.get('limite', 100, type=int)
         categoria = request.args.get('categoria')
         data_inicio = request.args.get('data_inicio')
         data_fim = request.args.get('data_fim')
-        
+
         # Construir query base
         query = '''
             SELECT a.id, a.usuario_id, a.ociosidade, a.active_window, a.titulo_janela,
@@ -439,26 +462,26 @@ def get_activities(current_user):
             WHERE a.usuario_id = %s
         '''
         params = [current_user[0]]
-        
+
         # Adicionar filtros
         if categoria:
             query += ' AND a.categoria = %s'
             params.append(categoria)
-        
+
         if data_inicio:
             query += ' AND a.horario >= %s'
             params.append(data_inicio)
-        
+
         if data_fim:
             query += ' AND a.horario <= %s'
             params.append(data_fim)
-        
+
         query += ' ORDER BY a.horario DESC LIMIT %s;'
         params.append(limite)
-        
+
         cursor.execute(query, params)
         atividades = cursor.fetchall()
-        
+
         result = [{
             'id': atividade[0], 
             'usuario_id': str(atividade[1]), 
@@ -471,7 +494,7 @@ def get_activities(current_user):
             'duracao': atividade[8],
             'created_at': atividade[9].isoformat() if atividade[9] else None
         } for atividade in atividades]
-        
+
         return jsonify(result)
     except psycopg2.Error as e:
         print(f"Erro na consulta de atividades: {e}")
@@ -491,7 +514,7 @@ def get_all_activities(current_user):
 @token_required
 def get_users(current_user):
     global conn, cursor
-    
+
     try:
         # Verificar se a conexão está ativa
         cursor.execute('SELECT 1;')
@@ -499,11 +522,11 @@ def get_users(current_user):
         # Reconectar se necessário
         conn = get_db_connection()
         cursor = conn.cursor()
-    
+
     try:
         cursor.execute("SELECT id, nome, created_at FROM usuarios WHERE ativo = TRUE;")
         usuarios = cursor.fetchall()
-        
+
         result = []
         if usuarios:
             for usuario in usuarios:
@@ -512,7 +535,7 @@ def get_users(current_user):
                     'usuario': usuario[1], 
                     'created_at': usuario[2].isoformat() if usuario[2] else None
                 })
-            
+
         return jsonify(result)
     except psycopg2.Error as e:
         print(f"Erro na consulta de usuários: {e}")
@@ -539,18 +562,18 @@ def get_categories(current_user):
 @token_required
 def create_category(current_user):
     data = request.json
-    
+
     if not data or 'nome' not in data or 'tipo_produtividade' not in data:
         return jsonify({'message': 'Nome e tipo de produtividade são obrigatórios!'}), 400
-    
+
     nome = data['nome'].strip()
     tipo = data['tipo_produtividade']
     cor = data.get('cor', '#6B7280')
     descricao = data.get('descricao', '')
-    
+
     if tipo not in ['productive', 'nonproductive', 'neutral']:
         return jsonify({'message': 'Tipo de produtividade inválido!'}), 400
-    
+
     try:
         cursor.execute('''
             INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao) 
@@ -558,7 +581,7 @@ def create_category(current_user):
         ''', (nome, tipo, cor, descricao))
         category_id = cursor.fetchone()[0]
         conn.commit()
-        
+
         return jsonify({
             'message': 'Categoria criada com sucesso!',
             'id': category_id
@@ -572,70 +595,70 @@ def create_category(current_user):
 @token_required
 def update_activity(current_user, activity_id):
     data = request.json
-    
+
     if not data:
         return jsonify({'message': 'Dados não fornecidos!'}), 400
-    
-    # Verificar se a atividade existe e pertence ao usuário
+
+    # Verificar se a atividade existe
     cursor.execute('''
         SELECT id FROM atividades 
-        WHERE id = %s AND usuario_id = %s;
-    ''', (activity_id, current_user[0]))
-    
+        WHERE id = %s;
+    ''', (activity_id,))
+
     if not cursor.fetchone():
         return jsonify({'message': 'Atividade não encontrada!'}), 404
-    
+
     # Campos que podem ser atualizados
     update_fields = []
     update_values = []
-    
+
     if 'produtividade' in data:
         if data['produtividade'] not in ['productive', 'nonproductive', 'neutral', 'unclassified']:
             return jsonify({'message': 'Valor de produtividade inválido!'}), 400
         update_fields.append('produtividade = %s')
         update_values.append(data['produtividade'])
-    
+
     if 'categoria' in data:
         update_fields.append('categoria = %s')
         update_values.append(data['categoria'])
-    
+
     if not update_fields:
         return jsonify({'message': 'Nenhum campo para atualizar!'}), 400
-    
+
     # Atualizar a atividade
     query = f'''
         UPDATE atividades 
         SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
-        WHERE id = %s AND usuario_id = %s;
+        WHERE id = %s;
     '''
-    update_values.extend([activity_id, current_user[0]])
-    
+    update_values.extend([activity_id])
+
     cursor.execute(query, update_values)
     conn.commit()
-    
+
     return jsonify({'message': 'Atividade atualizada com sucesso!'}), 200
 
 # Rota para excluir atividade (protegida)
 @app.route('/atividades/<int:activity_id>', methods=['DELETE'])
 @token_required
 def delete_activity(current_user, activity_id):
-    # Verificar se a atividade existe e pertence ao usuário
+    # Verificar se a atividade existe
     cursor.execute('''
         SELECT id FROM atividades 
-        WHERE id = %s AND usuario_id = %s;
-    ''', (activity_id, current_user[0]))
-    
+        WHERE id = %s;
+    ''', (activity_id,))
+
     if not cursor.fetchone():
         return jsonify({'message': 'Atividade não encontrada!'}), 404
-    
+
     # Excluir a atividade
     cursor.execute('''
         DELETE FROM atividades 
-        WHERE id = %s AND usuario_id = %s;
-    ''', (activity_id, current_user[0]))
-    
+        WHERE id = %s;
+    ''', (activity_id,))
+
     conn.commit()
-    
+
     return jsonify({'message': 'Atividade excluída com sucesso!'}), 200
 
 # Rota para estatísticas avançadas
@@ -651,9 +674,9 @@ def get_statistics(current_user):
         GROUP BY categoria 
         ORDER BY total DESC;
     ''', (current_user[0],))
-    
+
     stats_por_categoria = cursor.fetchall()
-    
+
     # Produtividade por dia da semana
     cursor.execute('''
         SELECT EXTRACT(DOW FROM horario) as dia_semana, 
@@ -664,9 +687,9 @@ def get_statistics(current_user):
         GROUP BY EXTRACT(DOW FROM horario), produtividade 
         ORDER BY dia_semana;
     ''', (current_user[0],))
-    
+
     produtividade_semanal = cursor.fetchall()
-    
+
     # Total de atividades hoje
     cursor.execute('''
         SELECT COUNT(*) 
@@ -674,9 +697,9 @@ def get_statistics(current_user):
         WHERE usuario_id = %s 
         AND DATE(horario) = CURRENT_DATE;
     ''', (current_user[0],))
-    
+
     atividades_hoje = cursor.fetchone()[0]
-    
+
     return jsonify({
         'categorias': [{
             'categoria': stat[0],
@@ -704,14 +727,14 @@ if __name__ == '__main__':
             print("❌ Arquivo .env não encontrado!")
             print("Copie o arquivo .env.example para .env e configure suas credenciais.")
             exit(1)
-        
+
         # Verificar variáveis de ambiente essenciais
         database_url = os.getenv('DATABASE_URL')
         if not database_url and not all([os.getenv('DB_HOST'), os.getenv('DB_USER'), os.getenv('DB_PASSWORD')]):
             print("❌ Configurações do banco de dados não encontradas!")
             print("Configure DATABASE_URL ou DB_HOST, DB_USER, DB_PASSWORD no arquivo .env")
             exit(1)
-        
+
         init_db()  # Inicializa o banco de dados
         print("✅ Banco de dados inicializado com sucesso!")
         print(f"🚀 Servidor rodando em http://0.0.0.0:5000")
