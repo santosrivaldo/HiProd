@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -14,11 +13,15 @@ import {
 } from '@heroicons/react/24/outline'
 import Dashboard from './Dashboard'
 import ActivityManagement from './ActivityManagement'
+import TagManagement from './TagManagement'
+import UserManagement from './UserManagement'
 import Settings from './Settings'
 
 const navigation = [
   { name: 'Dashboard', icon: ChartBarIcon, component: 'dashboard' },
   { name: 'Gerenciamento', icon: ClipboardDocumentListIcon, component: 'management' },
+  { name: 'Tags', icon: ClipboardDocumentListIcon, component: 'tags'},
+  { name: 'Usuários', icon: ClipboardDocumentListIcon, component: 'users'},
   { name: 'Configurações', icon: Cog6ToothIcon, component: 'settings' },
 ]
 
@@ -34,6 +37,10 @@ export default function Layout({ children }) {
         return <Dashboard />
       case 'management':
         return <ActivityManagement />
+      case 'tags':
+        return <TagManagement />
+      case 'users':
+        return <UserManagement />
       case 'settings':
         return <Settings />
       default:
@@ -120,7 +127,7 @@ export default function Layout({ children }) {
                   Activity Tracker
                 </h1>
               </div>
-              <nav className="mt-5 flex-1 px-2 space-y-1">
+              <nav className="mt-5 px-2 space-y-1">
                 {navigation.map((item) => (
                   <button
                     key={item.name}
@@ -177,7 +184,15 @@ export default function Layout({ children }) {
           </button>
         </div>
         <main className="flex-1 relative z-0 overflow-y-auto focus:outline-none">
-          {renderCurrentView()}
+          <div className="py-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+              {currentView === 'dashboard' && <Dashboard />}
+              {currentView === 'activities' && <ActivityManagement />}
+              {currentView === 'tags' && <TagManagement />}
+              {currentView === 'users' && <UserManagement />}
+              {currentView === 'settings' && <Settings />}
+            </div>
+          </div>
         </main>
       </div>
     </div>

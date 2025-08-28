@@ -72,61 +72,63 @@ def verify_token(token):
     except jwt.InvalidTokenError:
         return None
 
-# Função para classificar atividade automaticamente
-def classify_activity(active_window, ociosidade, user_department_id=None):
+# Função para classificar atividade automaticamente usando tags
+def classify_activity_with_tags(active_window, ociosidade, user_department_id=None, activity_id=None):
     try:
-        print(f"🔍 classify_activity - window: {active_window}, dept_id: {user_department_id}")
-
-        # Buscar regras de classificação específicas do departamento primeiro
+        print(f"🏷️ Classificando com tags - window: {active_window}, dept_id: {user_department_id}")
+        
+        # Buscar tags ativas do departamento primeiro
         if user_department_id:
-            print(f"🔍 Buscando regras para departamento {user_department_id}")
             cursor.execute('''
-            SELECT c.nome, c.tipo_produtividade 
-            FROM regras_classificacao r 
-            JOIN categorias_app c ON r.categoria_id = c.id 
-            WHERE r.ativo = TRUE AND r.departamento_id = %s AND %s ILIKE '%' || r.pattern || '%'
-            ORDER BY LENGTH(r.pattern) DESC 
-            LIMIT 1;
-            ''', (user_department_id, active_window))
-
-            result = cursor.fetchone()
-            print(f"🔍 Resultado busca departamental: {result}")
-            if result and len(result) >= 2:
-                categoria, produtividade = result[0], result[1]
-                print(f"🏷️ Match departamental: {categoria} ({produtividade})")
-                return categoria, produtividade
-            elif result:
-                print(f"🔍 Resultado departamental incompleto: {result}")
-
-        # Buscar regras globais (sem departamento específico)
-        print(f"🔍 Buscando regras globais")
-        cursor.execute('''
-        SELECT c.nome, c.tipo_produtividade 
-        FROM regras_classificacao r 
-        JOIN categorias_app c ON r.categoria_id = c.id 
-        WHERE r.ativo = TRUE AND r.departamento_id IS NULL AND %s ILIKE '%' || r.pattern || '%'
-        ORDER BY LENGTH(r.pattern) DESC 
-        LIMIT 1;
-        ''', (active_window,))
-
-        result = cursor.fetchone()
-        print(f"🔍 Resultado busca global: {result}")
-
-        if result and len(result) >= 2:
-            categoria, produtividade = result[0], result[1]
-            print(f"🏷️ Match global: {categoria} ({produtividade})")
-            return categoria, produtividade
-        elif result:
-            print(f"🔍 Resultado incompleto da query: {result}")
-            # Se o resultado existe mas não tem todos os campos, usar fallback
-
+            SELECT t.id, t.nome, t.produtividade, tk.palavra_chave, tk.peso
+            FROM tags t
+            JOIN tag_palavras_chave tk ON t.id = tk.tag_id
+            WHERE t.ativo = TRUE AND t.departamento_id = %s
+            ORDER BY tk.peso DESC;
+            ''', (user_department_id,))
+        else:
+            # Buscar tags globais
+            cursor.execute('''
+            SELECT t.id, t.nome, t.produtividade, tk.palavra_chave, tk.peso
+            FROM tags t
+            JOIN tag_palavras_chave tk ON t.id = tk.tag_id
+            WHERE t.ativo = TRUE AND t.departamento_id IS NULL
+            ORDER BY tk.peso DESC;
+            ''')
+        
+        tag_matches = cursor.fetchall()
+        matched_tags = []
+        
+        for tag_match in tag_matches:
+            tag_id, tag_nome, tag_produtividade, palavra_chave, peso = tag_match
+            if palavra_chave.lower() in active_window.lower():
+                confidence = peso * (len(palavra_chave) / len(active_window))
+                matched_tags.append({
+                    'tag_id': tag_id,
+                    'nome': tag_nome,
+                    'produtividade': tag_produtividade,
+                    'confidence': confidence
+                })
+                
+                # Se temos um ID da atividade, salvar a associação
+                if activity_id:
+                    cursor.execute('''
+                    INSERT INTO atividade_tags (atividade_id, tag_id, confidence)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (atividade_id, tag_id) DO UPDATE SET confidence = EXCLUDED.confidence;
+                    ''', (activity_id, tag_id, confidence))
+        
+        # Retornar a tag com maior confidence
+        if matched_tags:
+            best_match = max(matched_tags, key=lambda x: x['confidence'])
+            print(f"🏷️ Melhor match: {best_match['nome']} ({best_match['produtividade']}) - confidence: {best_match['confidence']:.2f}")
+            return best_match['nome'], best_match['produtividade']
+    
     except Exception as e:
-        print(f"❌ Erro na classificação automática: {e}")
-        print(f"🔍 Tipo do erro: {type(e)}")
-        # Fazer rollback em caso de erro na transação
+        print(f"❌ Erro na classificação com tags: {e}")
         conn.rollback()
-
-    # Classificação baseada em ociosidade
+    
+    # Fallback para classificação por ociosidade
     print(f"🔍 Usando classificação por ociosidade: {ociosidade}")
     if ociosidade >= 600:  # 10 minutos
         return 'idle', 'nonproductive'
@@ -134,6 +136,10 @@ def classify_activity(active_window, ociosidade, user_department_id=None):
         return 'away', 'nonproductive'
     else:
         return 'unclassified', 'neutral'
+
+# Manter função antiga para compatibilidade
+def classify_activity(active_window, ociosidade, user_department_id=None):
+    return classify_activity_with_tags(active_window, ociosidade, user_department_id)
 
 # Decorator para rotas protegidas
 def token_required(f):
@@ -356,6 +362,45 @@ def init_db():
         );
         ''')
 
+        # Tabela de tags
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tags (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(100) NOT NULL,
+            descricao TEXT,
+            cor VARCHAR(7) DEFAULT '#6B7280',
+            produtividade VARCHAR(20) NOT NULL CHECK (produtividade IN ('productive', 'nonproductive', 'neutral')),
+            departamento_id INTEGER REFERENCES departamentos(id),
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(nome, departamento_id)
+        );
+        ''')
+
+        # Tabela de palavras-chave das tags
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tag_palavras_chave (
+            id SERIAL PRIMARY KEY,
+            tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+            palavra_chave VARCHAR(255) NOT NULL,
+            peso INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        ''')
+
+        # Tabela para associar atividades com tags
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS atividade_tags (
+            id SERIAL PRIMARY KEY,
+            atividade_id INTEGER REFERENCES atividades(id) ON DELETE CASCADE,
+            tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+            confidence FLOAT DEFAULT 0.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(atividade_id, tag_id)
+        );
+        ''')
+
         # Tabela para configurações de departamento
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS departamento_configuracoes (
@@ -401,6 +446,11 @@ def init_db():
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_monitorados_nome ON usuarios_monitorados(nome);')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_departamentos_nome ON departamentos(nome);')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_categorias_departamento ON categorias_app(departamento_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tags_departamento ON tags(departamento_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tags_ativo ON tags(ativo);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_tag_palavras_chave_tag_id ON tag_palavras_chave(tag_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividade_tags_atividade_id ON atividade_tags(atividade_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividade_tags_tag_id ON atividade_tags(tag_id);')
 
         # 6. Inserir dados padrão
         print("📋 Inserindo dados padrão...")
@@ -489,6 +539,71 @@ def init_db():
         SELECT 'WhatsApp', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
         UNION ALL
         SELECT 'Replit', id, 'window_title' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+        ON CONFLICT DO NOTHING;
+        ''')
+
+        # Inserir tags padrão
+        print("📋 Inserindo tags padrão...")
+        cursor.execute('''
+        INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor) 
+        SELECT 'Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', d.id, '#10B981'
+        FROM departamentos d WHERE d.nome = 'TI'
+        UNION ALL
+        SELECT 'Design UI/UX', 'Design de interfaces e experiência do usuário', 'productive', d.id, '#8B5CF6'
+        FROM departamentos d WHERE d.nome = 'Marketing'
+        UNION ALL
+        SELECT 'Análise de Dados', 'Análise e processamento de dados', 'productive', d.id, '#3B82F6'
+        FROM departamentos d WHERE d.nome = 'Financeiro'
+        UNION ALL
+        SELECT 'Redes Sociais', 'Gerenciamento de mídias sociais', 'productive', d.id, '#EC4899'
+        FROM departamentos d WHERE d.nome = 'Marketing'
+        UNION ALL
+        SELECT 'Entretenimento', 'Atividades de entretenimento e lazer', 'nonproductive', NULL, '#EF4444'
+        UNION ALL
+        SELECT 'Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', NULL, '#06B6D4'
+        ON CONFLICT (nome, departamento_id) DO NOTHING;
+        ''')
+
+        # Inserir palavras-chave para as tags
+        cursor.execute('''
+        INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+        SELECT t.id, 'Visual Studio Code', 3 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        UNION ALL
+        SELECT t.id, 'GitHub', 2 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        UNION ALL
+        SELECT t.id, 'React', 2 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        UNION ALL
+        SELECT t.id, 'Node.js', 2 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        UNION ALL
+        SELECT t.id, 'Figma', 3 FROM tags t WHERE t.nome = 'Design UI/UX'
+        UNION ALL
+        SELECT t.id, 'Adobe XD', 3 FROM tags t WHERE t.nome = 'Design UI/UX'
+        UNION ALL
+        SELECT t.id, 'Photoshop', 2 FROM tags t WHERE t.nome = 'Design UI/UX'
+        UNION ALL
+        SELECT t.id, 'Excel', 3 FROM tags t WHERE t.nome = 'Análise de Dados'
+        UNION ALL
+        SELECT t.id, 'Power BI', 3 FROM tags t WHERE t.nome = 'Análise de Dados'
+        UNION ALL
+        SELECT t.id, 'Instagram', 2 FROM tags t WHERE t.nome = 'Redes Sociais'
+        UNION ALL
+        SELECT t.id, 'Facebook', 2 FROM tags t WHERE t.nome = 'Redes Sociais'
+        UNION ALL
+        SELECT t.id, 'LinkedIn', 2 FROM tags t WHERE t.nome = 'Redes Sociais'
+        UNION ALL
+        SELECT t.id, 'YouTube', 1 FROM tags t WHERE t.nome = 'Entretenimento'
+        UNION ALL
+        SELECT t.id, 'Netflix', 1 FROM tags t WHERE t.nome = 'Entretenimento'
+        UNION ALL
+        SELECT t.id, 'Spotify', 1 FROM tags t WHERE t.nome = 'Entretenimento'
+        UNION ALL
+        SELECT t.id, 'WhatsApp', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Slack', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Teams', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Zoom', 2 FROM tags t WHERE t.nome = 'Comunicação'
         ON CONFLICT DO NOTHING;
         ''')
 
@@ -697,8 +812,39 @@ def add_activity(current_user):
         active_window = data['active_window']
         print(f"🏷️ Iniciando classificação - window: {active_window}, ociosidade: {ociosidade}, dept: {user_department_id}")
 
+        # Primeiro salvar a atividade para obter o ID
+        # Extrair informações adicionais
+        titulo_janela = data.get('titulo_janela', active_window)
+        duracao = data.get('duracao', 0)
+
+        # Obter IP real do agente (considerando proxies)
+        ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+        if ',' in str(ip_address):
+            ip_address = ip_address.split(',')[0].strip()
+
+        user_agent = request.headers.get('User-Agent', '')
+
+        # Configurar timezone de São Paulo
+        sao_paulo_tz = timezone(timedelta(hours=-3))
+        horario_atual = datetime.now(sao_paulo_tz)
+
+        # Salvar atividade temporariamente
+        cursor.execute('''
+            INSERT INTO atividades 
+            (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
+             horario, duracao, ip_address, user_agent) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
+            RETURNING id;
+        ''', (
+            usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
+            'pending', 'neutral', horario_atual, 
+            duracao, ip_address, user_agent
+        ))
+
+        activity_id = cursor.fetchone()[0]
+
         try:
-            categoria, produtividade = classify_activity(active_window, ociosidade, user_department_id)
+            categoria, produtividade = classify_activity_with_tags(active_window, ociosidade, user_department_id, activity_id)
             print(f"🏷️ Classificação concluída: {categoria} ({produtividade})")
         except Exception as classify_error:
             print(f"❌ Erro na classificação: {classify_error}")
@@ -711,38 +857,16 @@ def add_activity(current_user):
                 categoria, produtividade = 'unclassified', 'neutral'
             print(f"🏷️ Classificação fallback: {categoria} ({produtividade})")
 
+        # Atualizar atividade com classificação final
+        cursor.execute('''
+            UPDATE atividades 
+            SET categoria = %s, produtividade = %s
+            WHERE id = %s;
+        ''', (categoria, produtividade, activity_id))
+
         print(f"🏷️ Atividade classificada: {categoria} ({produtividade})")
 
-        # Extrair informações adicionais
-        titulo_janela = data.get('titulo_janela', active_window)
-        duracao = data.get('duracao', 0)
-
-        # Obter IP real do agente (considerando proxies)
-        ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
-        if ',' in str(ip_address):
-            # Se há múltiplos IPs separados por vírgula, pegar o primeiro (IP original do cliente)
-            ip_address = ip_address.split(',')[0].strip()
-
-        user_agent = request.headers.get('User-Agent', '')
-
-        # Configurar timezone de São Paulo
-        sao_paulo_tz = timezone(timedelta(hours=-3))
-        horario_atual = datetime.now(sao_paulo_tz)
-
-        # Adiciona a atividade no PostgreSQL
-        cursor.execute('''
-            INSERT INTO atividades 
-            (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
-             horario, duracao, ip_address, user_agent) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
-            RETURNING id;
-        ''', (
-            usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
-            categoria, produtividade, horario_atual, 
-            duracao, ip_address, user_agent
-        ))
-
-        activity_id = cursor.fetchone()[0]
+        
         conn.commit()
 
         response_data = {
@@ -803,16 +927,33 @@ def get_activities(current_user):
         '''
         if agrupar:
             # Selecionar campos para agrupamento e somar ociosidade, contar eventos
-            query += ''', 
-                    SUM(a.ociosidade) as ociosidade_total, 
+            query = '''
+                SELECT 
+                    MIN(a.id) as id,
+                    a.usuario_monitorado_id, 
+                    SUM(a.ociosidade) as ociosidade, 
+                    a.active_window, 
+                    a.titulo_janela,
+                    a.categoria, 
+                    a.produtividade, 
+                    MIN(a.horario) as horario, 
+                    SUM(a.duracao) as duracao, 
+                    MIN(a.created_at) as created_at,
+                    um.nome as usuario_monitorado_nome, 
+                    um.cargo, 
+                    d.nome as departamento_nome,
                     COUNT(a.id) as eventos_agrupados
+                FROM atividades a 
+                JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                LEFT JOIN departamentos d ON um.departamento_id = d.id
             '''
-
-        query += '''
-            FROM atividades a 
-            JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
-            LEFT JOIN departamentos d ON um.departamento_id = d.id
-        '''
+        else:
+            query += '''
+                FROM atividades a 
+                JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                LEFT JOIN departamentos d ON um.departamento_id = d.id
+            '''
+        
         params = []
         conditions = ['um.ativo = TRUE']
 
@@ -1425,7 +1566,298 @@ def set_department_config(current_user, departamento_id):
         print(f"Erro ao salvar configurações: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
 
-# Rota para estatísticas avançadas
+# Rotas para gerenciamento de Tags
+
+@app.route('/tags', methods=['GET'])
+@token_required
+def get_tags(current_user):
+    departamento_id = request.args.get('departamento_id')
+    ativo = request.args.get('ativo', 'true').lower() == 'true'
+    
+    try:
+        if departamento_id:
+            cursor.execute('''
+                SELECT t.*, d.nome as departamento_nome
+                FROM tags t
+                LEFT JOIN departamentos d ON t.departamento_id = d.id
+                WHERE (t.departamento_id = %s OR t.departamento_id IS NULL) AND t.ativo = %s
+                ORDER BY t.nome;
+            ''', (departamento_id, ativo))
+        else:
+            cursor.execute('''
+                SELECT t.*, d.nome as departamento_nome
+                FROM tags t
+                LEFT JOIN departamentos d ON t.departamento_id = d.id
+                WHERE t.ativo = %s
+                ORDER BY t.nome;
+            ''', (ativo,))
+        
+        tags = cursor.fetchall()
+        result = []
+        
+        for tag in tags:
+            # Buscar palavras-chave da tag
+            cursor.execute('''
+                SELECT palavra_chave, peso
+                FROM tag_palavras_chave
+                WHERE tag_id = %s
+                ORDER BY peso DESC;
+            ''', (tag[0],))
+            palavras_chave = cursor.fetchall()
+            
+            result.append({
+                'id': tag[0],
+                'nome': tag[1],
+                'descricao': tag[2],
+                'cor': tag[3],
+                'produtividade': tag[4],
+                'departamento_id': tag[5],
+                'ativo': tag[6],
+                'created_at': tag[7].isoformat() if tag[7] else None,
+                'updated_at': tag[8].isoformat() if tag[8] else None,
+                'departamento_nome': tag[9] if len(tag) > 9 else None,
+                'palavras_chave': [{'palavra': p[0], 'peso': p[1]} for p in palavras_chave]
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Erro ao buscar tags: {e}")
+        return jsonify([]), 200
+
+@app.route('/tags', methods=['POST'])
+@token_required
+def create_tag(current_user):
+    data = request.json
+    
+    if not data or 'nome' not in data or 'produtividade' not in data:
+        return jsonify({'message': 'Nome e produtividade são obrigatórios!'}), 400
+    
+    nome = data['nome'].strip()
+    descricao = data.get('descricao', '')
+    cor = data.get('cor', '#6B7280')
+    produtividade = data['produtividade']
+    departamento_id = data.get('departamento_id')
+    palavras_chave = data.get('palavras_chave', [])
+    
+    if produtividade not in ['productive', 'nonproductive', 'neutral']:
+        return jsonify({'message': 'Produtividade inválida!'}), 400
+    
+    try:
+        # Criar tag
+        cursor.execute('''
+            INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id;
+        ''', (nome, descricao, cor, produtividade, departamento_id))
+        
+        tag_id = cursor.fetchone()[0]
+        
+        # Adicionar palavras-chave
+        for palavra in palavras_chave:
+            if isinstance(palavra, dict):
+                palavra_chave = palavra.get('palavra', '')
+                peso = palavra.get('peso', 1)
+            else:
+                palavra_chave = str(palavra)
+                peso = 1
+                
+            if palavra_chave.strip():
+                cursor.execute('''
+                    INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                    VALUES (%s, %s, %s);
+                ''', (tag_id, palavra_chave.strip(), peso))
+        
+        conn.commit()
+        return jsonify({'message': 'Tag criada com sucesso!', 'id': tag_id}), 201
+        
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        return jsonify({'message': 'Tag já existe para este departamento!'}), 409
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao criar tag: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@app.route('/tags/<int:tag_id>', methods=['PUT'])
+@token_required
+def update_tag(current_user, tag_id):
+    data = request.json
+    
+    if not data:
+        return jsonify({'message': 'Dados não fornecidos!'}), 400
+    
+    try:
+        # Verificar se a tag existe
+        cursor.execute('SELECT id FROM tags WHERE id = %s;', (tag_id,))
+        if not cursor.fetchone():
+            return jsonify({'message': 'Tag não encontrada!'}), 404
+        
+        # Atualizar tag
+        update_fields = []
+        update_values = []
+        
+        if 'nome' in data:
+            update_fields.append('nome = %s')
+            update_values.append(data['nome'])
+        if 'descricao' in data:
+            update_fields.append('descricao = %s')
+            update_values.append(data['descricao'])
+        if 'cor' in data:
+            update_fields.append('cor = %s')
+            update_values.append(data['cor'])
+        if 'produtividade' in data:
+            if data['produtividade'] not in ['productive', 'nonproductive', 'neutral']:
+                return jsonify({'message': 'Produtividade inválida!'}), 400
+            update_fields.append('produtividade = %s')
+            update_values.append(data['produtividade'])
+        if 'ativo' in data:
+            update_fields.append('ativo = %s')
+            update_values.append(data['ativo'])
+        
+        update_fields.append('updated_at = CURRENT_TIMESTAMP')
+        update_values.append(tag_id)
+        
+        cursor.execute(f'''
+            UPDATE tags SET {', '.join(update_fields)}
+            WHERE id = %s;
+        ''', update_values)
+        
+        # Atualizar palavras-chave se fornecidas
+        if 'palavras_chave' in data:
+            # Remover palavras-chave existentes
+            cursor.execute('DELETE FROM tag_palavras_chave WHERE tag_id = %s;', (tag_id,))
+            
+            # Adicionar novas palavras-chave
+            for palavra in data['palavras_chave']:
+                if isinstance(palavra, dict):
+                    palavra_chave = palavra.get('palavra', '')
+                    peso = palavra.get('peso', 1)
+                else:
+                    palavra_chave = str(palavra)
+                    peso = 1
+                    
+                if palavra_chave.strip():
+                    cursor.execute('''
+                        INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                        VALUES (%s, %s, %s);
+                    ''', (tag_id, palavra_chave.strip(), peso))
+        
+        conn.commit()
+        return jsonify({'message': 'Tag atualizada com sucesso!'}), 200
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao atualizar tag: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@app.route('/tags/<int:tag_id>', methods=['DELETE'])
+@token_required
+def delete_tag(current_user, tag_id):
+    try:
+        # Verificar se a tag existe
+        cursor.execute('SELECT id FROM tags WHERE id = %s;', (tag_id,))
+        if not cursor.fetchone():
+            return jsonify({'message': 'Tag não encontrada!'}), 404
+        
+        # Deletar tag (as palavras-chave serão deletadas em cascata)
+        cursor.execute('DELETE FROM tags WHERE id = %s;', (tag_id,))
+        conn.commit()
+        
+        return jsonify({'message': 'Tag deletada com sucesso!'}), 200
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao deletar tag: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+# Rotas para gerenciamento de usuários monitorados
+
+@app.route('/usuarios-monitorados', methods=['POST'])
+@token_required
+def create_monitored_user(current_user):
+    data = request.json
+    
+    if not data or 'nome' not in data:
+        return jsonify({'message': 'Nome é obrigatório!'}), 400
+    
+    nome = data['nome'].strip()
+    cargo = data.get('cargo', 'Usuário')
+    departamento_id = data.get('departamento_id')
+    
+    try:
+        cursor.execute('''
+            INSERT INTO usuarios_monitorados (nome, cargo, departamento_id)
+            VALUES (%s, %s, %s)
+            RETURNING id, nome, cargo, departamento_id, ativo, created_at;
+        ''', (nome, cargo, departamento_id))
+        
+        usuario = cursor.fetchone()
+        conn.commit()
+        
+        return jsonify({
+            'message': 'Usuário monitorado criado com sucesso!',
+            'id': usuario[0],
+            'nome': usuario[1],
+            'cargo': usuario[2],
+            'departamento_id': usuario[3],
+            'ativo': usuario[4],
+            'created_at': usuario[5].isoformat() if usuario[5] else None
+        }), 201
+        
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        return jsonify({'message': 'Usuário monitorado já existe!'}), 409
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao criar usuário monitorado: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@app.route('/usuarios-monitorados/<int:user_id>', methods=['PUT'])
+@token_required
+def update_monitored_user(current_user, user_id):
+    data = request.json
+    
+    if not data:
+        return jsonify({'message': 'Dados não fornecidos!'}), 400
+    
+    try:
+        # Verificar se o usuário existe
+        cursor.execute('SELECT id FROM usuarios_monitorados WHERE id = %s;', (user_id,))
+        if not cursor.fetchone():
+            return jsonify({'message': 'Usuário monitorado não encontrado!'}), 404
+        
+        update_fields = []
+        update_values = []
+        
+        if 'nome' in data:
+            update_fields.append('nome = %s')
+            update_values.append(data['nome'])
+        if 'cargo' in data:
+            update_fields.append('cargo = %s')
+            update_values.append(data['cargo'])
+        if 'departamento_id' in data:
+            update_fields.append('departamento_id = %s')
+            update_values.append(data['departamento_id'])
+        if 'ativo' in data:
+            update_fields.append('ativo = %s')
+            update_values.append(data['ativo'])
+        
+        update_fields.append('updated_at = CURRENT_TIMESTAMP')
+        update_values.append(user_id)
+        
+        cursor.execute(f'''
+            UPDATE usuarios_monitorados SET {', '.join(update_fields)}
+            WHERE id = %s;
+        ''', update_values)
+        
+        conn.commit()
+        return jsonify({'message': 'Usuário monitorado atualizado com sucesso!'}), 200
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao atualizar usuário monitorado: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+# Estatísticas avançadas
 @app.route('/estatisticas', methods=['GET'])
 @token_required
 def get_statistics(current_user):
