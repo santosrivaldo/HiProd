@@ -351,7 +351,7 @@ def init_db():
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS atividades (
             id SERIAL PRIMARY KEY,
-            usuario_id UUID NOT NULL,
+            usuario_monitorado_id INTEGER NOT NULL,
             ociosidade INTEGER NOT NULL DEFAULT 0,
             active_window TEXT NOT NULL,
             titulo_janela VARCHAR(500),
@@ -362,7 +362,7 @@ def init_db():
             ip_address INET,
             user_agent TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
+            FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
         );
         ''')
 
@@ -372,7 +372,7 @@ def init_db():
 
         # 5. Criar índices para melhor performance
         print("📋 Criando índices...")
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_usuario_id ON atividades(usuario_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_usuario_monitorado_id ON atividades(usuario_monitorado_id);')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_horario ON atividades(horario DESC);')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_categoria ON atividades(categoria);')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_nome ON usuarios(nome);')
@@ -618,18 +618,19 @@ def add_activity(current_user):
     data = request.json
 
     # Valida se os dados necessários estão presentes
-    if 'ociosidade' not in data or 'active_window' not in data:
-        return jsonify({'message': 'Dados inválidos!'}), 400
+    if 'ociosidade' not in data or 'active_window' not in data or 'usuario_monitorado_id' not in data:
+        return jsonify({'message': 'Dados inválidos! usuario_monitorado_id, ociosidade e active_window são obrigatórios!'}), 400
 
-    # Obter departamento do usuário
-    user_department_id = None
-    try:
-        cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
-        user_department = cursor.fetchone()
-        user_department_id = user_department[0] if user_department and user_department[0] else None
-    except psycopg2.Error as e:
-        print(f"Aviso ao buscar departamento do usuário: {e}")
-        user_department_id = None
+    usuario_monitorado_id = data['usuario_monitorado_id']
+
+    # Verificar se o usuário monitorado existe
+    cursor.execute("SELECT * FROM usuarios_monitorados WHERE id = %s AND ativo = TRUE;", (usuario_monitorado_id,))
+    usuario_monitorado = cursor.fetchone()
+    if not usuario_monitorado:
+        return jsonify({'message': 'Usuário monitorado não encontrado ou inativo!'}), 404
+
+    # Obter departamento do usuário monitorado
+    user_department_id = usuario_monitorado[2] if usuario_monitorado and len(usuario_monitorado) > 2 else None
 
     # Classificar atividade automaticamente
     ociosidade = int(data.get('ociosidade', 0))
@@ -645,12 +646,12 @@ def add_activity(current_user):
     # Adiciona a atividade no PostgreSQL
     cursor.execute('''
         INSERT INTO atividades 
-        (usuario_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
+        (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
          horario, duracao, ip_address, user_agent) 
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
         RETURNING id;
     ''', (
-        str(current_user[0]), ociosidade, active_window, titulo_janela, 
+        usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
         categoria, produtividade, datetime.now(timezone.utc), 
         duracao, ip_address, user_agent
     ))
@@ -662,7 +663,8 @@ def add_activity(current_user):
         'message': 'Atividade salva com sucesso!',
         'id': activity_id,
         'categoria': categoria,
-        'produtividade': produtividade
+        'produtividade': produtividade,
+        'usuario_monitorado': usuario_monitorado[1]  # Nome do usuário monitorado
     }), 201
 
 # Rota para obter atividades (protegida)
@@ -685,17 +687,25 @@ def get_activities(current_user):
         categoria = request.args.get('categoria')
         data_inicio = request.args.get('data_inicio')
         data_fim = request.args.get('data_fim')
+        usuario_monitorado_id = request.args.get('usuario_monitorado_id')
 
-        # Construir query base
+        # Construir query base com JOIN para obter dados do usuário monitorado
         query = '''
-            SELECT a.id, a.usuario_id, a.ociosidade, a.active_window, a.titulo_janela,
-                   a.categoria, a.produtividade, a.horario, a.duracao, a.created_at
+            SELECT a.id, a.usuario_monitorado_id, a.ociosidade, a.active_window, a.titulo_janela,
+                   a.categoria, a.produtividade, a.horario, a.duracao, a.created_at,
+                   um.nome as usuario_monitorado_nome, um.cargo, d.nome as departamento_nome
             FROM atividades a 
-            WHERE a.usuario_id = %s
+            JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+            LEFT JOIN departamentos d ON um.departamento_id = d.id
+            WHERE 1=1
         '''
-        params = [current_user[0]]
+        params = []
 
         # Adicionar filtros
+        if usuario_monitorado_id:
+            query += ' AND a.usuario_monitorado_id = %s'
+            params.append(usuario_monitorado_id)
+
         if categoria:
             query += ' AND a.categoria = %s'
             params.append(categoria)
@@ -716,7 +726,7 @@ def get_activities(current_user):
 
         result = [{
             'id': atividade[0], 
-            'usuario_id': str(atividade[1]), 
+            'usuario_monitorado_id': atividade[1], 
             'ociosidade': atividade[2], 
             'active_window': atividade[3],
             'titulo_janela': atividade[4],
@@ -724,7 +734,10 @@ def get_activities(current_user):
             'produtividade': atividade[6],
             'horario': atividade[7].isoformat() if atividade[7] else None,
             'duracao': atividade[8],
-            'created_at': atividade[9].isoformat() if atividade[9] else None
+            'created_at': atividade[9].isoformat() if atividade[9] else None,
+            'usuario_monitorado_nome': atividade[10],
+            'cargo': atividade[11],
+            'departamento_nome': atividade[12]
         } for atividade in atividades]
 
         return jsonify(result)
@@ -736,9 +749,24 @@ def get_activities(current_user):
 @app.route('/atividades/all', methods=['GET'])
 @token_required
 def get_all_activities(current_user):
-    cursor.execute("SELECT * FROM atividades ORDER BY horario DESC;")
+    cursor.execute('''
+        SELECT a.*, um.nome as usuario_monitorado_nome, um.cargo, d.nome as departamento_nome
+        FROM atividades a 
+        JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+        LEFT JOIN departamentos d ON um.departamento_id = d.id
+        ORDER BY a.horario DESC;
+    ''')
     atividades = cursor.fetchall()
-    result = [{'id': atividade[0], 'usuario_id': str(atividade[1]), 'ociosidade': atividade[2], 'active_window': atividade[3], 'horario': atividade[4]} for atividade in atividades]
+    result = [{
+        'id': atividade[0], 
+        'usuario_monitorado_id': atividade[1], 
+        'ociosidade': atividade[2], 
+        'active_window': atividade[3], 
+        'horario': atividade[7].isoformat() if atividade[7] else None,
+        'usuario_monitorado_nome': atividade[11],
+        'cargo': atividade[12],
+        'departamento_nome': atividade[13]
+    } for atividade in atividades]
     return jsonify(result)
 
 # Rota para obter usuários (protegida)
@@ -784,6 +812,53 @@ def get_users(current_user):
     except psycopg2.Error as e:
         print(f"Erro na consulta de usuários: {e}")
         return jsonify([]), 200  # Return empty array instead of error
+
+# Rota para obter usuários monitorados (protegida)
+@app.route('/usuarios-monitorados', methods=['GET'])
+@token_required
+def get_monitored_users(current_user):
+    global conn, cursor
+
+    try:
+        # Verificar se a conexão está ativa
+        cursor.execute('SELECT 1;')
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Reconectar se necessário
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+    try:
+        cursor.execute('''
+            SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                   d.nome as departamento_nome, d.cor as departamento_cor
+            FROM usuarios_monitorados um
+            LEFT JOIN departamentos d ON um.departamento_id = d.id
+            WHERE um.ativo = TRUE
+            ORDER BY um.nome;
+        ''')
+        usuarios_monitorados = cursor.fetchall()
+
+        result = []
+        if usuarios_monitorados:
+            for usuario in usuarios_monitorados:
+                result.append({
+                    'id': usuario[0], 
+                    'nome': usuario[1],
+                    'departamento_id': usuario[2],
+                    'cargo': usuario[3],
+                    'ativo': usuario[4],
+                    'created_at': usuario[5].isoformat() if usuario[5] else None,
+                    'updated_at': usuario[6].isoformat() if usuario[6] else None,
+                    'departamento': {
+                        'nome': usuario[7],
+                        'cor': usuario[8]
+                    } if usuario[7] else None
+                })
+
+        return jsonify(result)
+    except psycopg2.Error as e:
+        print(f"Erro na consulta de usuários monitorados: {e}")
+        return jsonify([]), 200
 
 # Rota para obter departamentos
 @app.route('/departamentos', methods=['GET'])
@@ -1054,15 +1129,20 @@ def set_department_config(current_user, departamento_id):
 @app.route('/estatisticas', methods=['GET'])
 @token_required
 def get_statistics(current_user):
+    usuario_monitorado_id = request.args.get('usuario_monitorado_id')
+    
+    if not usuario_monitorado_id:
+        return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
+
     # Estatísticas por categoria
     cursor.execute('''
         SELECT categoria, COUNT(*) as total, AVG(ociosidade) as media_ociosidade,
                SUM(duracao) as tempo_total
         FROM atividades 
-        WHERE usuario_id = %s 
+        WHERE usuario_monitorado_id = %s 
         GROUP BY categoria 
         ORDER BY total DESC;
-    ''', (current_user[0],))
+    ''', (usuario_monitorado_id,))
 
     stats_por_categoria = cursor.fetchall()
 
@@ -1072,10 +1152,10 @@ def get_statistics(current_user):
                produtividade,
                COUNT(*) as total
         FROM atividades 
-        WHERE usuario_id = %s 
+        WHERE usuario_monitorado_id = %s 
         GROUP BY EXTRACT(DOW FROM horario), produtividade 
         ORDER BY dia_semana;
-    ''', (current_user[0],))
+    ''', (usuario_monitorado_id,))
 
     produtividade_semanal = cursor.fetchall()
 
@@ -1083,9 +1163,9 @@ def get_statistics(current_user):
     cursor.execute('''
         SELECT COUNT(*) 
         FROM atividades 
-        WHERE usuario_id = %s 
+        WHERE usuario_monitorado_id = %s 
         AND DATE(horario) = CURRENT_DATE;
-    ''', (current_user[0],))
+    ''', (usuario_monitorado_id,))
 
     atividades_hoje = cursor.fetchone()[0]
 
