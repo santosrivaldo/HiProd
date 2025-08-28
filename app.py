@@ -173,21 +173,7 @@ def init_db():
     # Registrar adaptador para UUID
     psycopg2.extras.register_uuid()
 
-    # Tabela de usuários
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        nome VARCHAR(100) NOT NULL UNIQUE,
-        senha VARCHAR(255) NOT NULL,
-        email VARCHAR(255),
-        ativo BOOLEAN DEFAULT TRUE,
-        ultimo_login TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    ''')
-
-    # Tabela de departamentos
+    # 1. Primeiro criar tabela de departamentos
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS departamentos (
         id SERIAL PRIMARY KEY,
@@ -200,7 +186,56 @@ def init_db():
     );
     ''')
 
-    # Tabela de usuários monitorados (para login de administradores/operadores)
+    # Commit para garantir que a tabela departamentos existe
+    conn.commit()
+
+    # 2. Inserir departamentos padrão primeiro
+    cursor.execute('''
+    INSERT INTO departamentos (nome, descricao, cor) 
+    VALUES 
+        ('TI', 'Tecnologia da Informação', '#10B981'),
+        ('Marketing', 'Marketing e Comunicação', '#3B82F6'),
+        ('RH', 'Recursos Humanos', '#F59E0B'),
+        ('Financeiro', 'Departamento Financeiro', '#EF4444'),
+        ('Vendas', 'Departamento de Vendas', '#8B5CF6'),
+        ('Geral', 'Categorias gerais para todos os departamentos', '#6B7280')
+    ON CONFLICT (nome) DO NOTHING;
+    ''')
+
+    conn.commit()
+
+    # 3. Agora criar tabela de usuários com departamento_id já incluído
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nome VARCHAR(100) NOT NULL UNIQUE,
+        senha VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        departamento_id INTEGER REFERENCES departamentos(id),
+        ativo BOOLEAN DEFAULT TRUE,
+        ultimo_login TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+
+    # Se a tabela usuarios já existe mas não tem departamento_id, adicionar
+    try:
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='usuarios' AND column_name='departamento_id';
+        """)
+        
+        if not cursor.fetchone():
+            print("Adicionando coluna departamento_id à tabela usuarios existente...")
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN departamento_id INTEGER REFERENCES departamentos(id);")
+            print("✅ Coluna departamento_id adicionada com sucesso!")
+        
+    except psycopg2.Error as e:
+        print(f"Aviso ao verificar departamento_id: {e}")
+
+    # 4. Tabela de usuários monitorados
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios_monitorados (
         id SERIAL PRIMARY KEY,
@@ -213,7 +248,47 @@ def init_db():
     );
     ''')
 
-    # Tabela de atividades melhorada
+    # 5. Tabela de categorias de aplicações
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS categorias_app (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        departamento_id INTEGER REFERENCES departamentos(id),
+        tipo_produtividade VARCHAR(20) NOT NULL CHECK (tipo_produtividade IN ('productive', 'nonproductive', 'neutral')),
+        cor VARCHAR(7) DEFAULT '#6B7280',
+        descricao TEXT,
+        is_global BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(nome, departamento_id)
+    );
+    ''')
+
+    # 6. Tabela para regras de classificação automática
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS regras_classificacao (
+        id SERIAL PRIMARY KEY,
+        pattern VARCHAR(255) NOT NULL,
+        categoria_id INTEGER REFERENCES categorias_app(id),
+        departamento_id INTEGER REFERENCES departamentos(id),
+        tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('window_title', 'application_name')),
+        ativo BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+
+    # 7. Tabela para configurações de departamento
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS departamento_configuracoes (
+        id SERIAL PRIMARY KEY,
+        departamento_id INTEGER REFERENCES departamentos(id),
+        configuracao_chave VARCHAR(100) NOT NULL,
+        configuracao_valor TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(departamento_id, configuracao_chave)
+    );
+    ''')
+
+    # 8. Tabela de atividades (por último)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS atividades (
         id SERIAL PRIMARY KEY,
@@ -232,73 +307,8 @@ def init_db():
     );
     ''')
 
-    # Tabela para categorias de aplicações
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS categorias_app (
-        id SERIAL PRIMARY KEY,
-        nome VARCHAR(100) NOT NULL,
-        departamento_id INTEGER REFERENCES departamentos(id),
-        tipo_produtividade VARCHAR(20) NOT NULL CHECK (tipo_produtividade IN ('productive', 'nonproductive', 'neutral')),
-        cor VARCHAR(7) DEFAULT '#6B7280',
-        descricao TEXT,
-        is_global BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(nome, departamento_id)
-    );
-    ''')
-
-    # Tabela para regras de classificação automática
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS regras_classificacao (
-        id SERIAL PRIMARY KEY,
-        pattern VARCHAR(255) NOT NULL,
-        categoria_id INTEGER REFERENCES categorias_app(id),
-        departamento_id INTEGER REFERENCES departamentos(id),
-        tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('window_title', 'application_name')),
-        ativo BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    ''')
-
-    # Tabela para configurações de departamento
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS departamento_configuracoes (
-        id SERIAL PRIMARY KEY,
-        departamento_id INTEGER REFERENCES departamentos(id),
-        configuracao_chave VARCHAR(100) NOT NULL,
-        configuracao_valor TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(departamento_id, configuracao_chave)
-    );
-    ''')
-
-    # Commit das tabelas criadas antes de adicionar colunas com foreign keys
+    # Commit todas as tabelas
     conn.commit()
-
-    # Verificar se a coluna departamento_id existe antes de adicioná-la
-    try:
-        cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='usuarios' AND column_name='departamento_id';
-        """)
-        
-        column_exists = cursor.fetchone()
-        
-        if not column_exists:
-            print("Adicionando coluna departamento_id à tabela usuarios...")
-            cursor.execute("ALTER TABLE usuarios ADD COLUMN departamento_id INTEGER REFERENCES departamentos(id);")
-            conn.commit()  # Commit imediatamente após adicionar a coluna
-            print("✅ Coluna departamento_id adicionada com sucesso!")
-        else:
-            print("✅ Coluna departamento_id já existe na tabela usuarios")
-            
-    except psycopg2.ProgrammingError as e:
-        conn.rollback()  # Rollback em caso de erro
-        print(f"Erro ao verificar/adicionar coluna departamento_id: {e}")
-    except Exception as e:
-        conn.rollback()
-        print(f"Erro inesperado ao adicionar coluna departamento_id: {e}")
 
     # Criar índices para melhor performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_usuario_id ON atividades(usuario_id);')
@@ -309,19 +319,6 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_monitorados_nome ON usuarios_monitorados(nome);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_departamentos_nome ON departamentos(nome);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_categorias_departamento ON categorias_app(departamento_id);')
-
-    # Inserir departamentos padrão
-    cursor.execute('''
-    INSERT INTO departamentos (nome, descricao, cor) 
-    VALUES 
-        ('TI', 'Tecnologia da Informação', '#10B981'),
-        ('Marketing', 'Marketing e Comunicação', '#3B82F6'),
-        ('RH', 'Recursos Humanos', '#F59E0B'),
-        ('Financeiro', 'Departamento Financeiro', '#EF4444'),
-        ('Vendas', 'Departamento de Vendas', '#8B5CF6'),
-        ('Geral', 'Categorias gerais para todos os departamentos', '#6B7280')
-    ON CONFLICT (nome) DO NOTHING;
-    ''')
 
     # Inserir categorias globais padrão
     cursor.execute('''
@@ -353,6 +350,12 @@ def init_db():
     UNION ALL
     SELECT 'Treinamento', d.id, 'productive', '#EA580C', 'Capacitação de funcionários'
     FROM departamentos d WHERE d.nome = 'RH'
+    UNION ALL
+    SELECT 'Análise Financeira', d.id, 'productive', '#DC2626', 'Análise de dados financeiros'
+    FROM departamentos d WHERE d.nome = 'Financeiro'
+    UNION ALL
+    SELECT 'Vendas Online', d.id, 'productive', '#8B5CF6', 'Vendas através de plataformas digitais'
+    FROM departamentos d WHERE d.nome = 'Vendas'
     ON CONFLICT (nome, departamento_id) DO NOTHING;
     ''')
 
@@ -360,22 +363,28 @@ def init_db():
     cursor.execute('''
     INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo) 
     SELECT 'Visual Studio Code', c.id, c.departamento_id, 'application_name' 
-    FROM categorias_app c WHERE c.nome = 'Desenvolvimento'
+    FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
     UNION ALL
     SELECT 'IntelliJ', c.id, c.departamento_id, 'application_name' 
-    FROM categorias_app c WHERE c.nome = 'Desenvolvimento'
+    FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
+    UNION ALL
+    SELECT 'PyCharm', c.id, c.departamento_id, 'application_name' 
+    FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
     UNION ALL
     SELECT 'Docker', c.id, c.departamento_id, 'application_name' 
-    FROM categorias_app c WHERE c.nome = 'DevOps'
+    FROM categorias_app c WHERE c.nome = 'DevOps' AND c.departamento_id IS NOT NULL
     UNION ALL
     SELECT 'Photoshop', c.id, c.departamento_id, 'application_name' 
-    FROM categorias_app c WHERE c.nome = 'Design Gráfico'
+    FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
     UNION ALL
     SELECT 'Figma', c.id, c.departamento_id, 'window_title' 
-    FROM categorias_app c WHERE c.nome = 'Design Gráfico'
+    FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
     UNION ALL
     SELECT 'LinkedIn', c.id, c.departamento_id, 'window_title' 
-    FROM categorias_app c WHERE c.nome = 'Recrutamento'
+    FROM categorias_app c WHERE c.nome = 'Recrutamento' AND c.departamento_id IS NOT NULL
+    UNION ALL
+    SELECT 'Excel', c.id, c.departamento_id, 'application_name' 
+    FROM categorias_app c WHERE c.nome = 'Análise Financeira' AND c.departamento_id IS NOT NULL
     ON CONFLICT DO NOTHING;
     ''')
 
@@ -385,6 +394,8 @@ def init_db():
     SELECT 'YouTube', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
     UNION ALL
     SELECT 'Windows Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+    UNION ALL
+    SELECT 'File Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
     ON CONFLICT DO NOTHING;
     ''')
 
@@ -393,13 +404,18 @@ def init_db():
     INSERT INTO usuarios_monitorados (nome, departamento_id, cargo) 
     SELECT 'João Silva', d.id, 'Desenvolvedor' FROM departamentos d WHERE d.nome = 'TI'
     UNION ALL
-    SELECT 'Maria Santos', d.id, 'Analista' FROM departamentos d WHERE d.nome = 'Marketing'
+    SELECT 'Maria Santos', d.id, 'Analista de Marketing' FROM departamentos d WHERE d.nome = 'Marketing'
     UNION ALL
-    SELECT 'Pedro Costa', d.id, 'Assistente' FROM departamentos d WHERE d.nome = 'RH'
+    SELECT 'Pedro Costa', d.id, 'Assistente de RH' FROM departamentos d WHERE d.nome = 'RH'
+    UNION ALL
+    SELECT 'Ana Oliveira', d.id, 'Analista Financeiro' FROM departamentos d WHERE d.nome = 'Financeiro'
+    UNION ALL
+    SELECT 'Carlos Mendes', d.id, 'Vendedor' FROM departamentos d WHERE d.nome = 'Vendas'
     ON CONFLICT (nome) DO NOTHING;
     ''')
 
     conn.commit()
+    print("✅ Todas as tabelas e dados foram criados com sucesso!")
 
 # Rota para registro de usuário
 @app.route('/register', methods=['POST'])
@@ -534,26 +550,14 @@ def add_activity(current_user):
     if 'ociosidade' not in data or 'active_window' not in data:
         return jsonify({'message': 'Dados inválidos!'}), 400
 
-    # Obter departamento do usuário (verificar se a coluna existe)
+    # Obter departamento do usuário
     user_department_id = None
     try:
-        # Verificar se a coluna departamento_id existe primeiro
-        cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='usuarios' AND column_name='departamento_id';
-        """)
-        
-        if cursor.fetchone():
-            # Coluna existe, tentar buscar o departamento
-            cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
-            user_department = cursor.fetchone()
-            user_department_id = user_department[0] if user_department and user_department[0] else None
-        else:
-            print("Coluna departamento_id ainda não existe, usando classificação padrão")
-            
-    except psycopg2.ProgrammingError as e:
-        print(f"Erro ao acessar departamento do usuário: {e}")
+        cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
+        user_department = cursor.fetchone()
+        user_department_id = user_department[0] if user_department and user_department[0] else None
+    except psycopg2.Error as e:
+        print(f"Aviso ao buscar departamento do usuário: {e}")
         user_department_id = None
 
     # Classificar atividade automaticamente
@@ -681,7 +685,13 @@ def get_users(current_user):
         cursor = conn.cursor()
 
     try:
-        cursor.execute("SELECT id, nome, created_at FROM usuarios WHERE ativo = TRUE;")
+        cursor.execute('''
+            SELECT u.id, u.nome, u.email, u.departamento_id, u.created_at, d.nome as departamento_nome, d.cor as departamento_cor
+            FROM usuarios u
+            LEFT JOIN departamentos d ON u.departamento_id = d.id
+            WHERE u.ativo = TRUE
+            ORDER BY u.nome;
+        ''')
         usuarios = cursor.fetchall()
 
         result = []
@@ -689,8 +699,14 @@ def get_users(current_user):
             for usuario in usuarios:
                 result.append({
                     'usuario_id': str(usuario[0]), 
-                    'usuario': usuario[1], 
-                    'created_at': usuario[2].isoformat() if usuario[2] else None
+                    'usuario': usuario[1],
+                    'email': usuario[2],
+                    'departamento_id': usuario[3],
+                    'created_at': usuario[4].isoformat() if usuario[4] else None,
+                    'departamento': {
+                        'nome': usuario[5],
+                        'cor': usuario[6]
+                    } if usuario[5] else None
                 })
 
         return jsonify(result)
@@ -906,16 +922,6 @@ def update_user_department(current_user, usuario_id):
         return jsonify({'message': 'Departamento não encontrado!'}), 404
     
     try:
-        # Verificar se a coluna departamento_id existe
-        cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='usuarios' AND column_name='departamento_id';
-        """)
-        
-        if not cursor.fetchone():
-            return jsonify({'message': 'Sistema ainda não está completamente inicializado. Tente novamente.'}), 503
-            
         cursor.execute('''
             UPDATE usuarios 
             SET departamento_id = %s, updated_at = CURRENT_TIMESTAMP
