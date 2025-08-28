@@ -211,6 +211,18 @@ def token_required(f):
             except Exception as reconnect_error:
                 print(f"Erro na reconexão: {reconnect_error}")
                 return jsonify({'message': 'Erro interno do servidor!'}), 500
+        except psycopg2.ProgrammingError as e:
+            if "no results to fetch" in str(e):
+                conn.rollback()
+                try:
+                    cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
+                    current_user = cursor.fetchone()
+                    if not current_user:
+                        return jsonify({'message': 'Usuário não encontrado!'}), 401
+                except Exception:
+                    return jsonify({'message': 'Erro interno do servidor!'}), 500
+            else:
+                raise
 
         return f(current_user, *args, **kwargs)
     return decorated
@@ -1014,8 +1026,8 @@ def get_atividades(current_user):
                 SELECT 
                     MIN(a.id) as id,
                     a.usuario_monitorado_id,
-                    um.nome as usuario_monitorado_nome,
-                    um.cargo,
+                    MAX(um.nome) as usuario_monitorado_nome,
+                    MAX(um.cargo) as cargo,
                     a.active_window,
                     a.categoria,
                     a.produtividade,
