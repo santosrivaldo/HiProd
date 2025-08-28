@@ -160,6 +160,39 @@ def token_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
+# Função para deletar todas as tabelas
+def drop_all_tables():
+    global conn, cursor
+    try:
+        print("🗑️ Excluindo todas as tabelas existentes...")
+        
+        # Desabilitar verificações de foreign key temporariamente
+        cursor.execute("SET session_replication_role = replica;")
+        
+        # Listar todas as tabelas do usuário
+        cursor.execute("""
+            SELECT tablename FROM pg_tables 
+            WHERE schemaname = 'public' AND tablename NOT LIKE 'pg_%'
+        """)
+        tables = cursor.fetchall()
+        
+        # Excluir todas as tabelas
+        for table in tables:
+            table_name = table[0]
+            print(f"   Excluindo tabela: {table_name}")
+            cursor.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE;")
+        
+        # Reabilitar verificações de foreign key
+        cursor.execute("SET session_replication_role = DEFAULT;")
+        
+        conn.commit()
+        print("✅ Todas as tabelas foram excluídas!")
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Erro ao excluir tabelas: {e}")
+        raise
+
 # Função para inicializar as tabelas se não existirem
 def init_db():
     # Garantir que temos uma conexão ativa
@@ -1077,6 +1110,8 @@ def get_user_legacy():
     return jsonify({'message': 'Esta rota foi descontinuada. Use /login para autenticação.'}), 410
 
 if __name__ == '__main__':
+    import sys
+    
     try:
         # Verificar se o arquivo .env existe
         if not os.path.exists('.env'):
@@ -1091,9 +1126,18 @@ if __name__ == '__main__':
             print("Configure DATABASE_URL ou DB_HOST, DB_USER, DB_PASSWORD no arquivo .env")
             exit(1)
 
-        init_db()  # Inicializa o banco de dados
-        print("✅ Banco de dados inicializado com sucesso!")
-        print(f"🚀 Servidor rodando em http://0.0.0.0:5000")
+        # Verificar se deve excluir todas as tabelas
+        if len(sys.argv) > 1 and sys.argv[1] == '--reset':
+            print("🔄 Modo reset ativado - Excluindo e recriando banco...")
+            drop_all_tables()
+            init_db()
+            print("✅ Banco de dados resetado com sucesso!")
+            print("🚀 Servidor rodando em http://0.0.0.0:5000")
+        else:
+            init_db()  # Inicializa o banco de dados
+            print("✅ Banco de dados inicializado com sucesso!")
+            print(f"🚀 Servidor rodando em http://0.0.0.0:5000")
+        
         app.run(host='0.0.0.0', port=5000, debug=True)
     except psycopg2.OperationalError as e:
         print(f"❌ Erro de conexão com o banco PostgreSQL: {e}")
