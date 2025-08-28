@@ -24,19 +24,23 @@ const UserManagement = () => {
   }, [])
 
   const fetchData = async () => {
+    setLoading(true)
     try {
-      const [usuariosRes, monitoradosRes, departmentsRes] = await Promise.all([
-        api.get('/usuarios'),
-        api.get('/usuarios-monitorados'),
-        api.get('/departamentos')
+      const [usuariosResponse, usuariosMonitoradosResponse, departamentosResponse] = await Promise.all([
+        api.get('/usuarios').catch(() => ({ data: [] })),
+        api.get('/usuarios-monitorados').catch(() => ({ data: [] })),
+        api.get('/departamentos').catch(() => ({ data: [] }))
       ])
 
-      setUsuarios(usuariosRes.data || [])
-      setUsuariosMonitorados(monitoradosRes.data || [])
-      setDepartments(departmentsRes.data || [])
+      setUsuarios(usuariosResponse.data || [])
+      setUsuariosMonitorados(usuariosMonitoradosResponse.data || [])
+      setDepartments(departamentosResponse.data || [])
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
-      setMessage('Erro ao carregar dados')
+      // Set empty arrays on error
+      setUsuarios([])
+      setUsuariosMonitorados([])
+      setDepartments([])
     } finally {
       setLoading(false)
     }

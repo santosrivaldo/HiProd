@@ -100,6 +100,9 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
         matched_tags = []
 
         for tag_match in tag_matches:
+            # Verificar se temos todos os campos necessários
+            if len(tag_match) < 5:
+                continue
             tag_id, tag_nome, tag_produtividade, palavra_chave, peso = tag_match
             # Verificar se a palavra-chave está presente no título da janela (case insensitive)
             if palavra_chave.lower() in active_window.lower():
@@ -131,8 +134,16 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
             return best_match['nome'], best_match['produtividade']
 
     except Exception as e:
-        print(f"❌ Erro na classificação com tags: {e}")
         conn.rollback()
+        print(f"❌ Erro na classificação com tags: {e}")
+        # Retornar fallback em caso de erro
+        if ociosidade >= 600:
+            return 'Ocioso', 'nonproductive'
+        elif ociosidade >= 300:
+            return 'Ausente', 'nonproductive'
+        else:
+            return 'Não Classificado', 'neutral'
+
 
     # Fallback para classificação por ociosidade se nenhuma tag foi encontrada
     print(f"🔍 Nenhuma tag encontrada, usando classificação por ociosidade: {ociosidade}")
@@ -1378,10 +1389,6 @@ def get_departments(current_user):
         result = []
         for dept in departamentos:
             try:
-                # Verificar se temos dados suficientes
-                if len(dept) < 6:
-                    continue
-
                 # Verificar se created_at é datetime ou string
                 created_at_value = None
                 if len(dept) > 5 and dept[5]:
