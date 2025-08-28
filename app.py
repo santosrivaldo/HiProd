@@ -22,21 +22,25 @@ CORS(app)
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 
-# Configurando a conexão com o PostgreSQL usando Replit Database
-database_url = os.getenv('DATABASE_URL')
+# Função para conectar ao banco de dados
+def get_db_connection():
+    database_url = os.getenv('DATABASE_URL')
+    
+    if database_url:
+        # Usar DATABASE_URL completa
+        return psycopg2.connect(database_url)
+    else:
+        # Fallback para variáveis individuais
+        return psycopg2.connect(
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT", 5432)
+        )
 
-if database_url:
-    # Usar DATABASE_URL do Replit
-    conn = psycopg2.connect(database_url)
-else:
-    # Fallback para variáveis individuais
-    conn = psycopg2.connect(
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT")
-    )
+# Inicializar conexão global
+conn = get_db_connection()
 cursor = conn.cursor()
 
 # Registrando o adaptador para UUID
@@ -115,6 +119,17 @@ def token_required(f):
 
 # Função para inicializar as tabelas se não existirem
 def init_db():
+    # Garantir que temos uma conexão ativa
+    global conn, cursor
+    try:
+        cursor.execute('SELECT 1;')
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+    
+    # Registrar adaptador para UUID
+    psycopg2.extras.register_uuid()
+    
     # Tabela de usuários
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -534,5 +549,12 @@ def get_user_legacy():
     return jsonify({'message': 'Esta rota foi descontinuada. Use /login para autenticação.'}), 410
 
 if __name__ == '__main__':
-    init_db()  # Inicializa o banco de dados
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    try:
+        init_db()  # Inicializa o banco de dados
+        print("✅ Banco de dados inicializado com sucesso!")
+        print(f"🚀 Servidor rodando em http://0.0.0.0:5000")
+        app.run(host='0.0.0.0', port=5000, debug=True)
+    except Exception as e:
+        print(f"❌ Erro ao conectar com o banco de dados: {e}")
+        print("Verifique as configurações no arquivo .env")
+        exit(1)
