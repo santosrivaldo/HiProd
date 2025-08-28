@@ -942,13 +942,6 @@ def add_activity(current_user):
         print(f"✅ Atividade salva: ID {activity_id}")
         return jsonify(response_data), 201
 
-    except psycopg2.Error as e:
-        conn.rollback()
-        print(f"❌ Erro de banco de dados ao salvar atividade: {e}")
-        return jsonify({
-            'message': 'Erro interno do servidor - banco de dados',
-            'error': str(e)
-        }), 500
     except Exception as e:
         print(f"❌ Erro inesperado ao salvar atividade: {e}")
         return jsonify({
@@ -959,134 +952,139 @@ def add_activity(current_user):
 # Rota para obter atividades (protegida)
 @app.route('/atividades', methods=['GET'])
 @token_required
-def get_activities(current_user):
-    global conn, cursor
-
+def get_atividades(current_user):
+    """Buscar todas as atividades com filtros opcionais"""
     try:
-        # Verificar se a conexão está ativa
-        cursor.execute('SELECT 1;')
-    except (psycopg2.OperationalError, psycopg2.InterfaceError):
-        # Reconectar se necessário
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-    try:
-        # Parâmetros de filtro
-        limite = request.args.get('limite', 100, type=int)
-        categoria = request.args.get('categoria')
+        limite = request.args.get('limite', 50, type=int)
+        pagina = request.args.get('pagina', 1, type=int)
+        offset = (pagina - 1) * limite
+        agrupar = request.args.get('agrupar', 'false').lower() == 'true'
+        categoria_filter = request.args.get('categoria')
         data_inicio = request.args.get('data_inicio')
         data_fim = request.args.get('data_fim')
         usuario_monitorado_id = request.args.get('usuario_monitorado_id')
-        agrupar = request.args.get('agrupar', 'false').lower() == 'true' # Novo parâmetro para agrupar
 
-        # Construir query base com JOIN para obter dados do usuário monitorado
-        query = '''
-            SELECT a.id, a.usuario_monitorado_id, a.ociosidade, a.active_window, a.titulo_janela,
-                   a.categoria, a.produtividade, a.horario, a.duracao, a.created_at,
-                   um.nome as usuario_monitorado_nome, um.cargo, d.nome as departamento_nome
-        '''
-        if agrupar:
-            # Selecionar campos para agrupamento e somar ociosidade, contar eventos
-            query = '''
-                SELECT 
-                    MIN(a.id) as id,
-                    a.usuario_monitorado_id, 
-                    SUM(a.ociosidade) as ociosidade, 
-                    a.active_window, 
-                    a.titulo_janela,
-                    a.categoria, 
-                    a.produtividade, 
-                    MIN(a.horario) as horario, 
-                    SUM(a.duracao) as duracao, 
-                    MIN(a.created_at) as created_at,
-                    um.nome as usuario_monitorado_nome, 
-                    um.cargo, 
-                    d.nome as departamento_nome,
-                    COUNT(a.id) as eventos_agrupados
-                FROM atividades a 
-                JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
-                LEFT JOIN departamentos d ON um.departamento_id = d.id
-            '''
-        else:
-            query += '''
-                FROM atividades a 
-                JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
-                LEFT JOIN departamentos d ON um.departamento_id = d.id
-            '''
+        cursor = conn.cursor()
 
+        # Construir a parte WHERE da query
+        query_parts = []
         params = []
-        conditions = ['um.ativo = TRUE']
 
-        if categoria:
-            conditions.append('a.categoria = %s')
-            params.append(categoria)
+        if categoria_filter:
+            query_parts.append('a.categoria = %s')
+            params.append(categoria_filter)
 
         if data_inicio:
-            conditions.append('a.horario >= %s')
+            query_parts.append('a.horario >= %s')
             params.append(data_inicio)
 
         if data_fim:
-            conditions.append('a.horario <= %s')
+            query_parts.append('a.horario <= %s')
             params.append(data_fim)
 
         if usuario_monitorado_id:
-            conditions.append('a.usuario_monitorado_id = %s')
+            query_parts.append('a.usuario_monitorado_id = %s')
             params.append(usuario_monitorado_id)
 
-        if conditions:
-            query += ' WHERE ' + ' AND '.join(conditions)
+        where_clause = ""
+        if query_parts:
+            where_clause = "WHERE " + " AND ".join(query_parts)
+
+        # Primeiro, contar o total de registros que atendem aos filtros
+        if agrupar:
+            count_query = f"""
+                SELECT COUNT(*) FROM (
+                    SELECT 1
+                    FROM atividades a
+                    LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                    {where_clause}
+                    GROUP BY a.usuario_monitorado_id, a.active_window, a.categoria, a.produtividade,
+                             DATE_TRUNC('minute', a.horario)
+                ) as grouped;
+            """
+        else:
+            count_query = f"SELECT COUNT(*) FROM atividades a {where_clause};"
+        
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()[0]
 
         if agrupar:
-            # Adicionar GROUP BY para agrupamento
-            query += '''
-                GROUP BY 
+            # Query com agrupamento
+            query = f"""
+                SELECT 
+                    MIN(a.id) as id,
                     a.usuario_monitorado_id,
+                    um.nome as usuario_monitorado_nome,
+                    um.cargo,
                     a.active_window,
-                    a.titulo_janela,
                     a.categoria,
                     a.produtividade,
-                    um.nome,
-                    um.cargo,
-                    d.nome
-                ORDER BY MIN(a.horario) DESC 
-                LIMIT %s;
-            '''
+                    MIN(a.horario) as horario,
+                    MIN(a.ociosidade) as ociosidade,
+                    COUNT(*) as eventos_agrupados,
+                    SUM(COALESCE(a.duracao, 10)) as duracao_total
+                FROM atividades a
+                LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                {where_clause}
+                GROUP BY a.usuario_monitorado_id, a.active_window, a.categoria, a.produtividade,
+                         DATE_TRUNC('minute', a.horario)
+                ORDER BY MIN(a.horario) DESC
+                LIMIT %s OFFSET %s;
+            """
         else:
-            query += ' ORDER BY a.horario DESC LIMIT %s;'
-
-        params.append(limite)
-
+            # Query simples sem agrupamento
+            query = f"""
+                SELECT 
+                    a.id,
+                    a.usuario_monitorado_id,
+                    um.nome as usuario_monitorado_nome,
+                    um.cargo,
+                    a.active_window,
+                    a.categoria,
+                    a.produtividade,
+                    a.horario,
+                    a.ociosidade,
+                    1 as eventos_agrupados,
+                    COALESCE(a.duracao, 10) as duracao_total
+                FROM atividades a
+                LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                {where_clause}
+                ORDER BY a.horario DESC
+                LIMIT %s OFFSET %s;
+            """
+        
+        params.extend([limite, offset])
         cursor.execute(query, params)
-        atividades = cursor.fetchall()
+        rows = cursor.fetchall()
 
-        # Converter para formato JSON
         result = []
-        for atividade in atividades:
-            try:
-                result.append({
-                    'id': atividade[0],
-                    'usuario_monitorado_id': atividade[1],
-                    'ociosidade': atividade[2] if atividade[2] is not None else 0,
-                    'active_window': atividade[3],
-                    'titulo_janela': atividade[4],
-                    'categoria': atividade[5],
-                    'produtividade': atividade[6],
-                    'horario': atividade[7].isoformat() if atividade[7] else None,
-                    'duracao': atividade[8] if atividade[8] is not None else 10,
-                    'created_at': atividade[9].isoformat() if atividade[9] else None,
-                    'usuario_monitorado_nome': atividade[10],
-                    'cargo': atividade[11],
-                    'departamento_nome': atividade[12],
-                    'eventos_agrupados': atividade[13] if len(atividade) > 13 else 1
-                })
-            except Exception as e:
-                print(f"Erro ao processar atividade: {e}")
-                continue
+        for row in rows:
+            result.append({
+                'id': row[0],
+                'usuario_monitorado_id': row[1],
+                'usuario_monitorado_nome': row[2],
+                'cargo': row[3],
+                'active_window': row[4],
+                'categoria': row[5] or 'unclassified',
+                'produtividade': row[6] or 'neutral',
+                'horario': row[7].isoformat() if row[7] else None,
+                'ociosidade': row[8] or 0,
+                'eventos_agrupados': row[9] if agrupar else 1,
+                'duracao': row[10] or 10
+            })
 
-        return jsonify(result), 200
-    except psycopg2.Error as e:
-        print(f"Erro na consulta de atividades: {e}")
-        return jsonify({'message': 'Erro ao buscar atividades'}), 500
+        # Criar resposta com headers de paginação
+        response = jsonify(result)
+        response.headers['X-Total-Count'] = str(total_count)
+        response.headers['X-Page'] = str(pagina)
+        response.headers['X-Per-Page'] = str(limite)
+        response.headers['X-Total-Pages'] = str((total_count + limite - 1) // limite)
+
+        return response
+
+    except Exception as e:
+        print(f"Erro ao buscar atividades: {e}")
+        return jsonify([]), 500
 
 # Rota para obter todas as atividades (admin - para compatibilidade)
 @app.route('/atividades/all', methods=['GET'])
@@ -1333,8 +1331,6 @@ def get_monitored_users(current_user):
                     try:
                         # Verificar se os campos datetime existem e são válidos
                         created_at_value = None
-                        updated_at_value = None
-
                         if len(usuario) > 5 and usuario[5]:
                             if hasattr(usuario[5], 'isoformat'):
                                 created_at_value = usuario[5].isoformat()

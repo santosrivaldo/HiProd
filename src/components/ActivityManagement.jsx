@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
 import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import LoadingSpinner from './LoadingSpinner'
+import useIntersectionObserver from '../hooks/useIntersectionObserver'
 
 const activityTypes = [
   { value: 'all', label: 'Todos' },
@@ -18,6 +20,7 @@ export default function ActivityManagement() {
   const [activities, setActivities] = useState([])
   const [filteredActivities, setFilteredActivities] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -25,32 +28,82 @@ export default function ActivityManagement() {
   const [users, setUsers] = useState([])
   const [message, setMessage] = useState('')
   const [agruparAtividades, setAgruparAtividades] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+  
+  const [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData(1, true)
+  }, [agruparAtividades])
 
   useEffect(() => {
     applyFilters()
   }, [activities, searchTerm, dateFilter, typeFilter, userFilter])
 
-  const fetchData = async () => {
+  const fetchData = async (page = 1, reset = false) => {
     try {
-      const [activitiesRes, usersRes] = await Promise.all([
-        api.get(`/atividades?limite=500&agrupar=${agruparAtividades}`),
-        api.get('/usuarios')
-      ])
+      if (page === 1) {
+        setLoading(true)
+      } else {
+        setLoadingMore(true)
+      }
 
-      setActivities(activitiesRes.data || [])
-      setUsers(usersRes.data || [])
-      setLoading(false)
+      const pageSize = 50
+      const promises = [
+        api.get(`/atividades?limite=${pageSize}&pagina=${page}&agrupar=${agruparAtividades}`)
+      ]
+
+      // Buscar usuários apenas na primeira página
+      if (page === 1) {
+        promises.push(api.get('/usuarios'))
+      }
+
+      const responses = await Promise.all(promises)
+      const activitiesRes = responses[0]
+      
+      const newActivities = activitiesRes.data || []
+      const total = activitiesRes.headers['x-total-count'] || newActivities.length
+
+      if (page === 1 || reset) {
+        setActivities(newActivities)
+        setCurrentPage(1)
+        if (responses.length > 1) {
+          setUsers(responses[1].data || [])
+        }
+      } else {
+        setActivities(prev => [...prev, ...newActivities])
+        setCurrentPage(page)
+      }
+
+      setTotalCount(total)
+      setHasMore(newActivities.length === pageSize)
+
     } catch (error) {
       console.error('Error fetching data:', error)
-      setActivities([])
-      setUsers([])
+      if (page === 1) {
+        setActivities([])
+        setUsers([])
+      }
+    } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
+
+  const loadMoreActivities = useCallback(() => {
+    if (hasMore && !loadingMore && !loading) {
+      fetchData(currentPage + 1, false)
+    }
+  }, [hasMore, loadingMore, loading, currentPage])
+
+  // Detectar quando o usuário chega ao final da lista
+  useEffect(() => {
+    if (isLoadMoreVisible && hasMore && !loadingMore) {
+      loadMoreActivities()
+    }
+  }, [isLoadMoreVisible, hasMore, loadingMore, loadMoreActivities])
 
   const applyFilters = () => {
     let filtered = [...activities]
@@ -178,11 +231,7 @@ export default function ActivityManagement() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-500"></div>
-      </div>
-    )
+    return <LoadingSpinner size="xl" text="Carregando atividades..." fullScreen />
   }
 
   return (
@@ -257,7 +306,12 @@ export default function ActivityManagement() {
 
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Mostrando {filteredActivities.length} de {activities.length} registros
+            Mostrando {filteredActivities.length} de {totalCount > 0 ? totalCount : activities.length} registros
+            {hasMore && (
+              <span className="ml-2 text-indigo-600 dark:text-indigo-400">
+                (carregando mais automaticamente...)
+              </span>
+            )}
           </div>
           <div className="flex items-center space-x-4">
             <label className="flex items-center text-gray-700 dark:text-gray-300">
@@ -266,17 +320,18 @@ export default function ActivityManagement() {
                 checked={agruparAtividades}
                 onChange={(e) => {
                   setAgruparAtividades(e.target.checked)
-                  fetchData() // Re-fetch data when grouping preference changes
                 }}
                 className="form-checkbox h-4 w-4 text-indigo-600"
+                disabled={loading}
               />
               <span className="ml-2">Agrupar Atividades</span>
             </label>
             <button
-              onClick={fetchData}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700"
+              onClick={() => fetchData(1, true)}
+              disabled={loading}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
             >
-              Atualizar
+              {loading ? 'Atualizando...' : 'Atualizar'}
             </button>
           </div>
         </div>
@@ -411,7 +466,31 @@ export default function ActivityManagement() {
             </table>
           </div>
 
-          {filteredActivities.length === 0 && (
+          {/* Loading indicator for infinite scroll */}
+          {loadingMore && (
+            <div className="flex justify-center py-6">
+              <LoadingSpinner size="md" text="Carregando mais atividades..." />
+            </div>
+          )}
+
+          {/* Intersection observer target */}
+          {hasMore && !loadingMore && (
+            <div ref={loadMoreRef} className="h-4 flex justify-center py-4">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Role para baixo para carregar mais...
+              </div>
+            </div>
+          )}
+
+          {!hasMore && activities.length > 0 && (
+            <div className="text-center py-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                ✅ Todas as atividades foram carregadas ({activities.length} total)
+              </p>
+            </div>
+          )}
+
+          {filteredActivities.length === 0 && !loadingMore && (
             <div className="text-center py-12">
               <FunnelIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">

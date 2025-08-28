@@ -18,6 +18,7 @@ import {
   ResponsiveContainer
 } from 'recharts'
 import { ChartBarIcon } from '@heroicons/react/24/outline'
+import LoadingSpinner from './LoadingSpinner'
 
 const COLORS = {
   productive: '#10B981',
@@ -32,17 +33,20 @@ export default function Dashboard() {
   const [usuariosMonitorados, setUsuariosMonitorados] = useState([])
   const [departamentos, setDepartamentos] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingActivities, setLoadingActivities] = useState(false)
   const [dateRange, setDateRange] = useState(7)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [selectedUser, setSelectedUser] = useState('all')
   const [selectedDepartment, setSelectedDepartment] = useState('all')
+  const [activitiesPage, setActivitiesPage] = useState(1)
+  const [hasMoreActivities, setHasMoreActivities] = useState(true)
 
   useEffect(() => {
-    fetchData()
+    fetchData(1, true)
 
     let interval
     if (autoRefresh) {
-      interval = setInterval(fetchData, 30000)
+      interval = setInterval(() => fetchData(1, true), 30000)
     }
 
     return () => {
@@ -50,38 +54,77 @@ export default function Dashboard() {
     }
   }, [dateRange, autoRefresh])
 
-  const fetchData = async () => {
+  const fetchData = async (page = 1, reset = false) => {
     try {
-      setLoading(true)
-      const [activitiesRes, usuariosRes, departamentosRes] = await Promise.all([
-        api.get('/atividades?agrupar=true'),
-        api.get('/usuarios-monitorados'),
-        api.get('/departamentos')
-      ])
+      if (page === 1) {
+        setLoading(true)
+      } else {
+        setLoadingActivities(true)
+      }
+
+      const pageSize = 100
+      const promises = [
+        api.get(`/atividades?agrupar=true&pagina=${page}&limite=${pageSize}`),
+      ]
+
+      // Buscar usuários e departamentos apenas na primeira página
+      if (page === 1) {
+        promises.push(
+          api.get('/usuarios-monitorados'),
+          api.get('/departamentos')
+        )
+      }
+
+      const responses = await Promise.all(promises)
+      const activitiesRes = responses[0]
 
       // Validar e filtrar dados antes de definir no state
       const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-      const validUsuarios = Array.isArray(usuariosRes.data) ? 
-        usuariosRes.data.filter(u => u && u.id && u.nome) : []
-      const validDepartamentos = Array.isArray(departamentosRes.data) ? 
-        departamentosRes.data.filter(d => d && d.id && d.nome) : []
+      
+      if (page === 1 || reset) {
+        setActivities(validActivities)
+        setActivitiesPage(1)
+        setHasMoreActivities(validActivities.length === pageSize)
 
-      setActivities(validActivities)
-      setUsuariosMonitorados(validUsuarios)
-      setDepartamentos(validDepartamentos)
+        if (responses.length > 1) {
+          const usuariosRes = responses[1]
+          const departamentosRes = responses[2]
+          
+          const validUsuarios = Array.isArray(usuariosRes.data) ? 
+            usuariosRes.data.filter(u => u && u.id && u.nome) : []
+          const validDepartamentos = Array.isArray(departamentosRes.data) ? 
+            departamentosRes.data.filter(d => d && d.id && d.nome) : []
+
+          setUsuariosMonitorados(validUsuarios)
+          setDepartamentos(validDepartamentos)
+        }
+      } else {
+        setActivities(prev => [...prev, ...validActivities])
+        setActivitiesPage(page)
+        setHasMoreActivities(validActivities.length === pageSize)
+      }
 
       console.log('Dados carregados:', {
         atividades: validActivities.length,
-        usuarios: validUsuarios.length,
-        departamentos: validDepartamentos.length
+        página: page,
+        temMais: validActivities.length === pageSize
       })
     } catch (error) {
       console.error('Erro ao buscar dados:', error)
-      setActivities([])
-      setUsuariosMonitorados([])
-      setDepartamentos([])
+      if (page === 1) {
+        setActivities([])
+        setUsuariosMonitorados([])
+        setDepartamentos([])
+      }
     } finally {
       setLoading(false)
+      setLoadingActivities(false)
+    }
+  }
+
+  const loadMoreActivities = () => {
+    if (hasMoreActivities && !loadingActivities) {
+      fetchData(activitiesPage + 1, false)
     }
   }
 
@@ -242,11 +285,7 @@ export default function Dashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-500"></div>
-      </div>
-    )
+    return <LoadingSpinner size="xl" text="Carregando dashboard..." fullScreen />
   }
 
   const { pieData, timelineData, totalTime, userStats, recentActivities } = processActivityData()
@@ -336,10 +375,11 @@ export default function Dashboard() {
         </div>
 
         <button
-          onClick={fetchData}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700"
+          onClick={() => fetchData(1, true)}
+          disabled={loading}
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
         >
-          Atualizar
+          {loading ? 'Atualizando...' : 'Atualizar'}
         </button>
       </div>
 
@@ -581,31 +621,51 @@ export default function Dashboard() {
 
       {/* Recent Activities - Empty State */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mt-6">
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-          Atividades Recentes
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-medium text-gray-900 dark:text-white">
+            Atividades Recentes
+          </h2>
+          {hasMoreActivities && (
+            <button
+              onClick={loadMoreActivities}
+              disabled={loadingActivities}
+              className="px-3 py-1 text-sm bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200 disabled:opacity-50"
+            >
+              {loadingActivities ? 'Carregando...' : 'Carregar mais'}
+            </button>
+          )}
+        </div>
+        
         {recentActivities && recentActivities.length > 0 ? (
-          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-            {recentActivities.slice(0, 5).map((activity) => (
-              <li key={activity.id} className="py-4">
-                <div className="flex space-x-3">
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                        {activity.active_window || 'Atividade sem título'}
-                      </h3>
+          <>
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {recentActivities.slice(0, 10).map((activity) => (
+                <li key={activity.id} className="py-4">
+                  <div className="flex space-x-3">
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                          {activity.active_window || 'Atividade sem título'}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          {activity.horario ? new Date(activity.horario).toLocaleTimeString() : ''}
+                        </p>
+                      </div>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {activity.horario ? new Date(activity.horario).toLocaleTimeString() : ''}
+                        Usuário: {activity.usuario_monitorado_nome || 'N/A'} - {activity.categoria || 'Sem categoria'}
                       </p>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Usuário: {activity.usuario_monitorado_nome || 'N/A'} - {activity.categoria || 'Sem categoria'}
-                    </p>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+            
+            {loadingActivities && (
+              <div className="flex justify-center py-4">
+                <LoadingSpinner size="sm" text="Carregando mais atividades..." />
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-8">
             <div className="text-gray-400 dark:text-gray-500">
