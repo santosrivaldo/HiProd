@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import os
 
 # Carregar variáveis do arquivo .env
-load_dotenv()
+load_dotenv(override=True)
 
 def create_tables():
     # Conectar ao banco

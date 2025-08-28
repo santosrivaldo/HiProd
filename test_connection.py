@@ -8,7 +8,8 @@ import psycopg2
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+# Forçar recarregamento das variáveis de ambiente
+load_dotenv(override=True)
 
 def test_connection():
     try:
