@@ -74,37 +74,43 @@ def verify_token(token):
 
 # Função para classificar atividade automaticamente
 def classify_activity(active_window, ociosidade, user_department_id=None):
-    # Buscar regras de classificação específicas do departamento primeiro
-    if user_department_id:
+    try:
+        # Buscar regras de classificação específicas do departamento primeiro
+        if user_department_id:
+            cursor.execute('''
+            SELECT c.nome, c.tipo_produtividade 
+            FROM regras_classificacao r 
+            JOIN categorias_app c ON r.categoria_id = c.id 
+            WHERE r.ativo = TRUE AND r.departamento_id = %s AND %s ILIKE '%' || r.pattern || '%'
+            ORDER BY LENGTH(r.pattern) DESC 
+            LIMIT 1;
+            ''', (user_department_id, active_window))
+            
+            result = cursor.fetchone()
+            if result:
+                categoria, produtividade = result
+                return categoria, produtividade
+        
+        # Buscar regras globais (sem departamento específico)
         cursor.execute('''
         SELECT c.nome, c.tipo_produtividade 
         FROM regras_classificacao r 
         JOIN categorias_app c ON r.categoria_id = c.id 
-        WHERE r.ativo = TRUE AND r.departamento_id = %s AND %s ILIKE '%' || r.pattern || '%'
+        WHERE r.ativo = TRUE AND r.departamento_id IS NULL AND %s ILIKE '%' || r.pattern || '%'
         ORDER BY LENGTH(r.pattern) DESC 
         LIMIT 1;
-        ''', (user_department_id, active_window))
-        
+        ''', (active_window,))
+
         result = cursor.fetchone()
+
         if result:
             categoria, produtividade = result
             return categoria, produtividade
-    
-    # Buscar regras globais (sem departamento específico)
-    cursor.execute('''
-    SELECT c.nome, c.tipo_produtividade 
-    FROM regras_classificacao r 
-    JOIN categorias_app c ON r.categoria_id = c.id 
-    WHERE r.ativo = TRUE AND r.departamento_id IS NULL AND %s ILIKE '%' || r.pattern || '%'
-    ORDER BY LENGTH(r.pattern) DESC 
-    LIMIT 1;
-    ''', (active_window,))
 
-    result = cursor.fetchone()
-
-    if result:
-        categoria, produtividade = result
-        return categoria, produtividade
+    except psycopg2.ProgrammingError as e:
+        # Se houver erro de coluna não existir, usar classificação básica
+        print(f"Aviso na classificação: {e}")
+        pass
 
     # Classificação baseada em ociosidade
     if ociosidade >= 600:  # 10 minutos
@@ -265,6 +271,9 @@ def init_db():
         UNIQUE(departamento_id, configuracao_chave)
     );
     ''')
+
+    # Commit das tabelas criadas antes de adicionar colunas com foreign keys
+    conn.commit()
 
     # Verificar se a coluna departamento_id existe antes de adicioná-la
     try:
