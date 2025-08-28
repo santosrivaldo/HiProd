@@ -33,23 +33,48 @@ export default function Login() {
       return
     }
 
+    if (!isLogin && formData.password !== formData.confirmPassword) {
+      setError('As senhas não coincidem')
+      return
+    }
+
     setLoading(true)
     setError('')
 
     try {
       let result
+      console.log('Tentando fazer login/registro...', { username: formData.username.trim(), isLogin })
+      
       if (isLogin) {
         result = await login(formData.username.trim(), formData.password)
       } else {
         result = await register(formData.username.trim(), formData.password, formData.confirmPassword)
       }
       
+      console.log('Resultado da operação:', result)
+      
       if (!result.success) {
-        setError(result.error)
+        const errorMessage = result.error || 'Erro desconhecido'
+        console.error('Erro no login/registro:', errorMessage)
+        
+        // Mensagens de erro mais amigáveis
+        if (errorMessage.toLowerCase().includes('credenciais inválidas')) {
+          setError('Nome de usuário ou senha incorretos')
+        } else if (errorMessage.toLowerCase().includes('usuário já existe')) {
+          setError('Este nome de usuário já está em uso')
+        } else if (errorMessage.toLowerCase().includes('senha deve ter')) {
+          setError('A senha deve ter pelo menos 6 caracteres')
+        } else {
+          setError(errorMessage)
+        }
       }
     } catch (error) {
       console.error('Erro no submit:', error)
-      setError('Erro inesperado. Tente novamente.')
+      if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {
+        setError('Erro de conexão. Verifique sua internet e tente novamente.')
+      } else {
+        setError('Erro inesperado. Tente novamente em alguns segundos.')
+      }
     } finally {
       setLoading(false)
     }

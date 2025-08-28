@@ -60,10 +60,14 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     try {
+      console.log('Iniciando login...', { username })
+      
       const response = await api.post('/login', {
         nome: username,
         senha: password
       })
+
+      console.log('Resposta do login:', response.status, response.data)
 
       if (response.data && response.data.token) {
         const userData = {
@@ -76,8 +80,10 @@ export function AuthProvider({ children }) {
         localStorage.setItem('user', JSON.stringify(userData))
         localStorage.setItem('token', response.data.token)
 
+        console.log('Login bem-sucedido:', userData)
         return { success: true }
       } else {
+        console.error('Resposta inválida:', response.data)
         return { 
           success: false, 
           error: 'Resposta inválida do servidor' 
@@ -85,9 +91,26 @@ export function AuthProvider({ children }) {
       }
     } catch (error) {
       console.error('Erro no login:', error)
+      
+      let errorMessage = 'Erro no login'
+      
+      if (error.response) {
+        // Erro HTTP
+        console.error('Status:', error.response.status)
+        console.error('Data:', error.response.data)
+        errorMessage = error.response.data?.message || `Erro ${error.response.status}`
+      } else if (error.request) {
+        // Erro de rede
+        console.error('Erro de rede:', error.request)
+        errorMessage = 'Erro de conexão com o servidor'
+      } else {
+        console.error('Erro geral:', error.message)
+        errorMessage = error.message
+      }
+      
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message || 'Erro no login' 
+        error: errorMessage
       }
     }
   }

@@ -551,6 +551,31 @@ def init_db():
             # 6. Inserir dados padrão
             print("📋 Inserindo dados padrão...")
 
+            # Inserir usuário admin padrão se não existir
+            db.cursor.execute("SELECT COUNT(*) FROM usuarios WHERE nome = 'admin';")
+            admin_count_result = db.cursor.fetchone()
+            admin_count = admin_count_result[0] if admin_count_result else 0
+
+            if admin_count == 0:
+                print("👤 Criando usuário admin padrão...")
+                admin_password = "Brasil@1402"  # Mesma senha do agente
+                hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt())
+                admin_id = uuid.uuid4()
+                
+                # Buscar ID do departamento TI
+                db.cursor.execute("SELECT id FROM departamentos WHERE nome = 'TI';")
+                ti_dept_result = db.cursor.fetchone()
+                ti_dept_id = ti_dept_result[0] if ti_dept_result else None
+
+                db.cursor.execute('''
+                    INSERT INTO usuarios (id, nome, senha, email, departamento_id)
+                    VALUES (%s, %s, %s, %s, %s);
+                ''', (admin_id, 'admin', hashed_password.decode('utf-8'), 'admin@empresa.com', ti_dept_id))
+                
+                print("✅ Usuário admin criado (usuario: admin, senha: Brasil@1402)")
+            else:
+                print("⏭️ Usuário admin já existe...")
+
             # Inserir tags padrão
             print("📋 Inserindo tags padrão...")
             # Primeiro, verificar se já existem tags para evitar duplicatas
@@ -679,52 +704,80 @@ def register():
 def login():
     try:
         data = request.json
+        print(f"📝 Tentativa de login recebida: {data.get('nome', 'N/A') if data else 'Dados vazios'}")
 
         if not data or 'nome' not in data or 'senha' not in data:
+            print("❌ Dados de login incompletos")
             return jsonify({'message': 'Nome de usuário e senha são obrigatórios!'}), 400
 
         nome = data['nome'].strip()
         senha = data['senha']
 
+        if not nome or not senha:
+            print("❌ Nome ou senha vazios")
+            return jsonify({'message': 'Nome de usuário e senha não podem estar vazios!'}), 400
+
         with DatabaseConnection() as db:
             # Buscar usuário
-            db.cursor.execute("SELECT * FROM usuarios WHERE nome = %s;", (nome,))
+            db.cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE nome = %s AND ativo = TRUE;", (nome,))
             usuario = db.cursor.fetchone()
 
             if not usuario:
+                print(f"❌ Usuário não encontrado: {nome}")
                 return jsonify({'message': 'Credenciais inválidas!'}), 401
 
-            # Verificar senha - lidar com diferentes tipos de dados
+            print(f"✅ Usuário encontrado: {usuario[1]} (ID: {usuario[0]})")
+
+            # Verificar senha
             senha_hash = usuario[2]
-            if isinstance(senha_hash, bool):
-                # Se a senha foi armazenada como boolean, recriar o hash
-                senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                # Atualizar no banco com o hash correto
-                db.cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s;", (senha_hash, usuario[0]))
-            elif isinstance(senha_hash, str):
-                # Verificar se é um hash válido
-                if not senha_hash.startswith('$2b$'):
-                    # Se não é um hash bcrypt válido, criar um novo
-                    senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                    db.cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s;", (senha_hash, usuario[0]))
+            
+            # Se a senha ainda não está hasheada (primeira vez ou dados de teste)
+            if not isinstance(senha_hash, str) or not senha_hash.startswith('$2b$'):
+                print("🔧 Senha não está hasheada, criando hash...")
+                # Criar hash da senha fornecida para comparação
+                senha_hash_novo = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                
+                # Atualizar no banco
+                db.cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s;", (senha_hash_novo, usuario[0]))
+                senha_hash = senha_hash_novo
+                print("✅ Hash da senha atualizado no banco")
 
             # Verificar senha
             try:
-                if not bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8')):
+                senha_valida = bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8'))
+                
+                if not senha_valida:
+                    print(f"❌ Senha inválida para usuário: {nome}")
                     return jsonify({'message': 'Credenciais inválidas!'}), 401
-            except (ValueError, TypeError):
+                    
+                print(f"✅ Login bem-sucedido para: {nome}")
+                
+            except Exception as verify_error:
+                print(f"❌ Erro ao verificar senha: {verify_error}")
                 return jsonify({'message': 'Erro interno do servidor. Tente novamente.'}), 500
+
+            # Atualizar último login
+            try:
+                db.cursor.execute("UPDATE usuarios SET ultimo_login = CURRENT_TIMESTAMP WHERE id = %s;", (usuario[0],))
+            except Exception as update_error:
+                print(f"⚠️ Erro ao atualizar último login: {update_error}")
 
             # Gerar token
             token = generate_token(usuario[0])
 
-            return jsonify({
+            response_data = {
                 'usuario_id': str(usuario[0]),
                 'usuario': usuario[1],
                 'token': token
-            }), 200
+            }
+
+            print(f"🎉 Login realizado com sucesso: {nome}")
+            return jsonify(response_data), 200
+            
     except Exception as e:
-        print(f"Erro na preparação do login: {e}")
+        print(f"❌ Erro crítico no login: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'message': 'Erro interno do servidor'}), 500
 
 # Rota para obter perfil do usuário (protegida)
