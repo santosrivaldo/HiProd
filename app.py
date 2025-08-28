@@ -76,7 +76,7 @@ def verify_token(token):
 def classify_activity_with_tags(active_window, ociosidade, user_department_id=None, activity_id=None):
     try:
         print(f"🏷️ Classificando com tags - window: {active_window}, dept_id: {user_department_id}")
-        
+
         # Buscar tags ativas - primeiro do departamento específico, depois globais
         if user_department_id:
             cursor.execute('''
@@ -95,10 +95,10 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
             WHERE t.ativo = TRUE AND t.departamento_id IS NULL
             ORDER BY tk.peso DESC;
             ''')
-        
+
         tag_matches = cursor.fetchall()
         matched_tags = []
-        
+
         for tag_match in tag_matches:
             tag_id, tag_nome, tag_produtividade, palavra_chave, peso = tag_match
             # Verificar se a palavra-chave está presente no título da janela (case insensitive)
@@ -112,9 +112,9 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
                     'confidence': confidence,
                     'palavra_chave': palavra_chave
                 })
-                
+
                 print(f"🎯 Match encontrado: '{palavra_chave}' -> Tag '{tag_nome}' (confidence: {confidence:.2f})")
-                
+
                 # Se temos um ID da atividade, salvar a associação
                 if activity_id:
                     cursor.execute('''
@@ -122,18 +122,18 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
                     VALUES (%s, %s, %s)
                     ON CONFLICT (atividade_id, tag_id) DO UPDATE SET confidence = EXCLUDED.confidence;
                     ''', (activity_id, tag_id, confidence))
-        
+
         # Retornar a tag com maior confidence
         if matched_tags:
             best_match = max(matched_tags, key=lambda x: x['confidence'])
             print(f"🏷️ Melhor match: '{best_match['nome']}' ({best_match['produtividade']}) - confidence: {best_match['confidence']:.2f}")
             # A categoria agora será o nome da tag
             return best_match['nome'], best_match['produtividade']
-    
+
     except Exception as e:
         print(f"❌ Erro na classificação com tags: {e}")
         conn.rollback()
-    
+
     # Fallback para classificação por ociosidade se nenhuma tag foi encontrada
     print(f"🔍 Nenhuma tag encontrada, usando classificação por ociosidade: {ociosidade}")
     if ociosidade >= 600:  # 10 minutos
@@ -696,7 +696,7 @@ def register():
 @app.route('/login', methods=['POST'])
 def login():
     global conn, cursor
-    
+
     try:
         # Verificar se a conexão está ativa e fazer rollback se necessário
         try:
@@ -709,7 +709,7 @@ def login():
         except psycopg2.errors.InFailedSqlTransaction:
             # Rollback da transação falhada
             conn.rollback()
-        
+
         data = request.json
 
         if not data or 'nome' not in data or 'senha' not in data:
@@ -826,12 +826,12 @@ def add_activity(current_user):
         usuario_monitorado = cursor.fetchone()
         if not usuario_monitorado:
             print(f"❌ Usuário monitorado não encontrado: ID {usuario_monitorado_id}")
-            
+
             # Listar usuários existentes para debug
             cursor.execute("SELECT id, nome FROM usuarios_monitorados WHERE ativo = TRUE;")
             usuarios_existentes = cursor.fetchall()
             print(f"🔍 Usuários monitorados existentes: {usuarios_existentes}")
-            
+
             return jsonify({
                 'message': f'Usuário monitorado não encontrado ou inativo! ID: {usuario_monitorado_id}',
                 'suggestion': 'Verifique se o usuário existe ou recrie-o através do endpoint /usuarios-monitorados'
@@ -904,7 +904,7 @@ def add_activity(current_user):
 
         print(f"🏷️ Atividade classificada: {categoria} ({produtividade})")
 
-        
+
         conn.commit()
 
         response_data = {
@@ -991,7 +991,7 @@ def get_activities(current_user):
                 JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                 LEFT JOIN departamentos d ON um.departamento_id = d.id
             '''
-        
+
         params = []
         conditions = ['um.ativo = TRUE']
 
@@ -1256,7 +1256,7 @@ def get_monitored_users(current_user):
                         LEFT JOIN departamentos d ON um.departamento_id = d.id
                         WHERE um.nome = %s AND um.ativo = TRUE;
                     ''', (nome_usuario,))
-                    
+
                     usuario_encontrado = cursor.fetchone()
                     if usuario_encontrado:
                         result = {
@@ -1357,7 +1357,7 @@ def get_monitored_users(current_user):
 @token_required
 def get_departments(current_user):
     global conn, cursor
-    
+
     try:
         # Verificar e reconectar se necessário
         try:
@@ -1368,15 +1368,23 @@ def get_departments(current_user):
             cursor = conn.cursor()
         except (psycopg2.errors.InFailedSqlTransaction, psycopg2.ProgrammingError):
             conn.rollback()
-        
+
         cursor.execute("SELECT * FROM departamentos WHERE ativo = TRUE ORDER BY nome;")
         departamentos = cursor.fetchall()
+
+        if not departamentos:
+            return jsonify([]), 200
+
         result = []
         for dept in departamentos:
             try:
+                # Verificar se temos dados suficientes
+                if len(dept) < 6:
+                    continue
+
                 # Verificar se created_at é datetime ou string
                 created_at_value = None
-                if dept[5]:
+                if len(dept) > 5 and dept[5]:
                     if hasattr(dept[5], 'isoformat'):
                         created_at_value = dept[5].isoformat()
                     else:
@@ -1385,9 +1393,9 @@ def get_departments(current_user):
                 result.append({
                     'id': dept[0], 
                     'nome': dept[1], 
-                    'descricao': dept[2],
-                    'cor': dept[3], 
-                    'ativo': dept[4],
+                    'descricao': dept[2] if len(dept) > 2 else '',
+                    'cor': dept[3] if len(dept) > 3 else '#6B7280', 
+                    'ativo': dept[4] if len(dept) > 4 else True,
                     'created_at': created_at_value
                 })
             except (IndexError, AttributeError) as e:
@@ -1395,7 +1403,7 @@ def get_departments(current_user):
                 continue
 
         return jsonify(result)
-    except psycopg2.Error as e:
+    except (psycopg2.Error, psycopg2.ProgrammingError) as e:
         conn.rollback()
         print(f"Erro na consulta de departamentos: {e}")
         return jsonify([]), 200
@@ -1656,7 +1664,7 @@ def set_department_config(current_user, departamento_id):
 def get_tags(current_user):
     departamento_id = request.args.get('departamento_id')
     ativo = request.args.get('ativo', 'true').lower() == 'true'
-    
+
     try:
         if departamento_id:
             cursor.execute('''
@@ -1674,10 +1682,10 @@ def get_tags(current_user):
                 WHERE t.ativo = %s
                 ORDER BY t.nome;
             ''', (ativo,))
-        
+
         tags = cursor.fetchall()
         result = []
-        
+
         for tag in tags:
             # Buscar palavras-chave da tag
             cursor.execute('''
@@ -1687,7 +1695,7 @@ def get_tags(current_user):
                 ORDER BY peso DESC;
             ''', (tag[0],))
             palavras_chave = cursor.fetchall()
-            
+
             result.append({
                 'id': tag[0],
                 'nome': tag[1],
@@ -1701,7 +1709,7 @@ def get_tags(current_user):
                 'departamento_nome': tag[9] if len(tag) > 9 else None,
                 'palavras_chave': [{'palavra': p[0], 'peso': p[1]} for p in palavras_chave]
             })
-        
+
         return jsonify(result)
     except Exception as e:
         print(f"Erro ao buscar tags: {e}")
@@ -1711,20 +1719,20 @@ def get_tags(current_user):
 @token_required
 def create_tag(current_user):
     data = request.json
-    
+
     if not data or 'nome' not in data or 'produtividade' not in data:
         return jsonify({'message': 'Nome e produtividade são obrigatórios!'}), 400
-    
+
     nome = data['nome'].strip()
     descricao = data.get('descricao', '')
     cor = data.get('cor', '#6B7280')
     produtividade = data['produtividade']
     departamento_id = data.get('departamento_id')
     palavras_chave = data.get('palavras_chave', [])
-    
+
     if produtividade not in ['productive', 'nonproductive', 'neutral']:
         return jsonify({'message': 'Produtividade inválida!'}), 400
-    
+
     try:
         # Criar tag
         cursor.execute('''
@@ -1732,9 +1740,9 @@ def create_tag(current_user):
             VALUES (%s, %s, %s, %s, %s)
             RETURNING id;
         ''', (nome, descricao, cor, produtividade, departamento_id))
-        
+
         tag_id = cursor.fetchone()[0]
-        
+
         # Adicionar palavras-chave
         for palavra in palavras_chave:
             if isinstance(palavra, dict):
@@ -1743,16 +1751,16 @@ def create_tag(current_user):
             else:
                 palavra_chave = str(palavra)
                 peso = 1
-                
+
             if palavra_chave.strip():
                 cursor.execute('''
                     INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
                     VALUES (%s, %s, %s);
                 ''', (tag_id, palavra_chave.strip(), peso))
-        
+
         conn.commit()
         return jsonify({'message': 'Tag criada com sucesso!', 'id': tag_id}), 201
-        
+
     except psycopg2.IntegrityError:
         conn.rollback()
         return jsonify({'message': 'Tag já existe para este departamento!'}), 409
@@ -1765,20 +1773,20 @@ def create_tag(current_user):
 @token_required
 def update_tag(current_user, tag_id):
     data = request.json
-    
+
     if not data:
         return jsonify({'message': 'Dados não fornecidos!'}), 400
-    
+
     try:
         # Verificar se a tag existe
         cursor.execute('SELECT id FROM tags WHERE id = %s;', (tag_id,))
         if not cursor.fetchone():
             return jsonify({'message': 'Tag não encontrada!'}), 404
-        
+
         # Atualizar tag
         update_fields = []
         update_values = []
-        
+
         if 'nome' in data:
             update_fields.append('nome = %s')
             update_values.append(data['nome'])
@@ -1796,20 +1804,20 @@ def update_tag(current_user, tag_id):
         if 'ativo' in data:
             update_fields.append('ativo = %s')
             update_values.append(data['ativo'])
-        
+
         update_fields.append('updated_at = CURRENT_TIMESTAMP')
         update_values.append(tag_id)
-        
+
         cursor.execute(f'''
             UPDATE tags SET {', '.join(update_fields)}
             WHERE id = %s;
         ''', update_values)
-        
+
         # Atualizar palavras-chave se fornecidas
         if 'palavras_chave' in data:
             # Remover palavras-chave existentes
             cursor.execute('DELETE FROM tag_palavras_chave WHERE tag_id = %s;', (tag_id,))
-            
+
             # Adicionar novas palavras-chave
             for palavra in data['palavras_chave']:
                 if isinstance(palavra, dict):
@@ -1818,16 +1826,16 @@ def update_tag(current_user, tag_id):
                 else:
                     palavra_chave = str(palavra)
                     peso = 1
-                    
+
                 if palavra_chave.strip():
                     cursor.execute('''
                         INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
                         VALUES (%s, %s, %s);
                     ''', (tag_id, palavra_chave.strip(), peso))
-        
+
         conn.commit()
         return jsonify({'message': 'Tag atualizada com sucesso!'}), 200
-        
+
     except Exception as e:
         conn.rollback()
         print(f"Erro ao atualizar tag: {e}")
@@ -1841,11 +1849,11 @@ def delete_tag(current_user, tag_id):
         cursor.execute('SELECT id FROM tags WHERE id = %s;', (tag_id,))
         if not cursor.fetchone():
             return jsonify({'message': 'Tag não encontrada!'}), 404
-        
+
         # Deletar tag (as palavras-chave serão deletadas em cascata)
         cursor.execute('DELETE FROM tags WHERE id = %s;', (tag_id,))
         conn.commit()
-        
+
         return jsonify({'message': 'Tag deletada com sucesso!'}), 200
     except Exception as e:
         conn.rollback()
@@ -1858,24 +1866,24 @@ def delete_tag(current_user, tag_id):
 @token_required
 def create_monitored_user(current_user):
     data = request.json
-    
+
     if not data or 'nome' not in data:
         return jsonify({'message': 'Nome é obrigatório!'}), 400
-    
+
     nome = data['nome'].strip()
     cargo = data.get('cargo', 'Usuário')
     departamento_id = data.get('departamento_id')
-    
+
     try:
         cursor.execute('''
             INSERT INTO usuarios_monitorados (nome, cargo, departamento_id)
             VALUES (%s, %s, %s)
             RETURNING id, nome, cargo, departamento_id, ativo, created_at;
         ''', (nome, cargo, departamento_id))
-        
+
         usuario = cursor.fetchone()
         conn.commit()
-        
+
         return jsonify({
             'message': 'Usuário monitorado criado com sucesso!',
             'id': usuario[0],
@@ -1885,7 +1893,7 @@ def create_monitored_user(current_user):
             'ativo': usuario[4],
             'created_at': usuario[5].isoformat() if usuario[5] else None
         }), 201
-        
+
     except psycopg2.IntegrityError:
         conn.rollback()
         return jsonify({'message': 'Usuário monitorado já existe!'}), 409
@@ -1898,19 +1906,19 @@ def create_monitored_user(current_user):
 @token_required
 def update_monitored_user(current_user, user_id):
     data = request.json
-    
+
     if not data:
         return jsonify({'message': 'Dados não fornecidos!'}), 400
-    
+
     try:
         # Verificar se o usuário existe
         cursor.execute('SELECT id FROM usuarios_monitorados WHERE id = %s;', (user_id,))
         if not cursor.fetchone():
             return jsonify({'message': 'Usuário monitorado não encontrado!'}), 404
-        
+
         update_fields = []
         update_values = []
-        
+
         if 'nome' in data:
             update_fields.append('nome = %s')
             update_values.append(data['nome'])
@@ -1923,18 +1931,18 @@ def update_monitored_user(current_user, user_id):
         if 'ativo' in data:
             update_fields.append('ativo = %s')
             update_values.append(data['ativo'])
-        
+
         update_fields.append('updated_at = CURRENT_TIMESTAMP')
         update_values.append(user_id)
-        
+
         cursor.execute(f'''
             UPDATE usuarios_monitorados SET {', '.join(update_fields)}
             WHERE id = %s;
         ''', update_values)
-        
+
         conn.commit()
         return jsonify({'message': 'Usuário monitorado atualizado com sucesso!'}), 200
-        
+
     except Exception as e:
         conn.rollback()
         print(f"Erro ao atualizar usuário monitorado: {e}")
@@ -1954,10 +1962,10 @@ def get_activity_tags(current_user, activity_id):
             WHERE at.atividade_id = %s
             ORDER BY at.confidence DESC;
         ''', (activity_id,))
-        
+
         tags = cursor.fetchall()
         result = []
-        
+
         for tag in tags:
             result.append({
                 'id': tag[0],
@@ -1968,7 +1976,7 @@ def get_activity_tags(current_user, activity_id):
                 'confidence': float(tag[5]) if tag[5] else 0.0,
                 'departamento_nome': tag[6]
             })
-        
+
         return jsonify(result)
     except Exception as e:
         print(f"Erro ao buscar tags da atividade: {e}")

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -31,7 +30,7 @@ const UserManagement = () => {
         api.get('/usuarios-monitorados'),
         api.get('/departamentos')
       ])
-      
+
       setUsuarios(usuariosRes.data || [])
       setUsuariosMonitorados(monitoradosRes.data || [])
       setDepartments(departmentsRes.data || [])
@@ -45,7 +44,7 @@ const UserManagement = () => {
 
   const handleSubmitMonitorado = async (e) => {
     e.preventDefault()
-    
+
     try {
       if (editingUser) {
         await api.put(`/usuarios-monitorados/${editingUser.id}`, formData)
@@ -54,7 +53,7 @@ const UserManagement = () => {
         await api.post('/usuarios-monitorados', formData)
         setMessage('Usuário monitorado criado com sucesso!')
       }
-      
+
       fetchData()
       resetForm()
       setTimeout(() => setMessage(''), 3000)
@@ -167,7 +166,7 @@ const UserManagement = () => {
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             {editingUser ? 'Editar Usuário Monitorado' : 'Novo Usuário Monitorado'}
           </h2>
-          
+
           <form onSubmit={handleSubmitMonitorado} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -242,7 +241,7 @@ const UserManagement = () => {
               Usuários cujas atividades estão sendo monitoradas pelo sistema
             </p>
           </div>
-          
+
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {usuariosMonitorados.map((usuario) => (
               <li key={usuario.id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -269,7 +268,7 @@ const UserManagement = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       usuario.ativo 
@@ -278,7 +277,7 @@ const UserManagement = () => {
                     }`}>
                       {usuario.ativo ? 'Ativo' : 'Inativo'}
                     </span>
-                    
+
                     <button
                       onClick={() => handleEditMonitorado(usuario)}
                       className="text-indigo-600 hover:text-indigo-900 text-sm"
@@ -287,7 +286,7 @@ const UserManagement = () => {
                     </button>
                   </div>
                 </div>
-                
+
                 {usuario.created_at && (
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     Criado em: {format(new Date(usuario.created_at), 'dd/MM/yyyy HH:mm')}
@@ -296,7 +295,7 @@ const UserManagement = () => {
               </li>
             ))}
           </ul>
-          
+
           {usuariosMonitorados.length === 0 && (
             <div className="text-center py-12">
               <p className="text-gray-500 dark:text-gray-400">
@@ -318,7 +317,7 @@ const UserManagement = () => {
               Usuários com acesso ao painel administrativo
             </p>
           </div>
-          
+
           <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {usuarios.map((usuario) => (
               <li key={usuario.usuario_id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -347,7 +346,7 @@ const UserManagement = () => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <select
                       value={usuario.departamento_id || ''}
@@ -361,7 +360,7 @@ const UserManagement = () => {
                     </select>
                   </div>
                 </div>
-                
+
                 {usuario.created_at && (
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     Criado em: {format(new Date(usuario.created_at), 'dd/MM/yyyy HH:mm')}
@@ -370,7 +369,7 @@ const UserManagement = () => {
               </li>
             ))}
           </ul>
-          
+
           {usuarios.length === 0 && (
             <div className="text-center py-12">
               <p className="text-gray-500 dark:text-gray-400">

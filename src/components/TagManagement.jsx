@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -30,7 +29,7 @@ const TagManagement = () => {
         api.get('/tags'),
         api.get('/departamentos')
       ])
-      
+
       setTags(tagsRes.data || [])
       setDepartments(departmentsRes.data || [])
     } catch (error) {
@@ -43,7 +42,7 @@ const TagManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     try {
       const dataToSend = {
         ...formData,
@@ -59,7 +58,7 @@ const TagManagement = () => {
         await api.post('/tags', dataToSend)
         setMessage('Tag criada com sucesso!')
       }
-      
+
       fetchData()
       resetForm()
       setTimeout(() => setMessage(''), 3000)
@@ -185,7 +184,7 @@ const TagManagement = () => {
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             {editingTag ? 'Editar Tag' : 'Nova Tag'}
           </h2>
-          
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -310,86 +309,105 @@ const TagManagement = () => {
       )}
 
       {/* Lista de Tags */}
-      <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-          {tags.map((tag) => (
-            <li key={tag.id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-3">
-                    <div 
-                      className="w-4 h-4 rounded-full"
-                      style={{ backgroundColor: tag.cor }}
-                    ></div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                        {tag.nome}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                        {tag.descricao || 'Sem descrição'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-2 flex items-center space-x-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getProdutividadeColor(tag.produtividade)}`}>
-                      {getProdutividadeLabel(tag.produtividade)}
-                    </span>
-                    
-                    {tag.departamento_nome && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {tag.departamento_nome}
+      <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+          {tags && tags.length > 0 ? (
+            <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Nome
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Produtividade
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Departamento
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Palavras-chave
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {tags.map((tag) => (
+                  <tr key={tag.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div 
+                          className="w-4 h-4 rounded-full mr-3"
+                          style={{ backgroundColor: tag.cor }}
+                        />
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {tag.nome}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        tag.produtividade === 'productive' 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+                          : tag.produtividade === 'nonproductive'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                          : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+                      }`}>
+                        {tag.produtividade === 'productive' ? 'Produtiva' : 
+                         tag.produtividade === 'nonproductive' ? 'Não Produtiva' : 'Neutra'}
                       </span>
-                    )}
-                    
-                    {!tag.departamento_nome && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        Global
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                      {tag.departamento_nome || 'Global'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {tag.palavras_chave?.length > 0 
+                        ? tag.palavras_chave.map(p => p.palavra).join(', ')
+                        : 'Nenhuma'
+                      }
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        tag.ativo 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+                          : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                      }`}>
+                        {tag.ativo ? 'Ativo' : 'Inativo'}
                       </span>
-                    )}
-                  </div>
-                  
-                  {tag.palavras_chave?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {tag.palavras_chave.map((palavra, index) => (
-                        <span 
-                          key={index}
-                          className="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200"
-                        >
-                          {palavra.palavra}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleEdit(tag)}
-                    className="text-indigo-600 hover:text-indigo-900 text-sm"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDelete(tag.id)}
-                    className="text-red-600 hover:text-red-900 text-sm"
-                  >
-                    Excluir
-                  </button>
-                </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleEdit(tag)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-4"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(tag.id)}
+                        className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                      >
+                        Excluir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center py-12 bg-white dark:bg-gray-800">
+              <div className="text-gray-400 dark:text-gray-500">
+                <svg className="mx-auto h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a.997.997 0 01-1.414 0l-7-7A1.997 1.997 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                <p className="text-sm font-medium">Nenhuma tag encontrada</p>
+                <p className="text-xs mt-1">Crie sua primeira tag para classificar atividades automaticamente</p>
               </div>
-            </li>
-          ))}
-        </ul>
-        
-        {tags.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-500 dark:text-gray-400">
-              Nenhuma tag encontrada. Crie a primeira tag para começar!
-            </p>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
     </div>
   )
 }

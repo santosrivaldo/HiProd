@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -18,6 +17,7 @@ import {
   Line,
   ResponsiveContainer
 } from 'recharts'
+import { ChartBarIcon } from '@heroicons/react/outline'
 
 const COLORS = {
   productive: '#10B981',
@@ -39,12 +39,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData()
-    
+
     let interval
     if (autoRefresh) {
       interval = setInterval(fetchData, 30000)
     }
-    
+
     return () => {
       if (interval) clearInterval(interval)
     }
@@ -58,18 +58,18 @@ export default function Dashboard() {
         api.get('/usuarios-monitorados'),
         api.get('/departamentos')
       ])
-      
+
       // Validar e filtrar dados antes de definir no state
       const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
       const validUsuarios = Array.isArray(usuariosRes.data) ? 
         usuariosRes.data.filter(u => u && u.id && u.nome) : []
       const validDepartamentos = Array.isArray(departamentosRes.data) ? 
         departamentosRes.data.filter(d => d && d.id && d.nome) : []
-      
+
       setActivities(validActivities)
       setUsuariosMonitorados(validUsuarios)
       setDepartamentos(validDepartamentos)
-      
+
       console.log('Dados carregados:', {
         atividades: validActivities.length,
         usuarios: validUsuarios.length,
@@ -92,7 +92,7 @@ export default function Dashboard() {
 
     // Validar se temos dados
     if (!Array.isArray(activities)) {
-      return { pieData: [], timelineData: [], totalTime: 0, userStats: {} }
+      return { pieData: [], timelineData: [], totalTime: 0, userStats: {}, recentActivities: [] }
     }
 
     // Filtrar atividades por data
@@ -141,7 +141,7 @@ export default function Dashboard() {
     filteredActivities.forEach(activity => {
       const duration = activity.duracao || 10 // cada registro representa 10 segundos por padrão
       totalTime += duration
-      
+
       // Usar a classificação que vem da API
       const produtividade = activity.produtividade || 'neutral'
       if (timeData[produtividade] !== undefined) {
@@ -176,10 +176,10 @@ export default function Dashboard() {
           idle: 0 
         }
       }
-      
+
       const duration = activity.duracao || 10
       const produtividade = activity.produtividade || 'neutral'
-      
+
       if (dailyData[day][produtividade] !== undefined) {
         dailyData[day][produtividade] += duration
       } else {
@@ -198,12 +198,12 @@ export default function Dashboard() {
     const userStats = {}
     filteredActivities.forEach(activity => {
       if (!activity || !activity.usuario_monitorado_id) return
-      
+
       const userId = activity.usuario_monitorado_id
       const userName = activity.usuario_monitorado_nome || 
                       usuariosMonitorados.find(u => u.id === userId)?.nome || 
                       `Usuário ${userId}`
-      
+
       if (!userStats[userId]) {
         userStats[userId] = {
           nome: userName,
@@ -214,10 +214,10 @@ export default function Dashboard() {
           total: 0
         }
       }
-      
+
       const duration = Math.max(activity.duracao || 10, 1) // Garantir que duracao seja pelo menos 1
       const produtividade = activity.produtividade || 'neutral'
-      
+
       userStats[userId].total += duration
       if (userStats[userId][produtividade] !== undefined) {
         userStats[userId][produtividade] += duration
@@ -230,7 +230,9 @@ export default function Dashboard() {
       }
     })
 
-    return { pieData, timelineData, totalTime, userStats }
+    const recentActivities = filteredActivities.slice().sort((a, b) => new Date(b.horario) - new Date(a.horario));
+
+    return { pieData, timelineData, totalTime, userStats, recentActivities }
   }
 
   const formatTime = (seconds) => {
@@ -247,7 +249,7 @@ export default function Dashboard() {
     )
   }
 
-  const { pieData, timelineData, totalTime, userStats } = processActivityData()
+  const { pieData, timelineData, totalTime, userStats, recentActivities } = processActivityData()
 
   return (
     <div className="p-6">
@@ -316,7 +318,7 @@ export default function Dashboard() {
             }
           </select>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Auto-refresh:
@@ -332,7 +334,7 @@ export default function Dashboard() {
             {autoRefresh ? 'Ligado' : 'Desligado'}
           </button>
         </div>
-        
+
         <button
           onClick={fetchData}
           className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700"
@@ -576,6 +578,44 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Recent Activities - Empty State */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mt-6">
+        <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+          Atividades Recentes
+        </h2>
+        {recentActivities && recentActivities.length > 0 ? (
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            {recentActivities.slice(0, 5).map((activity) => (
+              <li key={activity.id} className="py-4">
+                <div className="flex space-x-3">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">
+                        {activity.active_window || 'Atividade sem título'}
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {activity.horario ? new Date(activity.horario).toLocaleTimeString() : ''}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Usuário: {activity.usuario_monitorado_nome || 'N/A'} - {activity.categoria || 'Sem categoria'}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-center py-8">
+            <div className="text-gray-400 dark:text-gray-500">
+              <ChartBarIcon className="mx-auto h-12 w-12 mb-4" />
+              <p className="text-sm">Nenhuma atividade encontrada</p>
+              <p className="text-xs mt-1">As atividades aparecerão aqui quando o agente começar a enviar dados</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
