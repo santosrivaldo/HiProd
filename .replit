@@ -33,6 +33,15 @@ mode = "sequential"
 task = "shell.exec"
 args = "python app.py --reset"
 
+[[workflows.workflow]]
+name = "Reset and Start Backend"
+author = 40480464
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python app.py --reset"
+
 [[ports]]
 localPort = 3000
 externalPort = 80
