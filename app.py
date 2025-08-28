@@ -238,7 +238,7 @@ def drop_all_tables():
 
         # Listar todas as tabelas do usuário
         cursor.execute("""
-            SELECT tablename FROM pg_tables 
+            SELECT tablename FROM pg_tables
             WHERE schemaname = 'public' AND tablename NOT LIKE 'pg_%'
         """)
         tables = cursor.fetchall()
@@ -297,8 +297,8 @@ def init_db():
         # 2. Inserir departamentos padrão
         print("📋 Inserindo departamentos padrão...")
         cursor.execute('''
-        INSERT INTO departamentos (nome, descricao, cor) 
-        VALUES 
+        INSERT INTO departamentos (nome, descricao, cor)
+        VALUES
             ('TI', 'Tecnologia da Informação', '#10B981'),
             ('Marketing', 'Marketing e Comunicação', '#3B82F6'),
             ('RH', 'Recursos Humanos', '#F59E0B'),
@@ -315,8 +315,8 @@ def init_db():
         # 3. Verificar se tabela usuarios existe
         cursor.execute("""
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = 'usuarios'
             );
         """)
@@ -326,8 +326,8 @@ def init_db():
             print("📋 Tabela usuarios já existe, verificando coluna departamento_id...")
             # Verificar se coluna departamento_id existe
             cursor.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
+                SELECT column_name
+                FROM information_schema.columns
                 WHERE table_name='usuarios' AND column_name='departamento_id';
             """)
 
@@ -413,8 +413,7 @@ def init_db():
             departamento_id INTEGER REFERENCES departamentos(id),
             ativo BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(nome, departamento_id)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         ''')
 
@@ -497,8 +496,8 @@ def init_db():
 
         # Categorias globais padrão
         cursor.execute('''
-        INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao, is_global) 
-        VALUES 
+        INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao, is_global)
+        VALUES
             ('Sistema', 'neutral', '#6B7280', 'Atividades do sistema operacional', TRUE),
             ('Entretenimento', 'nonproductive', '#EF4444', 'Jogos, vídeos e redes sociais', TRUE),
             ('Navegação Geral', 'neutral', '#F59E0B', 'Navegação web geral', TRUE)
@@ -507,7 +506,7 @@ def init_db():
 
         # Categorias específicas por departamento
         cursor.execute('''
-        INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao) 
+        INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao)
         SELECT 'Desenvolvimento', d.id, 'productive', '#10B981', 'Atividades de programação e desenvolvimento'
         FROM departamentos d WHERE d.nome = 'TI'
         UNION ALL
@@ -536,43 +535,43 @@ def init_db():
 
         # Regras de classificação padrão por departamento
         cursor.execute('''
-        INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo) 
-        SELECT 'Visual Studio Code', c.id, c.departamento_id, 'application_name' 
+        INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo)
+        SELECT 'Visual Studio Code', c.id, c.departamento_id, 'application_name'
         FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'IntelliJ', c.id, c.departamento_id, 'application_name' 
+        SELECT 'IntelliJ', c.id, c.departamento_id, 'application_name'
         FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'PyCharm', c.id, c.departamento_id, 'application_name' 
+        SELECT 'PyCharm', c.id, c.departamento_id, 'application_name'
         FROM categorias_app c WHERE c.nome = 'Desenvolvimento' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'Docker', c.id, c.departamento_id, 'application_name' 
+        SELECT 'Docker', c.id, c.departamento_id, 'application_name'
         FROM categorias_app c WHERE c.nome = 'DevOps' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'Photoshop', c.id, c.departamento_id, 'application_name' 
+        SELECT 'Photoshop', c.id, c.departamento_id, 'application_name'
         FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'Figma', c.id, c.departamento_id, 'window_title' 
+        SELECT 'Figma', c.id, c.departamento_id, 'window_title'
         FROM categorias_app c WHERE c.nome = 'Design Gráfico' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'LinkedIn', c.id, c.departamento_id, 'window_title' 
+        SELECT 'LinkedIn', c.id, c.departamento_id, 'window_title'
         FROM categorias_app c WHERE c.nome = 'Recrutamento' AND c.departamento_id IS NOT NULL
         UNION ALL
-        SELECT 'Excel', c.id, c.departamento_id, 'application_name' 
+        SELECT 'Excel', c.id, c.departamento_id, 'application_name'
         FROM categorias_app c WHERE c.nome = 'Análise Financeira' AND c.departamento_id IS NOT NULL
         ON CONFLICT DO NOTHING;
         ''')
 
         # Regras globais
         cursor.execute('''
-        INSERT INTO regras_classificacao (pattern, categoria_id, tipo) 
+        INSERT INTO regras_classificacao (pattern, categoria_id, tipo)
         SELECT 'YouTube', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
+        UNION ALL
+        SELECT 'Docker Desktop', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
         UNION ALL
         SELECT 'Windows Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
         UNION ALL
         SELECT 'File Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
-        UNION ALL
-        SELECT 'Visual Studio Code', id, 'window_title' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
         UNION ALL
         SELECT 'Google Chrome', id, 'window_title' FROM categorias_app WHERE nome = 'Navegação Geral' AND is_global = TRUE
         UNION ALL
@@ -585,7 +584,7 @@ def init_db():
         # Inserir tags padrão
         print("📋 Inserindo tags padrão...")
         cursor.execute('''
-        INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor) 
+        INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor)
         SELECT 'Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', d.id, '#10B981'
         FROM departamentos d WHERE d.nome = 'TI'
         UNION ALL
@@ -853,8 +852,8 @@ def add_activity(current_user):
 
         # Verificar se o usuário monitorado existe
         cursor.execute("""
-            SELECT id, nome, departamento_id, cargo, ativo, created_at, updated_at 
-            FROM usuarios_monitorados 
+            SELECT id, nome, departamento_id, cargo, ativo, created_at, updated_at
+            FROM usuarios_monitorados
             WHERE id = %s AND ativo = TRUE;
         """, (usuario_monitorado_id,))
         usuario_monitorado = cursor.fetchone()
@@ -902,14 +901,14 @@ def add_activity(current_user):
 
         # Salvar atividade temporariamente
         cursor.execute('''
-            INSERT INTO atividades 
-            (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade, 
-             horario, duracao, ip_address, user_agent) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) 
+            INSERT INTO atividades
+            (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade,
+             horario, duracao, ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
         ''', (
-            usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
-            'pending', 'neutral', horario_atual, 
+            usuario_monitorado_id, ociosidade, active_window, titulo_janela,
+            'pending', 'neutral', horario_atual,
             duracao, ip_address, user_agent
         ))
 
@@ -931,7 +930,7 @@ def add_activity(current_user):
 
         # Atualizar atividade com classificação final
         cursor.execute('''
-            UPDATE atividades 
+            UPDATE atividades
             SET categoria = %s, produtividade = %s
             WHERE id = %s;
         ''', (categoria, produtividade, activity_id))
@@ -1023,7 +1022,7 @@ def get_atividades(current_user):
         if agrupar:
             # Query com agrupamento
             query = f"""
-                SELECT 
+                SELECT
                     MIN(a.id) as id,
                     a.usuario_monitorado_id,
                     MAX(um.nome) as usuario_monitorado_nome,
@@ -1046,7 +1045,7 @@ def get_atividades(current_user):
         else:
             # Query simples sem agrupamento
             query = f"""
-                SELECT 
+                SELECT
                     a.id,
                     a.usuario_monitorado_id,
                     um.nome as usuario_monitorado_nome,
@@ -1104,17 +1103,17 @@ def get_atividades(current_user):
 def get_all_activities(current_user):
     cursor.execute('''
         SELECT a.*, um.nome as usuario_monitorado_nome, um.cargo, d.nome as departamento_nome
-        FROM atividades a 
+        FROM atividades a
         JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
         LEFT JOIN departamentos d ON um.departamento_id = d.id
         ORDER BY a.horario DESC;
     ''')
     atividades = cursor.fetchall()
     result = [{
-        'id': atividade[0], 
-        'usuario_monitorado_id': atividade[1], 
-        'ociosidade': atividade[2], 
-        'active_window': atividade[3], 
+        'id': atividade[0],
+        'usuario_monitorado_id': atividade[1],
+        'ociosidade': atividade[2],
+        'active_window': atividade[3],
         'horario': atividade[7].isoformat() if atividade[7] else None,
         'usuario_monitorado_nome': atividade[11],
         'cargo': atividade[12],
@@ -1149,16 +1148,22 @@ def get_users(current_user):
         result = []
         if usuarios:
             for usuario in usuarios:
+                # Verificar se temos dados suficientes do departamento
+                departamento_info = None
+                if len(usuario) > 6 and usuario[6]:  # departamento_nome existe
+                    departamento_info = {
+                        'nome': usuario[6],
+                        'cor': usuario[7] if len(usuario) > 7 else None
+                    }
+
                 result.append({
-                    'usuario_id': str(usuario[0]), 
+                    'usuario_id': usuario[0],
                     'usuario': usuario[1],
                     'email': usuario[2],
                     'departamento_id': usuario[3],
-                    'created_at': usuario[4].isoformat() if usuario[4] else None,
-                    'departamento': {
-                        'nome': usuario[5],
-                        'cor': usuario[6]
-                    } if usuario[5] else None
+                    'ativo': usuario[4],
+                    'created_at': usuario[5].isoformat() if usuario[5] else None,
+                    'departamento': departamento_info
                 })
 
         return jsonify(result)
@@ -1223,7 +1228,7 @@ def get_monitored_users(current_user):
                     }
 
                 result = {
-                    'id': usuario_existente[0], 
+                    'id': usuario_existente[0],
                     'nome': usuario_existente[1],
                     'departamento_id': usuario_existente[2] if len(usuario_existente) > 2 else None,
                     'cargo': usuario_existente[3] if len(usuario_existente) > 3 else None,
@@ -1240,8 +1245,8 @@ def get_monitored_users(current_user):
                 print(f"🔧 Criando novo usuário monitorado: {nome_usuario}")
                 try:
                     cursor.execute('''
-                        INSERT INTO usuarios_monitorados (nome, cargo) 
-                        VALUES (%s, 'Usuário') 
+                        INSERT INTO usuarios_monitorados (nome, cargo)
+                        VALUES (%s, 'Usuário')
                         RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
                     ''', (nome_usuario,))
 
@@ -1266,7 +1271,7 @@ def get_monitored_users(current_user):
                             updated_at_value = str(novo_usuario[6])
 
                     result = {
-                        'id': novo_usuario[0], 
+                        'id': novo_usuario[0],
                         'nome': novo_usuario[1],
                         'departamento_id': novo_usuario[2] if len(novo_usuario) > 2 else None,
                         'cargo': novo_usuario[3] if len(novo_usuario) > 3 else None,
@@ -1292,7 +1297,7 @@ def get_monitored_users(current_user):
                     usuario_encontrado = cursor.fetchone()
                     if usuario_encontrado:
                         result = {
-                            'id': usuario_encontrado[0], 
+                            'id': usuario_encontrado[0],
                             'nome': usuario_encontrado[1],
                             'departamento_id': usuario_encontrado[2] if len(usuario_encontrado) > 2 else None,
                             'cargo': usuario_encontrado[3] if len(usuario_encontrado) > 3 else None,
@@ -1364,7 +1369,7 @@ def get_monitored_users(current_user):
                             }
 
                         result.append({
-                            'id': usuario[0], 
+                            'id': usuario[0],
                             'nome': usuario[1],
                             'departamento_id': usuario[2] if len(usuario) > 2 else None,
                             'cargo': usuario[3] if len(usuario) > 3 else None,
@@ -1417,10 +1422,10 @@ def get_departments(current_user):
                         created_at_value = str(dept[5])
 
                 result.append({
-                    'id': dept[0], 
-                    'nome': dept[1], 
+                    'id': dept[0],
+                    'nome': dept[1],
                     'descricao': dept[2] if len(dept) > 2 and dept[2] else '',
-                    'cor': dept[3] if len(dept) > 3 and dept[3] else '#6B7280', 
+                    'cor': dept[3] if len(dept) > 3 and dept[3] else '#6B7280',
                     'ativo': dept[4] if len(dept) > 4 and dept[4] is not None else True,
                     'created_at': created_at_value
                 })
@@ -1459,7 +1464,7 @@ def create_department(current_user):
 
     try:
         cursor.execute('''
-            INSERT INTO departamentos (nome, descricao, cor) 
+            INSERT INTO departamentos (nome, descricao, cor)
             VALUES (%s, %s, %s) RETURNING id;
         ''', (nome, descricao, cor))
         department_id = cursor.fetchone()[0]
@@ -1497,11 +1502,11 @@ def get_categories(current_user):
 
     categorias = cursor.fetchall()
     result = [{
-        'id': cat[0], 
-        'nome': cat[1], 
+        'id': cat[0],
+        'nome': cat[1],
         'departamento_id': cat[2],
-        'tipo_produtividade': cat[3], 
-        'cor': cat[4], 
+        'tipo_produtividade': cat[3],
+        'cor': cat[4],
         'descricao': cat[5],
         'is_global': cat[6],
         'created_at': cat[7].isoformat() if cat[7] else None,
@@ -1530,7 +1535,7 @@ def create_category(current_user):
 
     try:
         cursor.execute('''
-            INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao, is_global) 
+            INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao, is_global)
             VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;
         ''', (nome, departamento_id, tipo, cor, descricao, is_global))
         category_id = cursor.fetchone()[0]
@@ -1555,7 +1560,7 @@ def update_activity(current_user, activity_id):
 
     # Verificar se a atividade existe
     cursor.execute('''
-        SELECT id FROM atividades 
+        SELECT id FROM atividades
         WHERE id = %s;
     ''', (activity_id,))
 
@@ -1581,7 +1586,7 @@ def update_activity(current_user, activity_id):
 
     # Atualizar a atividade
     query = f'''
-        UPDATE atividades 
+        UPDATE atividades
         SET {', '.join(update_fields)}
         WHERE id = %s;
     '''
@@ -1598,7 +1603,7 @@ def update_activity(current_user, activity_id):
 def delete_activity(current_user, activity_id):
     # Verificar se a atividade existe
     cursor.execute('''
-        SELECT id FROM atividades 
+        SELECT id FROM atividades
         WHERE id = %s;
     ''', (activity_id,))
 
@@ -1607,7 +1612,7 @@ def delete_activity(current_user, activity_id):
 
     # Excluir a atividade
     cursor.execute('''
-        DELETE FROM atividades 
+        DELETE FROM atividades
         WHERE id = %s;
     ''', (activity_id,))
 
@@ -1633,7 +1638,7 @@ def update_user_department(current_user, usuario_id):
 
     try:
         cursor.execute('''
-            UPDATE usuarios 
+            UPDATE usuarios
             SET departamento_id = %s, updated_at = CURRENT_TIMESTAMP
             WHERE id = %s;
         ''', (departamento_id, uuid.UUID(usuario_id)))
@@ -1654,8 +1659,8 @@ def update_user_department(current_user, usuario_id):
 @token_required
 def get_department_config(current_user, departamento_id):
     cursor.execute('''
-        SELECT configuracao_chave, configuracao_valor 
-        FROM departamento_configuracoes 
+        SELECT configuracao_chave, configuracao_valor
+        FROM departamento_configuracoes
         WHERE departamento_id = %s;
     ''', (departamento_id,))
 
@@ -1997,7 +2002,7 @@ def update_monitored_user(current_user, user_id):
 def get_activity_tags(current_user, activity_id):
     try:
         cursor.execute('''
-            SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade, 
+            SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade,
                    at.confidence, d.nome as departamento_nome
             FROM atividade_tags at
             JOIN tags t ON at.tag_id = t.id
@@ -2038,9 +2043,9 @@ def get_statistics(current_user):
     cursor.execute('''
         SELECT categoria, COUNT(*) as total, AVG(ociosidade) as media_ociosidade,
                SUM(duracao) as tempo_total
-        FROM atividades 
-        WHERE usuario_monitorado_id = %s 
-        GROUP BY categoria 
+        FROM atividades
+        WHERE usuario_monitorado_id = %s
+        GROUP BY categoria
         ORDER BY total DESC;
     ''', (usuario_monitorado_id,))
 
@@ -2048,12 +2053,12 @@ def get_statistics(current_user):
 
     # Produtividade por dia da semana
     cursor.execute('''
-        SELECT EXTRACT(DOW FROM horario) as dia_semana, 
+        SELECT EXTRACT(DOW FROM horario) as dia_semana,
                produtividade,
                COUNT(*) as total
-        FROM atividades 
-        WHERE usuario_monitorado_id = %s 
-        GROUP BY EXTRACT(DOW FROM horario), produtividade 
+        FROM atividades
+        WHERE usuario_monitorado_id = %s
+        GROUP BY EXTRACT(DOW FROM horario), produtividade
         ORDER BY dia_semana;
     ''', (usuario_monitorado_id,))
 
@@ -2061,9 +2066,9 @@ def get_statistics(current_user):
 
     # Total de atividades hoje
     cursor.execute('''
-        SELECT COUNT(*) 
-        FROM atividades 
-        WHERE usuario_monitorado_id = %s 
+        SELECT COUNT(*)
+        FROM atividades
+        WHERE usuario_monitorado_id = %s
         AND DATE(horario) = CURRENT_DATE;
     ''', (usuario_monitorado_id,))
 

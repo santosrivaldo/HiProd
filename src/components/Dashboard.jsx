@@ -80,7 +80,7 @@ export default function Dashboard() {
 
       // Validar e filtrar dados antes de definir no state
       const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-      
+
       if (page === 1 || reset) {
         setActivities(validActivities)
         setActivitiesPage(1)
@@ -89,7 +89,7 @@ export default function Dashboard() {
         if (responses.length > 1) {
           const usuariosRes = responses[1]
           const departamentosRes = responses[2]
-          
+
           const validUsuarios = Array.isArray(usuariosRes.data) ? 
             usuariosRes.data.filter(u => u && u.id && u.nome) : []
           const validDepartamentos = Array.isArray(departamentosRes.data) ? 
@@ -326,14 +326,17 @@ export default function Dashboard() {
             className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px]"
           >
             <option value="all">Todos os usuários</option>
-            {Array.isArray(usuariosMonitorados) && usuariosMonitorados
+            {Array.isArray(usuariosMonitorados) && usuariosMonitorados.length > 0 ? (
+            usuariosMonitorados
               .filter(usuario => usuario && usuario.id && usuario.nome)
               .map(usuario => (
                 <option key={`user-${usuario.id}`} value={usuario.id}>
                   {usuario.nome}
                 </option>
               ))
-            }
+          ) : (
+            <option value="" disabled>Nenhum usuário monitorado disponível</option>
+          )}
           </select>
         </div>
 
@@ -635,7 +638,7 @@ export default function Dashboard() {
             </button>
           )}
         </div>
-        
+
         {recentActivities && recentActivities.length > 0 ? (
           <>
             <ul className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -659,7 +662,7 @@ export default function Dashboard() {
                 </li>
               ))}
             </ul>
-            
+
             {loadingActivities && (
               <div className="flex justify-center py-4">
                 <LoadingSpinner size="sm" text="Carregando mais atividades..." />
