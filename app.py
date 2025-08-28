@@ -266,11 +266,21 @@ def init_db():
     );
     ''')
 
-    # Adicionar coluna departamento_id na tabela usuarios se não existir
+    # Verificar se a coluna departamento_id existe antes de adicioná-la
     try:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS departamento_id INTEGER REFERENCES departamentos(id);")
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='usuarios' AND column_name='departamento_id';
+        """)
+        if not cursor.fetchone():
+            print("Adicionando coluna departamento_id à tabela usuarios...")
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN departamento_id INTEGER REFERENCES departamentos(id);")
+            print("✅ Coluna departamento_id adicionada com sucesso!")
+        else:
+            print("✅ Coluna departamento_id já existe na tabela usuarios")
     except Exception as e:
-        print(f"Aviso: {e}")
+        print(f"Aviso ao verificar/adicionar coluna departamento_id: {e}")
 
     # Criar índices para melhor performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_usuario_id ON atividades(usuario_id);')
@@ -506,10 +516,14 @@ def add_activity(current_user):
     if 'ociosidade' not in data or 'active_window' not in data:
         return jsonify({'message': 'Dados inválidos!'}), 400
 
-    # Obter departamento do usuário
-    cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
-    user_department = cursor.fetchone()
-    user_department_id = user_department[0] if user_department and user_department[0] else None
+    # Obter departamento do usuário (verificar se a coluna existe)
+    try:
+        cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
+        user_department = cursor.fetchone()
+        user_department_id = user_department[0] if user_department and user_department[0] else None
+    except psycopg2.ProgrammingError:
+        # Coluna departamento_id não existe ainda
+        user_department_id = None
 
     # Classificar atividade automaticamente
     ociosidade = int(data.get('ociosidade', 0))
