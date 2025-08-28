@@ -25,15 +25,6 @@ task = "shell.exec"
 args = "npm run dev"
 
 [[workflows.workflow]]
-name = "Start BackEnd"
-mode = "sequential"
-author = 40480464
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python app.py"
-
-[[workflows.workflow]]
 name = "Start Backend"
 author = 40480464
 mode = "sequential"
