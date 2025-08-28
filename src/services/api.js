@@ -2,7 +2,9 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000',
+  baseURL: window.location.hostname === 'localhost' 
+    ? 'http://localhost:5000' 
+    : `${window.location.protocol}//${window.location.hostname}:5000`,
   headers: {
     'Content-Type': 'application/json',
   },
