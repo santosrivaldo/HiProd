@@ -3,7 +3,7 @@ run = "python app.py"
 
 [nix]
 channel = "stable-25_05"
-packages = ["openssl", "postgresql"]
+packages = ["cargo", "libiconv", "openssl", "postgresql", "rustc"]
 
 [deployment]
 run = ["sh", "-c", "python app.py"]
@@ -22,25 +22,7 @@ args = "npm install"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
-
-[[workflows.workflow]]
-name = "Start Backend"
-author = 40480464
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
 args = "python app.py"
-
-[[workflows.workflow]]
-name = "Setup Database"
-author = 40480464
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python setup_database.py"
 
 [[ports]]
 localPort = 3000
