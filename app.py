@@ -689,7 +689,13 @@ def add_activity(current_user):
         # Extrair informações adicionais
         titulo_janela = data.get('titulo_janela', active_window)
         duracao = data.get('duracao', 0)
-        ip_address = request.remote_addr
+        
+        # Obter IP real do agente (considerando proxies)
+        ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
+        if ',' in str(ip_address):
+            # Se há múltiplos IPs separados por vírgula, pegar o primeiro (IP original do cliente)
+            ip_address = ip_address.split(',')[0].strip()
+        
         user_agent = request.headers.get('User-Agent', '')
 
         # Configurar timezone de São Paulo
