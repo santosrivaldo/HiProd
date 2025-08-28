@@ -91,10 +91,12 @@ def classify_activity(active_window, ociosidade, user_department_id=None):
             
             result = cursor.fetchone()
             print(f"🔍 Resultado busca departamental: {result}")
-            if result:
-                categoria, produtividade = result
+            if result and len(result) >= 2:
+                categoria, produtividade = result[0], result[1]
                 print(f"🏷️ Match departamental: {categoria} ({produtividade})")
                 return categoria, produtividade
+            elif result:
+                print(f"🔍 Resultado departamental incompleto: {result}")
         
         # Buscar regras globais (sem departamento específico)
         print(f"🔍 Buscando regras globais")
@@ -110,10 +112,13 @@ def classify_activity(active_window, ociosidade, user_department_id=None):
         result = cursor.fetchone()
         print(f"🔍 Resultado busca global: {result}")
 
-        if result:
-            categoria, produtividade = result
+        if result and len(result) >= 2:
+            categoria, produtividade = result[0], result[1]
             print(f"🏷️ Match global: {categoria} ({produtividade})")
             return categoria, produtividade
+        elif result:
+            print(f"🔍 Resultado incompleto da query: {result}")
+            # Se o resultado existe mas não tem todos os campos, usar fallback
 
     except Exception as e:
         print(f"❌ Erro na classificação automática: {e}")
@@ -468,6 +473,14 @@ def init_db():
         SELECT 'Windows Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
         UNION ALL
         SELECT 'File Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+        UNION ALL
+        SELECT 'Visual Studio Code', id, 'window_title' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
+        UNION ALL
+        SELECT 'Google Chrome', id, 'window_title' FROM categorias_app WHERE nome = 'Navegação Geral' AND is_global = TRUE
+        UNION ALL
+        SELECT 'WhatsApp', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
+        UNION ALL
+        SELECT 'Replit', id, 'window_title' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
         ON CONFLICT DO NOTHING;
         ''')
 
