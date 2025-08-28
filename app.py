@@ -58,7 +58,7 @@ psycopg2.extras.register_uuid()
 def generate_token(user_id):
     payload = {
         'user_id': str(user_id),
-        'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']
+        'exp': datetime.now(timezone.utc) + app.config['JWT_ACCESS_TOKEN_EXPIRES']
     }
     return jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
 
@@ -654,6 +654,10 @@ def add_activity(current_user):
         ip_address = request.remote_addr
         user_agent = request.headers.get('User-Agent', '')
 
+        # Configurar timezone de São Paulo
+        sao_paulo_tz = timezone(timedelta(hours=-3))
+        horario_atual = datetime.now(sao_paulo_tz)
+
         # Adiciona a atividade no PostgreSQL
         cursor.execute('''
             INSERT INTO atividades 
@@ -663,7 +667,7 @@ def add_activity(current_user):
             RETURNING id;
         ''', (
             usuario_monitorado_id, ociosidade, active_window, titulo_janela, 
-            categoria, produtividade, datetime.now(timezone.utc), 
+            categoria, produtividade, horario_atual, 
             duracao, ip_address, user_agent
         ))
 
@@ -677,7 +681,7 @@ def add_activity(current_user):
             'produtividade': produtividade,
             'usuario_monitorado': usuario_monitorado[1],  # Nome do usuário monitorado
             'usuario_monitorado_id': usuario_monitorado_id,
-            'horario': datetime.now(timezone.utc).isoformat()
+            'horario': horario_atual.isoformat()
         }
 
         print(f"✅ Atividade salva: ID {activity_id}")
