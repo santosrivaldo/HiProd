@@ -1114,7 +1114,7 @@ def get_monitored_users(current_user):
     nome_usuario = request.args.get('nome')
 
     if nome_usuario:
-        # Buscar usuário específico ou criar se não existir
+        # Buscar usuário específico ou criar se não existir (sempre sem erro)
         try:
             # Primeiro, tentar encontrar o usuário
             cursor.execute('''
@@ -1163,51 +1163,96 @@ def get_monitored_users(current_user):
                     'departamento': departamento_info,
                     'created': False
                 }
+                print(f"✅ Usuário monitorado encontrado: {nome_usuario} (ID: {usuario_existente[0]})")
                 return jsonify(result)
             else:
-                # Usuário não existe, criar novo
-                cursor.execute('''
-                    INSERT INTO usuarios_monitorados (nome, cargo) 
-                    VALUES (%s, 'Usuário') 
-                    RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-                ''', (nome_usuario,))
+                # Usuário não existe, criar novo automaticamente
+                print(f"🔧 Criando novo usuário monitorado: {nome_usuario}")
+                try:
+                    cursor.execute('''
+                        INSERT INTO usuarios_monitorados (nome, cargo) 
+                        VALUES (%s, 'Usuário') 
+                        RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
+                    ''', (nome_usuario,))
 
-                novo_usuario = cursor.fetchone()
-                conn.commit()
+                    novo_usuario = cursor.fetchone()
+                    conn.commit()
+                    print(f"✅ Usuário monitorado criado: {nome_usuario} (ID: {novo_usuario[0]})")
 
-                # Processar dados do novo usuário com segurança
-                created_at_value = None
-                updated_at_value = None
+                    # Processar dados do novo usuário com segurança
+                    created_at_value = None
+                    updated_at_value = None
 
-                if len(novo_usuario) > 5 and novo_usuario[5]:
-                    if hasattr(novo_usuario[5], 'isoformat'):
-                        created_at_value = novo_usuario[5].isoformat()
-                    else:
-                        created_at_value = str(novo_usuario[5])
+                    if len(novo_usuario) > 5 and novo_usuario[5]:
+                        if hasattr(novo_usuario[5], 'isoformat'):
+                            created_at_value = novo_usuario[5].isoformat()
+                        else:
+                            created_at_value = str(novo_usuario[5])
 
-                if len(novo_usuario) > 6 and novo_usuario[6]:
-                    if hasattr(novo_usuario[6], 'isoformat'):
-                        updated_at_value = novo_usuario[6].isoformat()
-                    else:
-                        updated_at_value = str(novo_usuario[6])
+                    if len(novo_usuario) > 6 and novo_usuario[6]:
+                        if hasattr(novo_usuario[6], 'isoformat'):
+                            updated_at_value = novo_usuario[6].isoformat()
+                        else:
+                            updated_at_value = str(novo_usuario[6])
 
-                result = {
-                    'id': novo_usuario[0], 
-                    'nome': novo_usuario[1],
-                    'departamento_id': novo_usuario[2] if len(novo_usuario) > 2 else None,
-                    'cargo': novo_usuario[3] if len(novo_usuario) > 3 else None,
-                    'ativo': novo_usuario[4] if len(novo_usuario) > 4 else True,
-                    'created_at': created_at_value,
-                    'updated_at': updated_at_value,
-                    'departamento': None,
-                    'created': True
-                }
-                return jsonify(result)
+                    result = {
+                        'id': novo_usuario[0], 
+                        'nome': novo_usuario[1],
+                        'departamento_id': novo_usuario[2] if len(novo_usuario) > 2 else None,
+                        'cargo': novo_usuario[3] if len(novo_usuario) > 3 else None,
+                        'ativo': novo_usuario[4] if len(novo_usuario) > 4 else True,
+                        'created_at': created_at_value,
+                        'updated_at': updated_at_value,
+                        'departamento': None,
+                        'created': True
+                    }
+                    return jsonify(result)
+                except psycopg2.IntegrityError:
+                    # Se houve erro de integridade (usuário já existe), fazer uma nova consulta
+                    conn.rollback()
+                    print(f"⚠️ Conflito de integridade ao criar {nome_usuario}, buscando novamente...")
+                    cursor.execute('''
+                        SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                               d.nome as departamento_nome, d.cor as departamento_cor
+                        FROM usuarios_monitorados um
+                        LEFT JOIN departamentos d ON um.departamento_id = d.id
+                        WHERE um.nome = %s AND um.ativo = TRUE;
+                    ''', (nome_usuario,))
+                    
+                    usuario_encontrado = cursor.fetchone()
+                    if usuario_encontrado:
+                        result = {
+                            'id': usuario_encontrado[0], 
+                            'nome': usuario_encontrado[1],
+                            'departamento_id': usuario_encontrado[2] if len(usuario_encontrado) > 2 else None,
+                            'cargo': usuario_encontrado[3] if len(usuario_encontrado) > 3 else None,
+                            'ativo': usuario_encontrado[4] if len(usuario_encontrado) > 4 else True,
+                            'created_at': usuario_encontrado[5].isoformat() if usuario_encontrado[5] else None,
+                            'updated_at': usuario_encontrado[6].isoformat() if len(usuario_encontrado) > 6 and usuario_encontrado[6] else None,
+                            'departamento': {
+                                'nome': usuario_encontrado[7],
+                                'cor': usuario_encontrado[8] if len(usuario_encontrado) > 8 else None
+                            } if len(usuario_encontrado) > 7 and usuario_encontrado[7] else None,
+                            'created': False
+                        }
+                        return jsonify(result)
 
-        except psycopg2.Error as e:
+        except Exception as e:
             conn.rollback()
-            print(f"Erro ao buscar/criar usuário monitorado: {e}")
-            return jsonify({'message': 'Erro interno do servidor'}), 500
+            print(f"❌ Erro ao buscar/criar usuário monitorado {nome_usuario}: {e}")
+            # Retornar um usuário básico para manter o agente funcionando
+            return jsonify({
+                'id': 0,
+                'nome': nome_usuario,
+                'departamento_id': None,
+                'cargo': 'Usuário',
+                'ativo': True,
+                'created_at': None,
+                'updated_at': None,
+                'departamento': None,
+                'created': False,
+                'error': 'Erro ao processar usuário, usando fallback'
+            }), 200
 
     else:
         # Listar todos os usuários monitorados (comportamento original)

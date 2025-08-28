@@ -64,7 +64,13 @@ def get_usuario_monitorado_id(usuario_nome):
                             headers=get_headers())
         if resp.status_code == 200:
             data = resp.json()
-            return data.get('id')
+            user_id = data.get('id')
+            was_created = data.get('created', False)
+            if was_created:
+                print(f"✅ Novo usuário monitorado criado: {usuario_nome} (ID: {user_id})")
+            else:
+                print(f"✅ Usuário monitorado encontrado: {usuario_nome} (ID: {user_id})")
+            return user_id
         elif resp.status_code == 401:
             print("⚠️ Token expirado, renovando...")
             login()
