@@ -463,20 +463,8 @@ def init_db():
         ON CONFLICT DO NOTHING;
         ''')
 
-        # Usuários monitorados padrão
-        cursor.execute('''
-        INSERT INTO usuarios_monitorados (nome, departamento_id, cargo) 
-        SELECT 'João Silva', d.id, 'Desenvolvedor' FROM departamentos d WHERE d.nome = 'TI'
-        UNION ALL
-        SELECT 'Maria Santos', d.id, 'Analista de Marketing' FROM departamentos d WHERE d.nome = 'Marketing'
-        UNION ALL
-        SELECT 'Pedro Costa', d.id, 'Assistente de RH' FROM departamentos d WHERE d.nome = 'RH'
-        UNION ALL
-        SELECT 'Ana Oliveira', d.id, 'Analista Financeiro' FROM departamentos d WHERE d.nome = 'Financeiro'
-        UNION ALL
-        SELECT 'Carlos Mendes', d.id, 'Vendedor' FROM departamentos d WHERE d.nome = 'Vendas'
-        ON CONFLICT (nome) DO NOTHING;
-        ''')
+        # Não inserir usuários monitorados de demonstração
+        # Os usuários serão criados automaticamente conforme necessário
 
         # Commit final de todos os dados
         conn.commit()
@@ -813,7 +801,7 @@ def get_users(current_user):
         print(f"Erro na consulta de usuários: {e}")
         return jsonify([]), 200  # Return empty array instead of error
 
-# Rota para obter usuários monitorados (protegida)
+# Rota para obter ou criar usuário monitorado (protegida)
 @app.route('/usuarios-monitorados', methods=['GET'])
 @token_required
 def get_monitored_users(current_user):
@@ -827,38 +815,103 @@ def get_monitored_users(current_user):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-    try:
-        cursor.execute('''
-            SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
-                   d.nome as departamento_nome, d.cor as departamento_cor
-            FROM usuarios_monitorados um
-            LEFT JOIN departamentos d ON um.departamento_id = d.id
-            WHERE um.ativo = TRUE
-            ORDER BY um.nome;
-        ''')
-        usuarios_monitorados = cursor.fetchall()
-
-        result = []
-        if usuarios_monitorados:
-            for usuario in usuarios_monitorados:
-                result.append({
-                    'id': usuario[0], 
-                    'nome': usuario[1],
-                    'departamento_id': usuario[2],
-                    'cargo': usuario[3],
-                    'ativo': usuario[4],
-                    'created_at': usuario[5].isoformat() if usuario[5] else None,
-                    'updated_at': usuario[6].isoformat() if usuario[6] else None,
+    # Verificar se foi passado um nome para buscar/criar usuário específico
+    nome_usuario = request.args.get('nome')
+    
+    if nome_usuario:
+        # Buscar usuário específico ou criar se não existir
+        try:
+            # Primeiro, tentar encontrar o usuário
+            cursor.execute('''
+                SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                       d.nome as departamento_nome, d.cor as departamento_cor
+                FROM usuarios_monitorados um
+                LEFT JOIN departamentos d ON um.departamento_id = d.id
+                WHERE um.nome = %s AND um.ativo = TRUE;
+            ''', (nome_usuario,))
+            
+            usuario_existente = cursor.fetchone()
+            
+            if usuario_existente:
+                # Usuário existe, retornar seus dados
+                result = {
+                    'id': usuario_existente[0], 
+                    'nome': usuario_existente[1],
+                    'departamento_id': usuario_existente[2],
+                    'cargo': usuario_existente[3],
+                    'ativo': usuario_existente[4],
+                    'created_at': usuario_existente[5].isoformat() if usuario_existente[5] else None,
+                    'updated_at': usuario_existente[6].isoformat() if usuario_existente[6] else None,
                     'departamento': {
-                        'nome': usuario[7],
-                        'cor': usuario[8]
-                    } if usuario[7] else None
-                })
+                        'nome': usuario_existente[7],
+                        'cor': usuario_existente[8]
+                    } if usuario_existente[7] else None,
+                    'created': False
+                }
+                return jsonify(result)
+            else:
+                # Usuário não existe, criar novo
+                cursor.execute('''
+                    INSERT INTO usuarios_monitorados (nome, cargo) 
+                    VALUES (%s, 'Usuário') 
+                    RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
+                ''', (nome_usuario,))
+                
+                novo_usuario = cursor.fetchone()
+                conn.commit()
+                
+                result = {
+                    'id': novo_usuario[0], 
+                    'nome': novo_usuario[1],
+                    'departamento_id': novo_usuario[2],
+                    'cargo': novo_usuario[3],
+                    'ativo': novo_usuario[4],
+                    'created_at': novo_usuario[5].isoformat() if novo_usuario[5] else None,
+                    'updated_at': novo_usuario[6].isoformat() if novo_usuario[6] else None,
+                    'departamento': None,
+                    'created': True
+                }
+                return jsonify(result)
+                
+        except psycopg2.Error as e:
+            conn.rollback()
+            print(f"Erro ao buscar/criar usuário monitorado: {e}")
+            return jsonify({'message': 'Erro interno do servidor'}), 500
+    
+    else:
+        # Listar todos os usuários monitorados (comportamento original)
+        try:
+            cursor.execute('''
+                SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                       d.nome as departamento_nome, d.cor as departamento_cor
+                FROM usuarios_monitorados um
+                LEFT JOIN departamentos d ON um.departamento_id = d.id
+                WHERE um.ativo = TRUE
+                ORDER BY um.nome;
+            ''')
+            usuarios_monitorados = cursor.fetchall()
 
-        return jsonify(result)
-    except psycopg2.Error as e:
-        print(f"Erro na consulta de usuários monitorados: {e}")
-        return jsonify([]), 200
+            result = []
+            if usuarios_monitorados:
+                for usuario in usuarios_monitorados:
+                    result.append({
+                        'id': usuario[0], 
+                        'nome': usuario[1],
+                        'departamento_id': usuario[2],
+                        'cargo': usuario[3],
+                        'ativo': usuario[4],
+                        'created_at': usuario[5].isoformat() if usuario[5] else None,
+                        'updated_at': usuario[6].isoformat() if usuario[6] else None,
+                        'departamento': {
+                            'nome': usuario[7],
+                            'cor': usuario[8]
+                        } if usuario[7] else None
+                    })
+
+            return jsonify(result)
+        except psycopg2.Error as e:
+            print(f"Erro na consulta de usuários monitorados: {e}")
+            return jsonify([]), 200
 
 # Rota para obter departamentos
 @app.route('/departamentos', methods=['GET'])
