@@ -66,14 +66,14 @@ export default function Dashboard() {
 
       // Limitar dados para dashboard - menor pageSize para melhor performance
       const pageSize = 50
-      
+
       const activitiesPromise = api.get(`/atividades?agrupar=true&pagina=${page}&limite=${pageSize}`)
-      
+
       // Buscar usuários e departamentos apenas na primeira página
       if (page === 1) {
         setLoadingUsers(true)
         setLoadingDepartments(true)
-        
+
         const [activitiesRes, usuariosRes, departamentosRes] = await Promise.all([
           activitiesPromise,
           api.get('/usuarios-monitorados').finally(() => setLoadingUsers(false)),
@@ -95,7 +95,7 @@ export default function Dashboard() {
       } else {
         const activitiesRes = await activitiesPromise
         const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-        
+
         if (reset) {
           setActivities(validActivities)
           setActivitiesPage(1)
@@ -650,45 +650,50 @@ export default function Dashboard() {
           )}
         </div>
 
-        {recentActivities && recentActivities.length > 0 ? (
-          <>
-            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-              {recentActivities.slice(0, 10).map((activity) => (
-                <li key={activity.id} className="py-4">
-                  <div className="flex space-x-3">
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-                          {activity.active_window || 'Atividade sem título'}
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {activity.horario ? new Date(activity.horario).toLocaleTimeString() : ''}
-                        </p>
-                      </div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Usuário: {activity.usuario_monitorado_nome || 'N/A'} - {activity.categoria || 'Sem categoria'}
-                      </p>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-            {loadingActivities && (
-              <div className="flex justify-center py-4">
-                <LoadingSpinner size="sm" text="Carregando mais atividades..." />
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-center py-8">
-            <div className="text-gray-400 dark:text-gray-500">
-              <ChartBarIcon className="mx-auto h-12 w-12 mb-4" />
-              <p className="text-sm">Nenhuma atividade encontrada</p>
-              <p className="text-xs mt-1">As atividades aparecerão aqui quando o agente começar a enviar dados</p>
+        <div className="space-y-4">
+          {loadingActivities ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner />
             </div>
-          </div>
-        )}
+          ) : activities.length > 0 ? (
+            activities.slice(0, 10).map((activity) => (
+              <div
+                key={activity.id}
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {activity.active_window}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-300">
+                    {activity.usuario_monitorado_nome} • {activity.categoria}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span
+                    className={`px-2 py-1 text-xs rounded-full ${
+                      activity.produtividade === 'productive'
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : activity.produtividade === 'nonproductive'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                    }`}
+                  >
+                    {activity.produtividade}
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <div className="text-gray-400 dark:text-gray-500">
+                <ChartBarIcon className="mx-auto h-12 w-12 mb-4" />
+                <p className="text-sm">Nenhuma atividade encontrada</p>
+                <p className="text-xs mt-1">As atividades aparecerão aqui quando o agente começar a enviar dados</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
