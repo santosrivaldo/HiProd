@@ -19,8 +19,7 @@ import {
 } from 'recharts'
 import { ChartBarIcon } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
-import { exportToCSV } from '../utils/csvExport' // Assumindo que você tenha uma utilidade de exportação CSV
-import { printData } from '../utils/printData' // Assumindo que você tenha uma utilidade de impressão
+import { exportToCSV, printData } from '../utils/exportUtils'
 
 const COLORS = {
   productive: '#10B981',
