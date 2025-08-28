@@ -282,14 +282,23 @@ def init_db():
             FROM information_schema.columns 
             WHERE table_name='usuarios' AND column_name='departamento_id';
         """)
-        if not cursor.fetchone():
+        
+        column_exists = cursor.fetchone()
+        
+        if not column_exists:
             print("Adicionando coluna departamento_id à tabela usuarios...")
             cursor.execute("ALTER TABLE usuarios ADD COLUMN departamento_id INTEGER REFERENCES departamentos(id);")
+            conn.commit()  # Commit imediatamente após adicionar a coluna
             print("✅ Coluna departamento_id adicionada com sucesso!")
         else:
             print("✅ Coluna departamento_id já existe na tabela usuarios")
+            
+    except psycopg2.ProgrammingError as e:
+        conn.rollback()  # Rollback em caso de erro
+        print(f"Erro ao verificar/adicionar coluna departamento_id: {e}")
     except Exception as e:
-        print(f"Aviso ao verificar/adicionar coluna departamento_id: {e}")
+        conn.rollback()
+        print(f"Erro inesperado ao adicionar coluna departamento_id: {e}")
 
     # Criar índices para melhor performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_usuario_id ON atividades(usuario_id);')
@@ -526,12 +535,25 @@ def add_activity(current_user):
         return jsonify({'message': 'Dados inválidos!'}), 400
 
     # Obter departamento do usuário (verificar se a coluna existe)
+    user_department_id = None
     try:
-        cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
-        user_department = cursor.fetchone()
-        user_department_id = user_department[0] if user_department and user_department[0] else None
-    except psycopg2.ProgrammingError:
-        # Coluna departamento_id não existe ainda
+        # Verificar se a coluna departamento_id existe primeiro
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='usuarios' AND column_name='departamento_id';
+        """)
+        
+        if cursor.fetchone():
+            # Coluna existe, tentar buscar o departamento
+            cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
+            user_department = cursor.fetchone()
+            user_department_id = user_department[0] if user_department and user_department[0] else None
+        else:
+            print("Coluna departamento_id ainda não existe, usando classificação padrão")
+            
+    except psycopg2.ProgrammingError as e:
+        print(f"Erro ao acessar departamento do usuário: {e}")
         user_department_id = None
 
     # Classificar atividade automaticamente
@@ -884,6 +906,16 @@ def update_user_department(current_user, usuario_id):
         return jsonify({'message': 'Departamento não encontrado!'}), 404
     
     try:
+        # Verificar se a coluna departamento_id existe
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='usuarios' AND column_name='departamento_id';
+        """)
+        
+        if not cursor.fetchone():
+            return jsonify({'message': 'Sistema ainda não está completamente inicializado. Tente novamente.'}), 503
+            
         cursor.execute('''
             UPDATE usuarios 
             SET departamento_id = %s, updated_at = CURRENT_TIMESTAMP
