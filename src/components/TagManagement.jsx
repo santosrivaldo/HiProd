@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
+import { PrinterIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { exportToCSV, printData } from '../utils/exportUtils'
 
 const TagManagement = () => {
   const { user } = useAuth()
@@ -201,6 +203,54 @@ const TagManagement = () => {
     setFilteredTags(filtered)
   }
 
+  const handleExportTags = () => {
+    const exportData = filteredTags.map(tag => ({
+      'Nome': tag.nome,
+      'Tier': tag.tier || 3,
+      'Produtividade': tag.produtividade === 'productive' ? 'Produtiva' : 
+                      tag.produtividade === 'nonproductive' ? 'Não Produtiva' : 'Neutra',
+      'Departamento': tag.departamento_nome || 'Global',
+      'Palavras-chave': tag.palavras_chave?.map(p => `${p.palavra} (${p.peso})`).join('; ') || '',
+      'Status': tag.ativo ? 'Ativo' : 'Inativo',
+      'Descrição': tag.descricao || ''
+    }))
+
+    exportToCSV(exportData, 'tags')
+  }
+
+  const handlePrintTags = () => {
+    const columns = [
+      {
+        header: 'Nome',
+        accessor: (row) => row.nome
+      },
+      {
+        header: 'Tier',
+        accessor: (row) => `Tier ${row.tier || 3}`
+      },
+      {
+        header: 'Produtividade',
+        accessor: (row) => row.produtividade === 'productive' ? 'Produtiva' : 
+                           row.produtividade === 'nonproductive' ? 'Não Produtiva' : 'Neutra',
+        className: (row) => row.produtividade
+      },
+      {
+        header: 'Departamento',
+        accessor: (row) => row.departamento_nome || 'Global'
+      },
+      {
+        header: 'Palavras-chave',
+        accessor: (row) => row.palavras_chave?.map(p => `${p.palavra} (${p.peso})`).join('; ') || ''
+      },
+      {
+        header: 'Status',
+        accessor: (row) => row.ativo ? 'Ativo' : 'Inativo'
+      }
+    ]
+
+    printData('Relatório de Tags', filteredTags, columns)
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -221,12 +271,30 @@ const TagManagement = () => {
             Configure tags para classificação automática de atividades
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          {showForm ? 'Cancelar' : 'Nova Tag'}
-        </button>
+        <div className="flex space-x-2">
+          <button
+            onClick={handleExportTags}
+            disabled={loading || filteredTags.length === 0}
+            className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </button>
+          <button
+            onClick={handlePrintTags}
+            disabled={loading || filteredTags.length === 0}
+            className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+          >
+            <PrinterIcon className="h-4 w-4 mr-2" />
+            Imprimir
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            {showForm ? 'Cancelar' : 'Nova Tag'}
+          </button>
+        </div>
       </div>
 
       {message && (

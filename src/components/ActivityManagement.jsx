@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
-import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline'
+import { MagnifyingGlassIcon, FunnelIcon, PrinterIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 import useIntersectionObserver from '../hooks/useIntersectionObserver'
+import { exportToCSV, printData, formatTime } from '../utils/exportUtils'
 
 const activityTypes = [
   { value: 'all', label: 'Todos' },
@@ -230,6 +231,67 @@ export default function ActivityManagement() {
     }
   }
 
+  const handleExportCSV = () => {
+    const exportData = filteredActivities.map(activity => ({
+      'Data/Hora': format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss'),
+      'Usuário Monitorado': activity.usuario_monitorado_nome || 'N/A',
+      'Cargo': activity.cargo || 'N/A',
+      'Janela Ativa': activity.active_window,
+      'Categoria': activity.categoria || 'Não Classificado',
+      'Ociosidade': formatTime(activity.ociosidade),
+      'Classificação': getActivityType(activity).label,
+      'Eventos Agrupados': agruparAtividades ? (activity.eventos_agrupados || 1) : 1
+    }))
+
+    exportToCSV(exportData, 'atividades')
+  }
+
+  const handlePrint = () => {
+    const columns = [
+      {
+        header: 'Data/Hora',
+        accessor: (row) => format(new Date(row.horario), 'dd/MM/yyyy HH:mm:ss')
+      },
+      {
+        header: 'Usuário Monitorado',
+        accessor: (row) => row.usuario_monitorado_nome || 'N/A'
+      },
+      {
+        header: 'Cargo',
+        accessor: (row) => row.cargo || 'N/A'
+      },
+      {
+        header: 'Janela Ativa',
+        accessor: (row) => row.active_window
+      },
+      {
+        header: 'Categoria',
+        accessor: (row) => row.categoria || 'Não Classificado'
+      },
+      {
+        header: 'Ociosidade',
+        accessor: (row) => formatTime(row.ociosidade)
+      },
+      {
+        header: 'Classificação',
+        accessor: (row) => getActivityType(row).label,
+        className: (row) => {
+          const type = getActivityType(row).type
+          return type
+        }
+      }
+    ]
+
+    if (agruparAtividades) {
+      columns.push({
+        header: 'Eventos Agrupados',
+        accessor: (row) => row.eventos_agrupados || 1
+      })
+    }
+
+    printData('Relatório de Atividades', filteredActivities, columns)
+  }
+
   if (loading) {
     return <LoadingSpinner size="xl" text="Carregando atividades..." fullScreen />
   }
@@ -326,13 +388,31 @@ export default function ActivityManagement() {
               />
               <span className="ml-2">Agrupar Atividades</span>
             </label>
-            <button
-              onClick={() => fetchData(1, true)}
-              disabled={loading}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {loading ? 'Atualizando...' : 'Atualizar'}
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleExportCSV}
+                disabled={loading || filteredActivities.length === 0}
+                className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar CSV
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={loading || filteredActivities.length === 0}
+                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                <PrinterIcon className="h-4 w-4 mr-2" />
+                Imprimir
+              </button>
+              <button
+                onClick={() => fetchData(1, true)}
+                disabled={loading}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {loading ? 'Atualizando...' : 'Atualizar'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

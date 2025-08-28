@@ -19,6 +19,8 @@ import {
 } from 'recharts'
 import { ChartBarIcon } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
+import { exportToCSV } from '../utils/csvExport' // Assumindo que você tenha uma utilidade de exportação CSV
+import { printData } from '../utils/printData' // Assumindo que você tenha uma utilidade de impressão
 
 const COLORS = {
   productive: '#10B981',
@@ -42,6 +44,8 @@ export default function Dashboard() {
   const [selectedDepartment, setSelectedDepartment] = useState('all')
   const [activitiesPage, setActivitiesPage] = useState(1)
   const [hasMoreActivities, setHasMoreActivities] = useState(true)
+  const [summary, setSummary] = useState({ productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 });
+
 
   useEffect(() => {
     fetchData(1, true)
@@ -82,9 +86,9 @@ export default function Dashboard() {
 
         // Validar e filtrar dados
         const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-        const validUsuarios = Array.isArray(usuariosRes.data) ? 
+        const validUsuarios = Array.isArray(usuariosRes.data) ?
           usuariosRes.data.filter(u => u && u.id && u.nome) : []
-        const validDepartamentos = Array.isArray(departamentosRes.data) ? 
+        const validDepartamentos = Array.isArray(departamentosRes.data) ?
           departamentosRes.data.filter(d => d && d.id && d.nome) : []
 
         setActivities(validActivities)
@@ -140,7 +144,7 @@ export default function Dashboard() {
 
     // Validar se temos dados
     if (!Array.isArray(activities)) {
-      return { pieData: [], timelineData: [], totalTime: 0, userStats: {}, recentActivities: [] }
+      return { pieData: [], timelineData: [], totalTime: 0, userStats: {}, recentActivities: [], summary: { productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 } }
     }
 
     // Filtrar atividades por data
@@ -154,7 +158,7 @@ export default function Dashboard() {
     if (selectedUser !== 'all' && selectedUser !== '') {
       const selectedUserId = parseInt(selectedUser)
       if (!isNaN(selectedUserId)) {
-        filteredActivities = filteredActivities.filter(activity => 
+        filteredActivities = filteredActivities.filter(activity =>
           activity.usuario_monitorado_id === selectedUserId
         )
       }
@@ -164,12 +168,12 @@ export default function Dashboard() {
     if (selectedDepartment !== 'all' && selectedDepartment !== '') {
       const selectedDeptId = parseInt(selectedDepartment)
       if (!isNaN(selectedDeptId) && Array.isArray(usuariosMonitorados)) {
-        const usuariosDoDept = usuariosMonitorados.filter(u => 
+        const usuariosDoDept = usuariosMonitorados.filter(u =>
           u && u.departamento_id === selectedDeptId
         )
         const userIds = usuariosDoDept.map(u => u.id).filter(id => id !== undefined)
         if (userIds.length > 0) {
-          filteredActivities = filteredActivities.filter(activity => 
+          filteredActivities = filteredActivities.filter(activity =>
             userIds.includes(activity.usuario_monitorado_id)
           )
         }
@@ -204,6 +208,8 @@ export default function Dashboard() {
       }
     })
 
+    setSummary(timeData); // Atualiza o estado do summary
+
     const pieData = [
       { name: 'Produtivo', value: timeData.productive, color: COLORS.productive },
       { name: 'Não Produtivo', value: timeData.nonproductive, color: COLORS.nonproductive },
@@ -216,12 +222,12 @@ export default function Dashboard() {
     filteredActivities.forEach(activity => {
       const day = format(new Date(activity.horario), 'yyyy-MM-dd')
       if (!dailyData[day]) {
-        dailyData[day] = { 
-          date: day, 
-          productive: 0, 
-          nonproductive: 0, 
-          neutral: 0, 
-          idle: 0 
+        dailyData[day] = {
+          date: day,
+          productive: 0,
+          nonproductive: 0,
+          neutral: 0,
+          idle: 0
         }
       }
 
@@ -248,8 +254,8 @@ export default function Dashboard() {
       if (!activity || !activity.usuario_monitorado_id) return
 
       const userId = activity.usuario_monitorado_id
-      const userName = activity.usuario_monitorado_nome || 
-                      usuariosMonitorados.find(u => u.id === userId)?.nome || 
+      const userName = activity.usuario_monitorado_nome ||
+                      usuariosMonitorados.find(u => u.id === userId)?.nome ||
                       `Usuário ${userId}`
 
       if (!userStats[userId]) {
@@ -280,7 +286,7 @@ export default function Dashboard() {
 
     const recentActivities = filteredActivities.slice().sort((a, b) => new Date(b.horario) - new Date(a.horario));
 
-    return { pieData, timelineData, totalTime, userStats, recentActivities }
+    return { pieData, timelineData, totalTime, userStats, recentActivities, summary: timeData }
   }
 
   const formatTime = (seconds) => {
@@ -289,20 +295,110 @@ export default function Dashboard() {
     return `${hours}h ${minutes}m`
   }
 
+  const handleExportDashboard = () => {
+    const summaryData = [
+      {
+        'Métrica': 'Tempo Total',
+        'Valor': formatTime(summary.total)
+      },
+      {
+        'Métrica': 'Tempo Produtivo',
+        'Valor': formatTime(summary.productive)
+      },
+      {
+        'Métrica': 'Tempo Não Produtivo',
+        'Valor': formatTime(summary.nonproductive)
+      },
+      {
+        'Métrica': 'Tempo Neutro',
+        'Valor': formatTime(summary.neutral)
+      },
+      {
+        'Métrica': 'Tempo Ocioso',
+        'Valor': formatTime(summary.idle)
+      }
+    ]
+
+    const userStatsData = Object.values(userStats).map(stats => ({
+      'Usuário': stats.nome,
+      'Produtivo': formatTime(stats.productive),
+      'Não Produtivo': formatTime(stats.nonproductive),
+      'Neutro': formatTime(stats.neutral),
+      'Ocioso': formatTime(stats.idle),
+      'Total': formatTime(stats.productive + stats.nonproductive + stats.neutral + stats.idle)
+    }))
+
+    // Exportar dados do resumo
+    exportToCSV(summaryData, 'dashboard_resumo')
+
+    // Exportar estatísticas por usuário
+    setTimeout(() => {
+      exportToCSV(userStatsData, 'dashboard_usuarios')
+    }, 500)
+  }
+
+  const handlePrintDashboard = () => {
+    const summaryColumns = [
+      {
+        header: 'Métrica',
+        accessor: (row) => row.metric
+      },
+      {
+        header: 'Valor',
+        accessor: (row) => row.value
+      }
+    ]
+
+    const summaryPrintData = [
+      { metric: 'Tempo Total', value: formatTime(summary.total) },
+      { metric: 'Tempo Produtivo', value: formatTime(summary.productive) },
+      { metric: 'Tempo Não Produtivo', value: formatTime(summary.nonproductive) },
+      { metric: 'Tempo Neutro', value: formatTime(summary.neutral) },
+      { metric: 'Tempo Ocioso', value: formatTime(summary.idle) }
+    ]
+
+    printData('Dashboard - Resumo de Atividades', summaryPrintData, summaryColumns)
+  }
+
   if (loading) {
     return <LoadingSpinner size="xl" text="Carregando dashboard..." fullScreen />
   }
 
-  const { pieData, timelineData, totalTime, userStats, recentActivities } = processActivityData()
+  const { pieData, timelineData, userStats, recentActivities } = processActivityData()
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Bem-vindo de volta, {user?.usuario}!
-        </p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Bem-vindo de volta, {user?.usuario}!
+          </p>
+        </div>
+        <div className="flex space-x-4">
+          <button
+            onClick={handlePrintDashboard}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 flex items-center space-x-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M5 17a2 2 0 00-2 2h10a2 2 0 00-2-2H5z" />
+              <path fillRule="evenodd" d="M4 3a1 1 0 00-1 1v4a1 1 0 001 1h10a1 1 0 001-1V4a1 1 0 00-1-1H4zm12 1a1 1 0 011 1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2a1 1 0 01-1-1V4zM4 10a1 1 0 00-1 1v4a1 1 0 001 1h10a1 1 0 001-1v-4a1 1 0 00-1-1H4zM14 11h2a1 1 0 011 1v4a1 1 0 01-1 1h-2a1 1 0 01-1-1v-4a1 1 0 011-1zM4 16a1 1 0 00-1 1v2a1 1 0 001 1h10a1 1 0 001-1v-2a1 1 0 00-1-1H4z" clipRule="evenodd" />
+            </svg>
+            <span>Imprimir</span>
+          </button>
+          <button
+            onClick={handleExportDashboard}
+            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 flex items-center space-x-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M3 17a1 1 0 001 1h12a1 1 0 001-1v-5a1 1 0 00-1-1H6.414a1 1 0 00-.707.293l-5 5A1 1 0 003 17zm7-4a1 1 0 011-1h3a1 1 0 010 2h-3a1 1 0 01-1-1zM9 15a1 1 0 00-1 1v1h4v-1a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              <path d="M16 18a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h12a2 2 0 012 2v12zM10.5 13a.5.5 0 00-.5.5v2a.5.5 0 00.5.5h3a.5.5 0 00.5-.5v-2a.5.5 0 00-.5-.5h-3z" />
+            </svg>
+            <span>Exportar</span>
+          </button>
+        </div>
       </div>
+
 
       {/* Controls */}
       <div className="mb-6 flex flex-wrap items-center gap-4">
