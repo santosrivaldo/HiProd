@@ -49,10 +49,11 @@ export default function Dashboard() {
   const fetchActivities = async () => {
     try {
       const response = await api.get('/atividades')
-      setActivities(response.data)
+      setActivities(response.data || [])
       setLoading(false)
     } catch (error) {
       console.error('Error fetching activities:', error)
+      setActivities([]) // Set empty array on error
       setLoading(false)
     }
   }

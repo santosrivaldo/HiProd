@@ -1,12 +1,11 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import api from '../services/api'
 
-const AuthContext = createContext()
+const AuthContext = createContext(null)
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
@@ -20,7 +19,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
-    
+
     if (token && storedUser) {
       // Verificar se o token ainda é válido
       verifyToken(token)
@@ -58,17 +57,17 @@ export function AuthProvider({ children }) {
         nome: username,
         senha: password
       })
-      
+
       const userData = {
         usuario_id: response.data.usuario_id,
         usuario: response.data.usuario
       }
-      
+
       setUser(userData)
       setIsAuthenticated(true)
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('token', response.data.token)
-      
+
       return { success: true }
     } catch (error) {
       return { 
@@ -82,23 +81,23 @@ export function AuthProvider({ children }) {
     if (password !== confirmPassword) {
       return { success: false, error: 'Senhas não coincidem' }
     }
-    
+
     try {
       const response = await api.post('/register', {
         nome: username,
         senha: password
       })
-      
+
       const userData = {
         usuario_id: response.data.usuario_id,
         usuario: response.data.usuario
       }
-      
+
       setUser(userData)
       setIsAuthenticated(true)
       localStorage.setItem('user', JSON.stringify(userData))
       localStorage.setItem('token', response.data.token)
-      
+
       return { success: true }
     } catch (error) {
       return { 

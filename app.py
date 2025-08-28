@@ -401,54 +401,68 @@ def add_activity(current_user):
 @app.route('/atividades', methods=['GET'])
 @token_required
 def get_activities(current_user):
-    # Parâmetros de filtro
-    limite = request.args.get('limite', 100, type=int)
-    categoria = request.args.get('categoria')
-    data_inicio = request.args.get('data_inicio')
-    data_fim = request.args.get('data_fim')
+    global conn, cursor
     
-    # Construir query base
-    query = '''
-        SELECT a.id, a.usuario_id, a.ociosidade, a.active_window, a.titulo_janela,
-               a.categoria, a.produtividade, a.horario, a.duracao, a.created_at
-        FROM atividades a 
-        WHERE a.usuario_id = %s
-    '''
-    params = [current_user[0]]
+    try:
+        # Verificar se a conexão está ativa
+        cursor.execute('SELECT 1;')
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Reconectar se necessário
+        conn = get_db_connection()
+        cursor = conn.cursor()
     
-    # Adicionar filtros
-    if categoria:
-        query += ' AND a.categoria = %s'
-        params.append(categoria)
-    
-    if data_inicio:
-        query += ' AND a.horario >= %s'
-        params.append(data_inicio)
-    
-    if data_fim:
-        query += ' AND a.horario <= %s'
-        params.append(data_fim)
-    
-    query += ' ORDER BY a.horario DESC LIMIT %s;'
-    params.append(limite)
-    
-    cursor.execute(query, params)
-    atividades = cursor.fetchall()
-    
-    result = [{
-        'id': atividade[0], 
-        'usuario_id': str(atividade[1]), 
-        'ociosidade': atividade[2], 
-        'active_window': atividade[3],
-        'titulo_janela': atividade[4],
-        'categoria': atividade[5],
-        'produtividade': atividade[6],
-        'horario': atividade[7].isoformat() if atividade[7] else None,
-        'duracao': atividade[8],
-        'created_at': atividade[9].isoformat() if atividade[9] else None
-    } for atividade in atividades]
-    
-    return jsonify(result)
+    try:
+        # Parâmetros de filtro
+        limite = request.args.get('limite', 100, type=int)
+        categoria = request.args.get('categoria')
+        data_inicio = request.args.get('data_inicio')
+        data_fim = request.args.get('data_fim')
+        
+        # Construir query base
+        query = '''
+            SELECT a.id, a.usuario_id, a.ociosidade, a.active_window, a.titulo_janela,
+                   a.categoria, a.produtividade, a.horario, a.duracao, a.created_at
+            FROM atividades a 
+            WHERE a.usuario_id = %s
+        '''
+        params = [current_user[0]]
+        
+        # Adicionar filtros
+        if categoria:
+            query += ' AND a.categoria = %s'
+            params.append(categoria)
+        
+        if data_inicio:
+            query += ' AND a.horario >= %s'
+            params.append(data_inicio)
+        
+        if data_fim:
+            query += ' AND a.horario <= %s'
+            params.append(data_fim)
+        
+        query += ' ORDER BY a.horario DESC LIMIT %s;'
+        params.append(limite)
+        
+        cursor.execute(query, params)
+        atividades = cursor.fetchall()
+        
+        result = [{
+            'id': atividade[0], 
+            'usuario_id': str(atividade[1]), 
+            'ociosidade': atividade[2], 
+            'active_window': atividade[3],
+            'titulo_janela': atividade[4],
+            'categoria': atividade[5],
+            'produtividade': atividade[6],
+            'horario': atividade[7].isoformat() if atividade[7] else None,
+            'duracao': atividade[8],
+            'created_at': atividade[9].isoformat() if atividade[9] else None
+        } for atividade in atividades]
+        
+        return jsonify(result)
+    except psycopg2.Error as e:
+        print(f"Erro na consulta de atividades: {e}")
+        return jsonify({'message': 'Erro ao buscar atividades'}), 500
 
 # Rota para obter todas as atividades (admin - para compatibilidade)
 @app.route('/atividades/all', methods=['GET'])
@@ -463,10 +477,19 @@ def get_all_activities(current_user):
 @app.route('/usuarios', methods=['GET'])
 @token_required
 def get_users(current_user):
-    cursor.execute("SELECT id, nome, created_at FROM usuarios;")
-    usuarios = cursor.fetchall()
-    result = [{'usuario_id': str(usuario[0]), 'usuario': usuario[1], 'created_at': usuario[2].isoformat() if usuario[2] else None} for usuario in usuarios]
-    return jsonify(result)
+    try:
+        cursor.execute("SELECT id, nome, created_at FROM usuarios;")
+        usuarios = cursor.fetchall()
+        
+        if usuarios:
+            result = [{'usuario_id': str(usuario[0]), 'usuario': usuario[1], 'created_at': usuario[2].isoformat() if usuario[2] else None} for usuario in usuarios]
+        else:
+            result = []
+            
+        return jsonify(result)
+    except psycopg2.Error as e:
+        print(f"Erro na consulta de usuários: {e}")
+        return jsonify({'message': 'Erro ao buscar usuários'}), 500
 
 # Rota para obter categorias
 @app.route('/categorias', methods=['GET'])

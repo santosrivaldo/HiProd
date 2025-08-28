@@ -40,11 +40,13 @@ export default function ActivityManagement() {
         api.get('/usuarios')
       ])
       
-      setActivities(activitiesRes.data)
-      setUsers(usersRes.data)
+      setActivities(activitiesRes.data || [])
+      setUsers(usersRes.data || [])
       setLoading(false)
     } catch (error) {
       console.error('Error fetching data:', error)
+      setActivities([])
+      setUsers([])
       setLoading(false)
     }
   }
