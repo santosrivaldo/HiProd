@@ -18,28 +18,93 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const token = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
-      setIsAuthenticated(true)
+    
+    if (token && storedUser) {
+      // Verificar se o token ainda é válido
+      verifyToken(token)
+    } else {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
-  const login = async (username) => {
+  const verifyToken = async (token) => {
     try {
-      const response = await api.get('/usuario', {
-        params: { usuario_nome: username }
+      const response = await api.post('/verify-token', { token })
+      if (response.data.valid) {
+        const userData = {
+          usuario_id: response.data.usuario_id,
+          usuario: response.data.usuario
+        }
+        setUser(userData)
+        setIsAuthenticated(true)
+        localStorage.setItem('user', JSON.stringify(userData))
+      } else {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+      }
+    } catch (error) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const login = async (username, password) => {
+    try {
+      const response = await api.post('/login', {
+        nome: username,
+        senha: password
       })
       
-      const userData = response.data
+      const userData = {
+        usuario_id: response.data.usuario_id,
+        usuario: response.data.usuario
+      }
+      
       setUser(userData)
       setIsAuthenticated(true)
       localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('token', response.data.token)
       
       return { success: true }
     } catch (error) {
-      return { success: false, error: error.response?.data?.message || 'Login failed' }
+      return { 
+        success: false, 
+        error: error.response?.data?.message || 'Erro no login' 
+      }
+    }
+  }
+
+  const register = async (username, password, confirmPassword) => {
+    if (password !== confirmPassword) {
+      return { success: false, error: 'Senhas não coincidem' }
+    }
+    
+    try {
+      const response = await api.post('/register', {
+        nome: username,
+        senha: password
+      })
+      
+      const userData = {
+        usuario_id: response.data.usuario_id,
+        usuario: response.data.usuario
+      }
+      
+      setUser(userData)
+      setIsAuthenticated(true)
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('token', response.data.token)
+      
+      return { success: true }
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.message || 'Erro no registro' 
+      }
     }
   }
 
@@ -47,12 +112,14 @@ export function AuthProvider({ children }) {
     setUser(null)
     setIsAuthenticated(false)
     localStorage.removeItem('user')
+    localStorage.removeItem('token')
   }
 
   const value = {
     user,
     isAuthenticated,
     login,
+    register,
     logout,
     loading
   }

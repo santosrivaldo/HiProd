@@ -24,6 +24,15 @@ args = "npm install"
 task = "shell.exec"
 args = "npm run dev"
 
+[[workflows.workflow]]
+name = "Start Backend"
+author = 40480464
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python app.py"
+
 [[ports]]
 localPort = 3000
 externalPort = 80
