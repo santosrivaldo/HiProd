@@ -498,6 +498,77 @@ def create_category(current_user):
         conn.rollback()
         return jsonify({'message': 'Categoria já existe!'}), 409
 
+# Rota para atualizar atividade (protegida)
+@app.route('/atividades/<int:activity_id>', methods=['PATCH'])
+@token_required
+def update_activity(current_user, activity_id):
+    data = request.json
+    
+    if not data:
+        return jsonify({'message': 'Dados não fornecidos!'}), 400
+    
+    # Verificar se a atividade existe e pertence ao usuário
+    cursor.execute('''
+        SELECT id FROM atividades 
+        WHERE id = %s AND usuario_id = %s;
+    ''', (activity_id, current_user[0]))
+    
+    if not cursor.fetchone():
+        return jsonify({'message': 'Atividade não encontrada!'}), 404
+    
+    # Campos que podem ser atualizados
+    update_fields = []
+    update_values = []
+    
+    if 'produtividade' in data:
+        if data['produtividade'] not in ['productive', 'nonproductive', 'neutral', 'unclassified']:
+            return jsonify({'message': 'Valor de produtividade inválido!'}), 400
+        update_fields.append('produtividade = %s')
+        update_values.append(data['produtividade'])
+    
+    if 'categoria' in data:
+        update_fields.append('categoria = %s')
+        update_values.append(data['categoria'])
+    
+    if not update_fields:
+        return jsonify({'message': 'Nenhum campo para atualizar!'}), 400
+    
+    # Atualizar a atividade
+    query = f'''
+        UPDATE atividades 
+        SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = %s AND usuario_id = %s;
+    '''
+    update_values.extend([activity_id, current_user[0]])
+    
+    cursor.execute(query, update_values)
+    conn.commit()
+    
+    return jsonify({'message': 'Atividade atualizada com sucesso!'}), 200
+
+# Rota para excluir atividade (protegida)
+@app.route('/atividades/<int:activity_id>', methods=['DELETE'])
+@token_required
+def delete_activity(current_user, activity_id):
+    # Verificar se a atividade existe e pertence ao usuário
+    cursor.execute('''
+        SELECT id FROM atividades 
+        WHERE id = %s AND usuario_id = %s;
+    ''', (activity_id, current_user[0]))
+    
+    if not cursor.fetchone():
+        return jsonify({'message': 'Atividade não encontrada!'}), 404
+    
+    # Excluir a atividade
+    cursor.execute('''
+        DELETE FROM atividades 
+        WHERE id = %s AND usuario_id = %s;
+    ''', (activity_id, current_user[0]))
+    
+    conn.commit()
+    
+    return jsonify({'message': 'Atividade excluída com sucesso!'}), 200
+
 # Rota para estatísticas avançadas
 @app.route('/estatisticas', methods=['GET'])
 @token_required

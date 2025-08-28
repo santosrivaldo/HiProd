@@ -83,6 +83,7 @@ def create_tables():
         cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS ip_address INET;")
         cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS user_agent TEXT;")
         cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
         
         # Alterar tipo da coluna ociosidade se necessário
         cursor.execute("ALTER TABLE atividades ALTER COLUMN ociosidade TYPE INTEGER USING ociosidade::integer;")

@@ -9,6 +9,7 @@ const activityTypes = [
   { value: 'all', label: 'Todos' },
   { value: 'productive', label: 'Produtivo' },
   { value: 'nonproductive', label: 'Não Produtivo' },
+  { value: 'neutral', label: 'Neutro' },
   { value: 'unclassified', label: 'Não Classificado' },
   { value: 'idle', label: 'Ocioso' }
 ]
@@ -68,15 +69,8 @@ export default function ActivityManagement() {
     // Type filter
     if (typeFilter !== 'all') {
       filtered = filtered.filter(activity => {
-        const isIdle = activity.ociosidade >= 600
-        switch (typeFilter) {
-          case 'idle':
-            return isIdle
-          case 'unclassified':
-            return !isIdle // For now, everything non-idle is unclassified
-          default:
-            return false // productive and nonproductive not implemented yet
-        }
+        const activityType = getActivityType(activity)
+        return activityType.type === typeFilter
       })
     }
 
@@ -91,10 +85,25 @@ export default function ActivityManagement() {
   }
 
   const getActivityType = (activity) => {
+    // Check if activity has classification from API
+    if (activity.categoria && activity.produtividade) {
+      switch (activity.produtividade) {
+        case 'productive':
+          return { type: 'productive', label: 'Produtivo', color: 'bg-green-100 text-green-800' }
+        case 'nonproductive':
+          return { type: 'nonproductive', label: 'Não Produtivo', color: 'bg-red-100 text-red-800' }
+        case 'neutral':
+          return { type: 'neutral', label: 'Neutro', color: 'bg-blue-100 text-blue-800' }
+        default:
+          return { type: 'unclassified', label: 'Não Classificado', color: 'bg-yellow-100 text-yellow-800' }
+      }
+    }
+    
+    // Fallback to idle classification
     if (activity.ociosidade >= 600) {
       return { type: 'idle', label: 'Ocioso', color: 'bg-gray-100 text-gray-800' }
     }
-    // For now, classify all non-idle as unclassified since we don't have classification in API
+    
     return { type: 'unclassified', label: 'Não Classificado', color: 'bg-yellow-100 text-yellow-800' }
   }
 
@@ -103,6 +112,34 @@ export default function ActivityManagement() {
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const updateActivityClassification = async (activityId, newProductivity) => {
+    try {
+      await api.patch(`/atividades/${activityId}`, {
+        produtividade: newProductivity
+      })
+      
+      // Refresh activities after update
+      await fetchData()
+    } catch (error) {
+      console.error('Error updating activity classification:', error)
+      alert('Erro ao atualizar classificação da atividade')
+    }
+  }
+
+  const deleteActivity = async (activityId) => {
+    if (window.confirm('Tem certeza que deseja excluir esta atividade?')) {
+      try {
+        await api.delete(`/atividades/${activityId}`)
+        
+        // Refresh activities after deletion
+        await fetchData()
+      } catch (error) {
+        console.error('Error deleting activity:', error)
+        alert('Erro ao excluir atividade')
+      }
+    }
   }
 
   if (loading) {
@@ -213,10 +250,13 @@ export default function ActivityManagement() {
                     Janela Ativa
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Categoria
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Ociosidade
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Tipo
+                    Classificação
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Ações
@@ -240,18 +280,35 @@ export default function ActivityManagement() {
                         {activity.active_window || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-md">
+                          {activity.categoria || 'unclassified'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                         {formatTime(activity.ociosidade)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${activityType.color}`}>
-                          {activityType.label}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${activityType.color}`}>
+                            {activityType.label}
+                          </span>
+                          <select
+                            value={activity.produtividade || 'unclassified'}
+                            onChange={(e) => updateActivityClassification(activity.id, e.target.value)}
+                            className="text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="productive">Produtivo</option>
+                            <option value="nonproductive">Não Produtivo</option>
+                            <option value="neutral">Neutro</option>
+                            <option value="unclassified">Não Classificado</option>
+                          </select>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 mr-3">
-                          Editar
-                        </button>
-                        <button className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
+                        <button 
+                          onClick={() => deleteActivity(activity.id)}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                        >
                           Excluir
                         </button>
                       </td>
