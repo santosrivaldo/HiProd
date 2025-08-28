@@ -27,17 +27,26 @@ def get_db_connection():
     database_url = os.getenv('DATABASE_URL')
     
     if database_url:
-        # Usar DATABASE_URL completa
-        return psycopg2.connect(database_url)
+        print(f"Tentando conectar com DATABASE_URL...")
+        try:
+            return psycopg2.connect(database_url)
+        except psycopg2.OperationalError as e:
+            print(f"Erro na conexão com DATABASE_URL: {e}")
+            raise e
     else:
         # Fallback para variáveis individuais
-        return psycopg2.connect(
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT", 5432)
-        )
+        print(f"Tentando conectar com variáveis individuais...")
+        try:
+            return psycopg2.connect(
+                dbname=os.getenv("DB_NAME"),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
+                host=os.getenv("DB_HOST"),
+                port=os.getenv("DB_PORT", 5432)
+            )
+        except psycopg2.OperationalError as e:
+            print(f"Erro na conexão com variáveis individuais: {e}")
+            raise e
 
 # Inicializar conexão global
 conn = get_db_connection()
@@ -550,11 +559,31 @@ def get_user_legacy():
 
 if __name__ == '__main__':
     try:
+        # Verificar se o arquivo .env existe
+        if not os.path.exists('.env'):
+            print("❌ Arquivo .env não encontrado!")
+            print("Copie o arquivo .env.example para .env e configure suas credenciais.")
+            exit(1)
+        
+        # Verificar variáveis de ambiente essenciais
+        database_url = os.getenv('DATABASE_URL')
+        if not database_url and not all([os.getenv('DB_HOST'), os.getenv('DB_USER'), os.getenv('DB_PASSWORD')]):
+            print("❌ Configurações do banco de dados não encontradas!")
+            print("Configure DATABASE_URL ou DB_HOST, DB_USER, DB_PASSWORD no arquivo .env")
+            exit(1)
+        
         init_db()  # Inicializa o banco de dados
         print("✅ Banco de dados inicializado com sucesso!")
         print(f"🚀 Servidor rodando em http://0.0.0.0:5000")
         app.run(host='0.0.0.0', port=5000, debug=True)
+    except psycopg2.OperationalError as e:
+        print(f"❌ Erro de conexão com o banco PostgreSQL: {e}")
+        print("\n📋 Checklist de verificação:")
+        print("1. Verifique se o arquivo .env existe e está configurado")
+        print("2. Confirme se as credenciais (usuário/senha) estão corretas")
+        print("3. Verifique se o host e porta estão acessíveis")
+        print("4. Confirme se o banco de dados existe")
+        exit(1)
     except Exception as e:
-        print(f"❌ Erro ao conectar com o banco de dados: {e}")
-        print("Verifique as configurações no arquivo .env")
+        print(f"❌ Erro inesperado: {e}")
         exit(1)
