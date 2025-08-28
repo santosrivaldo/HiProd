@@ -17,7 +17,7 @@ import {
   Line,
   ResponsiveContainer
 } from 'recharts'
-import { ChartBarIcon } from '@heroicons/react/outline'
+import { ChartBarIcon } from '@heroicons/react/24/outline'
 
 const COLORS = {
   productive: '#10B981',
