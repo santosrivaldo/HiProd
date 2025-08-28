@@ -33,6 +33,15 @@ mode = "sequential"
 task = "shell.exec"
 args = "python app.py"
 
+[[workflows.workflow]]
+name = "Setup Database"
+author = 40480464
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python setup_database.py"
+
 [[ports]]
 localPort = 3000
 externalPort = 80
