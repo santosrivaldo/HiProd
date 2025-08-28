@@ -403,7 +403,7 @@ def init_db():
             # Tabela de usuários monitorados
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS usuarios_monitorados (
-                id SERIAL PRIMARYKEY,
+                id SERIAL PRIMARY KEY,
                 nome VARCHAR(100) NOT NULL UNIQUE,
                 departamento_id INTEGER REFERENCES departamentos(id),
                 cargo VARCHAR(100),
@@ -460,7 +460,7 @@ def init_db():
             # Tabela de palavras-chave das tags
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS tag_palavras_chave (
-                id SERIAL PRIMARYKEY,
+                id SERIAL PRIMARY KEY,
                 tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
                 palavra_chave VARCHAR(255) NOT NULL,
                 peso INTEGER DEFAULT 1,
