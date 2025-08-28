@@ -59,9 +59,22 @@ export default function Dashboard() {
         api.get('/departamentos')
       ])
       
-      setActivities(activitiesRes.data || [])
-      setUsuariosMonitorados(usuariosRes.data || [])
-      setDepartamentos(departamentosRes.data || [])
+      // Validar e filtrar dados antes de definir no state
+      const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
+      const validUsuarios = Array.isArray(usuariosRes.data) ? 
+        usuariosRes.data.filter(u => u && u.id && u.nome) : []
+      const validDepartamentos = Array.isArray(departamentosRes.data) ? 
+        departamentosRes.data.filter(d => d && d.id && d.nome) : []
+      
+      setActivities(validActivities)
+      setUsuariosMonitorados(validUsuarios)
+      setDepartamentos(validDepartamentos)
+      
+      console.log('Dados carregados:', {
+        atividades: validActivities.length,
+        usuarios: validUsuarios.length,
+        departamentos: validDepartamentos.length
+      })
     } catch (error) {
       console.error('Erro ao buscar dados:', error)
       setActivities([])
@@ -77,26 +90,42 @@ export default function Dashboard() {
     const startDate = startOfDay(subDays(now, dateRange))
     const endDate = endOfDay(now)
 
+    // Validar se temos dados
+    if (!Array.isArray(activities)) {
+      return { pieData: [], timelineData: [], totalTime: 0, userStats: {} }
+    }
+
     // Filtrar atividades por data
     let filteredActivities = activities.filter(activity => {
+      if (!activity || !activity.horario) return false
       const activityDate = new Date(activity.horario)
       return activityDate >= startDate && activityDate <= endDate
     })
 
     // Filtrar por usuário selecionado
-    if (selectedUser !== 'all') {
-      filteredActivities = filteredActivities.filter(activity => 
-        activity.usuario_monitorado_id === parseInt(selectedUser)
-      )
+    if (selectedUser !== 'all' && selectedUser !== '') {
+      const selectedUserId = parseInt(selectedUser)
+      if (!isNaN(selectedUserId)) {
+        filteredActivities = filteredActivities.filter(activity => 
+          activity.usuario_monitorado_id === selectedUserId
+        )
+      }
     }
 
     // Filtrar por departamento selecionado
-    if (selectedDepartment !== 'all') {
-      const usuariosDoDept = usuariosMonitorados.filter(u => u.departamento_id === parseInt(selectedDepartment))
-      const userIds = usuariosDoDept.map(u => u.id)
-      filteredActivities = filteredActivities.filter(activity => 
-        userIds.includes(activity.usuario_monitorado_id)
-      )
+    if (selectedDepartment !== 'all' && selectedDepartment !== '') {
+      const selectedDeptId = parseInt(selectedDepartment)
+      if (!isNaN(selectedDeptId) && Array.isArray(usuariosMonitorados)) {
+        const usuariosDoDept = usuariosMonitorados.filter(u => 
+          u && u.departamento_id === selectedDeptId
+        )
+        const userIds = usuariosDoDept.map(u => u.id).filter(id => id !== undefined)
+        if (userIds.length > 0) {
+          filteredActivities = filteredActivities.filter(activity => 
+            userIds.includes(activity.usuario_monitorado_id)
+          )
+        }
+      }
     }
 
     // Calcular tempo em cada categoria
@@ -168,8 +197,12 @@ export default function Dashboard() {
     // Estatísticas por usuário
     const userStats = {}
     filteredActivities.forEach(activity => {
+      if (!activity || !activity.usuario_monitorado_id) return
+      
       const userId = activity.usuario_monitorado_id
-      const userName = activity.usuario_monitorado_nome || `Usuário ${userId}`
+      const userName = activity.usuario_monitorado_nome || 
+                      usuariosMonitorados.find(u => u.id === userId)?.nome || 
+                      `Usuário ${userId}`
       
       if (!userStats[userId]) {
         userStats[userId] = {
@@ -182,7 +215,7 @@ export default function Dashboard() {
         }
       }
       
-      const duration = activity.duracao || 10
+      const duration = Math.max(activity.duracao || 10, 1) // Garantir que duracao seja pelo menos 1
       const produtividade = activity.produtividade || 'neutral'
       
       userStats[userId].total += duration
@@ -249,14 +282,17 @@ export default function Dashboard() {
           <select
             value={selectedUser}
             onChange={(e) => setSelectedUser(e.target.value)}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px]"
           >
             <option value="all">Todos os usuários</option>
-            {usuariosMonitorados.map(usuario => (
-              <option key={usuario.id} value={usuario.id}>
-                {usuario.nome}
-              </option>
-            ))}
+            {Array.isArray(usuariosMonitorados) && usuariosMonitorados
+              .filter(usuario => usuario && usuario.id && usuario.nome)
+              .map(usuario => (
+                <option key={`user-${usuario.id}`} value={usuario.id}>
+                  {usuario.nome}
+                </option>
+              ))
+            }
           </select>
         </div>
 
@@ -267,14 +303,17 @@ export default function Dashboard() {
           <select
             value={selectedDepartment}
             onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px]"
           >
             <option value="all">Todos os departamentos</option>
-            {departamentos.map(dept => (
-              <option key={dept.id} value={dept.id}>
-                {dept.nome}
-              </option>
-            ))}
+            {Array.isArray(departamentos) && departamentos
+              .filter(dept => dept && dept.id && dept.nome)
+              .map(dept => (
+                <option key={`dept-${dept.id}`} value={dept.id}>
+                  {dept.nome}
+                </option>
+              ))
+            }
           </select>
         </div>
         
