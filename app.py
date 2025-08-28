@@ -22,14 +22,21 @@ CORS(app)
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-this')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 
-# Configurando a conexão com o PostgreSQL usando variáveis de ambiente
-conn = psycopg2.connect(
-    dbname=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-    host=os.getenv("DB_HOST"),
-    port=os.getenv("DB_PORT")
-)
+# Configurando a conexão com o PostgreSQL usando Replit Database
+database_url = os.getenv('DATABASE_URL')
+
+if database_url:
+    # Usar DATABASE_URL do Replit
+    conn = psycopg2.connect(database_url)
+else:
+    # Fallback para variáveis individuais
+    conn = psycopg2.connect(
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT")
+    )
 cursor = conn.cursor()
 
 # Registrando o adaptador para UUID
