@@ -75,8 +75,11 @@ def verify_token(token):
 # Função para classificar atividade automaticamente
 def classify_activity(active_window, ociosidade, user_department_id=None):
     try:
+        print(f"🔍 classify_activity - window: {active_window}, dept_id: {user_department_id}")
+        
         # Buscar regras de classificação específicas do departamento primeiro
         if user_department_id:
+            print(f"🔍 Buscando regras para departamento {user_department_id}")
             cursor.execute('''
             SELECT c.nome, c.tipo_produtividade 
             FROM regras_classificacao r 
@@ -87,11 +90,14 @@ def classify_activity(active_window, ociosidade, user_department_id=None):
             ''', (user_department_id, active_window))
             
             result = cursor.fetchone()
+            print(f"🔍 Resultado busca departamental: {result}")
             if result:
                 categoria, produtividade = result
+                print(f"🏷️ Match departamental: {categoria} ({produtividade})")
                 return categoria, produtividade
         
         # Buscar regras globais (sem departamento específico)
+        print(f"🔍 Buscando regras globais")
         cursor.execute('''
         SELECT c.nome, c.tipo_produtividade 
         FROM regras_classificacao r 
@@ -102,17 +108,19 @@ def classify_activity(active_window, ociosidade, user_department_id=None):
         ''', (active_window,))
 
         result = cursor.fetchone()
+        print(f"🔍 Resultado busca global: {result}")
 
         if result:
             categoria, produtividade = result
+            print(f"🏷️ Match global: {categoria} ({produtividade})")
             return categoria, produtividade
 
-    except psycopg2.ProgrammingError as e:
-        # Se houver erro de coluna não existir, usar classificação básica
-        print(f"Aviso na classificação: {e}")
-        pass
+    except Exception as e:
+        print(f"❌ Erro na classificação automática: {e}")
+        print(f"🔍 Tipo do erro: {type(e)}")
 
     # Classificação baseada em ociosidade
+    print(f"🔍 Usando classificação por ociosidade: {ociosidade}")
     if ociosidade >= 600:  # 10 minutos
         return 'idle', 'nonproductive'
     elif ociosidade >= 300:  # 5 minutos
@@ -637,14 +645,31 @@ def add_activity(current_user):
             return jsonify({'message': f'Usuário monitorado não encontrado ou inativo! ID: {usuario_monitorado_id}'}), 404
 
         print(f"✅ Usuário monitorado encontrado: {usuario_monitorado[1]} (ID: {usuario_monitorado[0]})")
+        print(f"🔍 Debug - usuário monitorado tuple: {usuario_monitorado}")
+        print(f"🔍 Debug - length do tuple: {len(usuario_monitorado)}")
 
         # Obter departamento do usuário monitorado (índice 2 é departamento_id)
         user_department_id = usuario_monitorado[2] if usuario_monitorado and len(usuario_monitorado) > 2 else None
+        print(f"🔍 Debug - departamento_id extraído: {user_department_id}")
 
         # Classificar atividade automaticamente
         ociosidade = int(data.get('ociosidade', 0))
         active_window = data['active_window']
-        categoria, produtividade = classify_activity(active_window, ociosidade, user_department_id)
+        print(f"🏷️ Iniciando classificação - window: {active_window}, ociosidade: {ociosidade}, dept: {user_department_id}")
+        
+        try:
+            categoria, produtividade = classify_activity(active_window, ociosidade, user_department_id)
+            print(f"🏷️ Classificação concluída: {categoria} ({produtividade})")
+        except Exception as classify_error:
+            print(f"❌ Erro na classificação: {classify_error}")
+            # Fallback para classificação básica
+            if ociosidade >= 600:
+                categoria, produtividade = 'idle', 'nonproductive'
+            elif ociosidade >= 300:
+                categoria, produtividade = 'away', 'nonproductive'
+            else:
+                categoria, produtividade = 'unclassified', 'neutral'
+            print(f"🏷️ Classificação fallback: {categoria} ({produtividade})")
 
         print(f"🏷️ Atividade classificada: {categoria} ({produtividade})")
 
