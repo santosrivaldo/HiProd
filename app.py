@@ -192,37 +192,35 @@ def token_required(f):
 
         try:
             # Verificar se o usuário ainda existe
-            cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
+            cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s AND ativo = TRUE;", (uuid.UUID(user_id),))
             current_user = cursor.fetchone()
             if not current_user:
-                print(f"❌ Usuário não encontrado para token: {user_id}")
-                return jsonify({'message': 'Usuário não encontrado!'}), 401
-        except (psycopg2.ProgrammingError, psycopg2.errors.InFailedSqlTransaction, psycopg2.Error) as e:
+                print(f"❌ Usuário não encontrado ou inativo para token: {user_id}")
+                return jsonify({'message': 'Usuário não encontrado ou inativo!'}), 401
+        except (psycopg2.ProgrammingError, psycopg2.errors.InFailedSqlTransaction) as e:
             conn.rollback()
             print(f"Erro ao verificar usuário: {e}")
             # Try to reconnect and verify again
             try:
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
+                # Register UUID adapter again after reconnection
+                psycopg2.extras.register_uuid()
+                cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s AND ativo = TRUE;", (uuid.UUID(user_id),))
                 current_user = cursor.fetchone()
                 if not current_user:
                     return jsonify({'message': 'Usuário não encontrado após reconexão!'}), 401
             except Exception as reconnect_error:
                 print(f"Erro na reconexão: {reconnect_error}")
                 return jsonify({'message': 'Erro interno do servidor!'}), 500
-        except psycopg2.ProgrammingError as e:
-            if "no results to fetch" in str(e):
-                conn.rollback()
-                try:
-                    cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
-                    current_user = cursor.fetchone()
-                    if not current_user:
-                        return jsonify({'message': 'Usuário não encontrado!'}), 401
-                except Exception:
-                    return jsonify({'message': 'Erro interno do servidor!'}), 500
-            else:
-                raise
+        except psycopg2.Error as e:
+            conn.rollback()
+            print(f"Erro de banco ao verificar usuário: {e}")
+            return jsonify({'message': 'Erro interno do servidor!'}), 500
+        except Exception as e:
+            conn.rollback()
+            print(f"Erro inesperado ao verificar usuário: {e}")
+            return jsonify({'message': 'Erro interno do servidor!'}), 500
 
         return f(current_user, *args, **kwargs)
     return decorated
@@ -606,98 +604,67 @@ def init_db():
         print("📋 Inserindo tags padrão...")
         # Primeiro, verificar se já existem tags para evitar duplicatas
         cursor.execute("SELECT COUNT(*) FROM tags;")
-        tag_count = cursor.fetchone()[0]
+        tag_count_result = cursor.fetchone()
+        tag_count = tag_count_result[0] if tag_count_result else 0
         
         if tag_count == 0:
-            cursor.execute('''
-            INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor)
-            SELECT 'Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', d.id, '#10B981'
-            FROM departamentos d WHERE d.nome = 'TI'
-            UNION ALL
-            SELECT 'Banco de Dados', 'Administração e desenvolvimento de bancos de dados', 'productive', d.id, '#059669'
-            FROM departamentos d WHERE d.nome = 'TI'
-            UNION ALL
-            SELECT 'Design UI/UX', 'Design de interfaces e experiência do usuário', 'productive', d.id, '#8B5CF6'
-            FROM departamentos d WHERE d.nome = 'Marketing'
-            UNION ALL
-            SELECT 'Análise de Dados', 'Análise e processamento de dados', 'productive', d.id, '#3B82F6'
-            FROM departamentos d WHERE d.nome = 'Financeiro'
-            UNION ALL
-            SELECT 'Redes Sociais', 'Gerenciamento de mídias sociais', 'productive', d.id, '#EC4899'
-            FROM departamentos d WHERE d.nome = 'Marketing'
-            UNION ALL
-            SELECT 'Entretenimento', 'Atividades de entretenimento e lazer', 'nonproductive', NULL, '#EF4444'
-            UNION ALL
-            SELECT 'Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', NULL, '#06B6D4'
-            UNION ALL
-            SELECT 'Navegação Web', 'Navegação geral na internet', 'neutral', NULL, '#F59E0B';
-            ''')
+            # Inserir tags uma por vez para evitar problemas
+            tags_to_insert = [
+                ('Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', 'TI', '#10B981'),
+                ('Banco de Dados', 'Administração e desenvolvimento de bancos de dados', 'productive', 'TI', '#059669'),
+                ('Design UI/UX', 'Design de interfaces e experiência do usuário', 'productive', 'Marketing', '#8B5CF6'),
+                ('Análise de Dados', 'Análise e processamento de dados', 'productive', 'Financeiro', '#3B82F6'),
+                ('Redes Sociais', 'Gerenciamento de mídias sociais', 'productive', 'Marketing', '#EC4899'),
+                ('Entretenimento', 'Atividades de entretenimento e lazer', 'nonproductive', None, '#EF4444'),
+                ('Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', None, '#06B6D4'),
+                ('Navegação Web', 'Navegação geral na internet', 'neutral', None, '#F59E0B')
+            ]
+            
+            for tag_nome, tag_desc, tag_prod, dept_nome, tag_cor in tags_to_insert:
+                if dept_nome:
+                    cursor.execute('''
+                    INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor)
+                    SELECT %s, %s, %s, d.id, %s
+                    FROM departamentos d WHERE d.nome = %s
+                    ON CONFLICT DO NOTHING;
+                    ''', (tag_nome, tag_desc, tag_prod, tag_cor, dept_nome))
+                else:
+                    cursor.execute('''
+                    INSERT INTO tags (nome, descricao, produtividade, departamento_id, cor)
+                    VALUES (%s, %s, %s, NULL, %s)
+                    ON CONFLICT DO NOTHING;
+                    ''', (tag_nome, tag_desc, tag_prod, tag_cor))
         else:
             print("⏭️ Tags já existem, pulando inserção...")
 
         # Inserir palavras-chave para as tags
         cursor.execute("SELECT COUNT(*) FROM tag_palavras_chave;")
-        keyword_count = cursor.fetchone()[0]
+        keyword_count_result = cursor.fetchone()
+        keyword_count = keyword_count_result[0] if keyword_count_result else 0
         
         if keyword_count == 0:
-            cursor.execute('''
-            INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
-            SELECT t.id, 'Visual Studio Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-            UNION ALL
-            SELECT t.id, 'VS Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-            UNION ALL
-            SELECT t.id, 'GitHub', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-            UNION ALL
-            SELECT t.id, 'React', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-            UNION ALL
-            SELECT t.id, 'Node.js', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-            UNION ALL
-            SELECT t.id, 'Replit', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
-            UNION ALL
-            SELECT t.id, 'pgAdmin', 5 FROM tags t WHERE t.nome = 'Banco de Dados'
-            UNION ALL
-            SELECT t.id, 'PostgreSQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
-            UNION ALL
-            SELECT t.id, 'MySQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
-            UNION ALL
-            SELECT t.id, 'MongoDB', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
-            UNION ALL
-            SELECT t.id, 'Figma', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
-            UNION ALL
-            SELECT t.id, 'Adobe XD', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
-            UNION ALL
-            SELECT t.id, 'Photoshop', 4 FROM tags t WHERE t.nome = 'Design UI/UX'
-            UNION ALL
-            SELECT t.id, 'Excel', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
-            UNION ALL
-            SELECT t.id, 'Power BI', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
-            UNION ALL
-            SELECT t.id, 'Instagram', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
-            UNION ALL
-            SELECT t.id, 'Facebook', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
-            UNION ALL
-            SELECT t.id, 'LinkedIn', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
-            UNION ALL
-            SELECT t.id, 'YouTube', 3 FROM tags t WHERE t.nome = 'Entretenimento'
-            UNION ALL
-            SELECT t.id, 'Netflix', 3 FROM tags t WHERE t.nome = 'Entretenimento'
-            UNION ALL
-            SELECT t.id, 'Spotify', 3 FROM tags t WHERE t.nome = 'Entretenimento'
-            UNION ALL
-            SELECT t.id, 'WhatsApp', 4 FROM tags t WHERE t.nome = 'Comunicação'
-            UNION ALL
-            SELECT t.id, 'Slack', 4 FROM tags t WHERE t.nome = 'Comunicação'
-            UNION ALL
-            SELECT t.id, 'Teams', 4 FROM tags t WHERE t.nome = 'Comunicação'
-            UNION ALL
-            SELECT t.id, 'Zoom', 4 FROM tags t WHERE t.nome = 'Comunicação'
-            UNION ALL
-            SELECT t.id, 'Google Chrome', 3 FROM tags t WHERE t.nome = 'Navegação Web'
-            UNION ALL
-            SELECT t.id, 'Firefox', 3 FROM tags t WHERE t.nome = 'Navegação Web'
-            UNION ALL
-            SELECT t.id, 'Edge', 3 FROM tags t WHERE t.nome = 'Navegação Web';
-            ''')
+            # Inserir palavras-chave uma por vez
+            keywords_data = [
+                ('Desenvolvimento Web', ['Visual Studio Code', 'VS Code', 'GitHub', 'React', 'Node.js', 'Replit'], [5, 5, 4, 4, 4, 5]),
+                ('Banco de Dados', ['pgAdmin', 'PostgreSQL', 'MySQL', 'MongoDB'], [5, 4, 4, 4]),
+                ('Design UI/UX', ['Figma', 'Adobe XD', 'Photoshop'], [5, 5, 4]),
+                ('Análise de Dados', ['Excel', 'Power BI'], [5, 5]),
+                ('Redes Sociais', ['Instagram', 'Facebook', 'LinkedIn'], [4, 4, 4]),
+                ('Entretenimento', ['YouTube', 'Netflix', 'Spotify'], [3, 3, 3]),
+                ('Comunicação', ['WhatsApp', 'Slack', 'Teams', 'Zoom'], [4, 4, 4, 4]),
+                ('Navegação Web', ['Google Chrome', 'Firefox', 'Edge'], [3, 3, 3])
+            ]
+            
+            for tag_nome, palavras, pesos in keywords_data:
+                cursor.execute("SELECT id FROM tags WHERE nome = %s;", (tag_nome,))
+                tag_result = cursor.fetchone()
+                if tag_result:
+                    tag_id = tag_result[0]
+                    for palavra, peso in zip(palavras, pesos):
+                        cursor.execute('''
+                        INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                        VALUES (%s, %s, %s);
+                        ''', (tag_id, palavra, peso))
         else:
             print("⏭️ Palavras-chave já existem, pulando inserção...")
 
@@ -1162,14 +1129,19 @@ def get_users(current_user):
     try:
         # Verificar se a conexão está ativa
         cursor.execute('SELECT 1;')
-    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        cursor.fetchone()  # Consume the result
+    except (psycopg2.OperationalError, psycopg2.InterfaceError, psycopg2.InternalError):
         # Reconectar se necessário
+        conn.rollback()
         conn = get_db_connection()
         cursor = conn.cursor()
+        psycopg2.extras.register_uuid()
+    except (psycopg2.errors.InFailedSqlTransaction, psycopg2.ProgrammingError):
+        conn.rollback()
 
     try:
         cursor.execute('''
-            SELECT u.id, u.nome, u.email, u.departamento_id, u.created_at, d.nome as departamento_nome, d.cor as departamento_cor
+            SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at, d.nome as departamento_nome, d.cor as departamento_cor
             FROM usuarios u
             LEFT JOIN departamentos d ON u.departamento_id = d.id
             WHERE u.ativo = TRUE
@@ -1189,7 +1161,7 @@ def get_users(current_user):
                     }
 
                 result.append({
-                    'usuario_id': usuario[0],
+                    'usuario_id': str(usuario[0]) if usuario[0] else None,
                     'usuario': usuario[1],
                     'email': usuario[2],
                     'departamento_id': usuario[3],
@@ -1199,9 +1171,14 @@ def get_users(current_user):
                 })
 
         return jsonify(result)
-    except psycopg2.Error as e:
+    except (psycopg2.Error, psycopg2.ProgrammingError) as e:
+        conn.rollback()
         print(f"Erro na consulta de usuários: {e}")
         return jsonify([]), 200  # Return empty array instead of error
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro inesperado na consulta de usuários: {e}")
+        return jsonify([]), 200
 
 # Rota para obter ou criar usuário monitorado (protegida)
 @app.route('/usuarios-monitorados', methods=['GET'])
