@@ -77,17 +77,17 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
     try:
         print(f"🏷️ Classificando com tags - window: {active_window}, dept_id: {user_department_id}")
         
-        # Buscar tags ativas do departamento primeiro
+        # Buscar tags ativas - primeiro do departamento específico, depois globais
         if user_department_id:
             cursor.execute('''
             SELECT t.id, t.nome, t.produtividade, tk.palavra_chave, tk.peso
             FROM tags t
             JOIN tag_palavras_chave tk ON t.id = tk.tag_id
-            WHERE t.ativo = TRUE AND t.departamento_id = %s
-            ORDER BY tk.peso DESC;
+            WHERE t.ativo = TRUE AND (t.departamento_id = %s OR t.departamento_id IS NULL)
+            ORDER BY t.departamento_id NULLS LAST, tk.peso DESC;
             ''', (user_department_id,))
         else:
-            # Buscar tags globais
+            # Buscar apenas tags globais
             cursor.execute('''
             SELECT t.id, t.nome, t.produtividade, tk.palavra_chave, tk.peso
             FROM tags t
@@ -101,14 +101,19 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
         
         for tag_match in tag_matches:
             tag_id, tag_nome, tag_produtividade, palavra_chave, peso = tag_match
+            # Verificar se a palavra-chave está presente no título da janela (case insensitive)
             if palavra_chave.lower() in active_window.lower():
-                confidence = peso * (len(palavra_chave) / len(active_window))
+                # Calcular confidence baseado no peso e na proporção da palavra-chave
+                confidence = peso * (len(palavra_chave) / len(active_window)) * 100
                 matched_tags.append({
                     'tag_id': tag_id,
                     'nome': tag_nome,
                     'produtividade': tag_produtividade,
-                    'confidence': confidence
+                    'confidence': confidence,
+                    'palavra_chave': palavra_chave
                 })
+                
+                print(f"🎯 Match encontrado: '{palavra_chave}' -> Tag '{tag_nome}' (confidence: {confidence:.2f})")
                 
                 # Se temos um ID da atividade, salvar a associação
                 if activity_id:
@@ -121,21 +126,22 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
         # Retornar a tag com maior confidence
         if matched_tags:
             best_match = max(matched_tags, key=lambda x: x['confidence'])
-            print(f"🏷️ Melhor match: {best_match['nome']} ({best_match['produtividade']}) - confidence: {best_match['confidence']:.2f}")
+            print(f"🏷️ Melhor match: '{best_match['nome']}' ({best_match['produtividade']}) - confidence: {best_match['confidence']:.2f}")
+            # A categoria agora será o nome da tag
             return best_match['nome'], best_match['produtividade']
     
     except Exception as e:
         print(f"❌ Erro na classificação com tags: {e}")
         conn.rollback()
     
-    # Fallback para classificação por ociosidade
-    print(f"🔍 Usando classificação por ociosidade: {ociosidade}")
+    # Fallback para classificação por ociosidade se nenhuma tag foi encontrada
+    print(f"🔍 Nenhuma tag encontrada, usando classificação por ociosidade: {ociosidade}")
     if ociosidade >= 600:  # 10 minutos
-        return 'idle', 'nonproductive'
+        return 'Ocioso', 'nonproductive'
     elif ociosidade >= 300:  # 5 minutos
-        return 'away', 'nonproductive'
+        return 'Ausente', 'nonproductive'
     else:
-        return 'unclassified', 'neutral'
+        return 'Não Classificado', 'neutral'
 
 # Manter função antiga para compatibilidade
 def classify_activity(active_window, ociosidade, user_department_id=None):
@@ -549,6 +555,9 @@ def init_db():
         SELECT 'Desenvolvimento Web', 'Desenvolvimento de aplicações web', 'productive', d.id, '#10B981'
         FROM departamentos d WHERE d.nome = 'TI'
         UNION ALL
+        SELECT 'Banco de Dados', 'Administração e desenvolvimento de bancos de dados', 'productive', d.id, '#059669'
+        FROM departamentos d WHERE d.nome = 'TI'
+        UNION ALL
         SELECT 'Design UI/UX', 'Design de interfaces e experiência do usuário', 'productive', d.id, '#8B5CF6'
         FROM departamentos d WHERE d.nome = 'Marketing'
         UNION ALL
@@ -561,49 +570,69 @@ def init_db():
         SELECT 'Entretenimento', 'Atividades de entretenimento e lazer', 'nonproductive', NULL, '#EF4444'
         UNION ALL
         SELECT 'Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', NULL, '#06B6D4'
+        UNION ALL
+        SELECT 'Navegação Web', 'Navegação geral na internet', 'neutral', NULL, '#F59E0B'
         ON CONFLICT (nome, departamento_id) DO NOTHING;
         ''')
 
         # Inserir palavras-chave para as tags
         cursor.execute('''
         INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
-        SELECT t.id, 'Visual Studio Code', 3 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        SELECT t.id, 'Visual Studio Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
         UNION ALL
-        SELECT t.id, 'GitHub', 2 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        SELECT t.id, 'VS Code', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
         UNION ALL
-        SELECT t.id, 'React', 2 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        SELECT t.id, 'GitHub', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
         UNION ALL
-        SELECT t.id, 'Node.js', 2 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
+        SELECT t.id, 'React', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
         UNION ALL
-        SELECT t.id, 'Figma', 3 FROM tags t WHERE t.nome = 'Design UI/UX'
+        SELECT t.id, 'Node.js', 4 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
         UNION ALL
-        SELECT t.id, 'Adobe XD', 3 FROM tags t WHERE t.nome = 'Design UI/UX'
+        SELECT t.id, 'Replit', 5 FROM tags t WHERE t.nome = 'Desenvolvimento Web'
         UNION ALL
-        SELECT t.id, 'Photoshop', 2 FROM tags t WHERE t.nome = 'Design UI/UX'
+        SELECT t.id, 'pgAdmin', 5 FROM tags t WHERE t.nome = 'Banco de Dados'
         UNION ALL
-        SELECT t.id, 'Excel', 3 FROM tags t WHERE t.nome = 'Análise de Dados'
+        SELECT t.id, 'PostgreSQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
         UNION ALL
-        SELECT t.id, 'Power BI', 3 FROM tags t WHERE t.nome = 'Análise de Dados'
+        SELECT t.id, 'MySQL', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
         UNION ALL
-        SELECT t.id, 'Instagram', 2 FROM tags t WHERE t.nome = 'Redes Sociais'
+        SELECT t.id, 'MongoDB', 4 FROM tags t WHERE t.nome = 'Banco de Dados'
         UNION ALL
-        SELECT t.id, 'Facebook', 2 FROM tags t WHERE t.nome = 'Redes Sociais'
+        SELECT t.id, 'Figma', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
         UNION ALL
-        SELECT t.id, 'LinkedIn', 2 FROM tags t WHERE t.nome = 'Redes Sociais'
+        SELECT t.id, 'Adobe XD', 5 FROM tags t WHERE t.nome = 'Design UI/UX'
         UNION ALL
-        SELECT t.id, 'YouTube', 1 FROM tags t WHERE t.nome = 'Entretenimento'
+        SELECT t.id, 'Photoshop', 4 FROM tags t WHERE t.nome = 'Design UI/UX'
         UNION ALL
-        SELECT t.id, 'Netflix', 1 FROM tags t WHERE t.nome = 'Entretenimento'
+        SELECT t.id, 'Excel', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
         UNION ALL
-        SELECT t.id, 'Spotify', 1 FROM tags t WHERE t.nome = 'Entretenimento'
+        SELECT t.id, 'Power BI', 5 FROM tags t WHERE t.nome = 'Análise de Dados'
         UNION ALL
-        SELECT t.id, 'WhatsApp', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        SELECT t.id, 'Instagram', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
         UNION ALL
-        SELECT t.id, 'Slack', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        SELECT t.id, 'Facebook', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
         UNION ALL
-        SELECT t.id, 'Teams', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        SELECT t.id, 'LinkedIn', 4 FROM tags t WHERE t.nome = 'Redes Sociais'
         UNION ALL
-        SELECT t.id, 'Zoom', 2 FROM tags t WHERE t.nome = 'Comunicação'
+        SELECT t.id, 'YouTube', 3 FROM tags t WHERE t.nome = 'Entretenimento'
+        UNION ALL
+        SELECT t.id, 'Netflix', 3 FROM tags t WHERE t.nome = 'Entretenimento'
+        UNION ALL
+        SELECT t.id, 'Spotify', 3 FROM tags t WHERE t.nome = 'Entretenimento'
+        UNION ALL
+        SELECT t.id, 'WhatsApp', 4 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Slack', 4 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Teams', 4 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Zoom', 4 FROM tags t WHERE t.nome = 'Comunicação'
+        UNION ALL
+        SELECT t.id, 'Google Chrome', 3 FROM tags t WHERE t.nome = 'Navegação Web'
+        UNION ALL
+        SELECT t.id, 'Firefox', 3 FROM tags t WHERE t.nome = 'Navegação Web'
+        UNION ALL
+        SELECT t.id, 'Edge', 3 FROM tags t WHERE t.nome = 'Navegação Web'
         ON CONFLICT DO NOTHING;
         ''')
 
@@ -1901,6 +1930,40 @@ def update_monitored_user(current_user, user_id):
         conn.rollback()
         print(f"Erro ao atualizar usuário monitorado: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+# Rota para obter tags de uma atividade específica
+@app.route('/atividades/<int:activity_id>/tags', methods=['GET'])
+@token_required
+def get_activity_tags(current_user, activity_id):
+    try:
+        cursor.execute('''
+            SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade, 
+                   at.confidence, d.nome as departamento_nome
+            FROM atividade_tags at
+            JOIN tags t ON at.tag_id = t.id
+            LEFT JOIN departamentos d ON t.departamento_id = d.id
+            WHERE at.atividade_id = %s
+            ORDER BY at.confidence DESC;
+        ''', (activity_id,))
+        
+        tags = cursor.fetchall()
+        result = []
+        
+        for tag in tags:
+            result.append({
+                'id': tag[0],
+                'nome': tag[1],
+                'descricao': tag[2],
+                'cor': tag[3],
+                'produtividade': tag[4],
+                'confidence': float(tag[5]) if tag[5] else 0.0,
+                'departamento_nome': tag[6]
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Erro ao buscar tags da atividade: {e}")
+        return jsonify([]), 200
 
 # Estatísticas avançadas
 @app.route('/estatisticas', methods=['GET'])

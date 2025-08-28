@@ -364,20 +364,29 @@ export default function ActivityManagement() {
                         {formatTime(activity.ociosidade)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${activityType.color}`}>
-                            {activityType.label}
-                          </span>
-                          <select
-                            value={activity.produtividade || 'unclassified'}
-                            onChange={(e) => updateActivityClassification(activity.id, e.target.value)}
-                            className="text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
-                          >
-                            <option value="productive">Produtivo</option>
-                            <option value="nonproductive">Não Produtivo</option>
-                            <option value="neutral">Neutro</option>
-                            <option value="unclassified">Não Classificado</option>
-                          </select>
+                        <div className="flex flex-col space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${activityType.color}`}>
+                              {activityType.label}
+                            </span>
+                            <select
+                              value={activity.produtividade || 'neutral'}
+                              onChange={(e) => updateActivityClassification(activity.id, e.target.value)}
+                              className="text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="productive">Produtivo</option>
+                              <option value="nonproductive">Não Produtivo</option>
+                              <option value="neutral">Neutro</option>
+                              <option value="unclassified">Não Classificado</option>
+                            </select>
+                          </div>
+                          {activity.categoria && activity.categoria !== 'unclassified' && activity.categoria !== 'Não Classificado' && (
+                            <div className="flex items-center">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-indigo-100 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-200">
+                                🏷️ {activity.categoria}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       {agruparAtividades && (
