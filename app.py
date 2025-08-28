@@ -389,18 +389,6 @@ def init_db():
         );
         ''')
 
-        # Tabela para associar atividades com tags
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS atividade_tags (
-            id SERIAL PRIMARY KEY,
-            atividade_id INTEGER REFERENCES atividades(id) ON DELETE CASCADE,
-            tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
-            confidence FLOAT DEFAULT 0.0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(atividade_id, tag_id)
-        );
-        ''')
-
         # Tabela para configurações de departamento
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS departamento_configuracoes (
@@ -413,7 +401,7 @@ def init_db():
         );
         ''')
 
-        # Tabela de atividades (por último)
+        # Tabela de atividades (criar após usuarios_monitorados)
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS atividades (
             id SERIAL PRIMARY KEY,
@@ -429,6 +417,18 @@ def init_db():
             user_agent TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
+        );
+        ''')
+
+        # Tabela para associar atividades com tags (criar após atividades)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS atividade_tags (
+            id SERIAL PRIMARY KEY,
+            atividade_id INTEGER REFERENCES atividades(id) ON DELETE CASCADE,
+            tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+            confidence FLOAT DEFAULT 0.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(atividade_id, tag_id)
         );
         ''')
 
