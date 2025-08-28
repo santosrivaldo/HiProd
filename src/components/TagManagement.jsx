@@ -98,7 +98,8 @@ const TagManagement = () => {
       cor: tag.cor || '#6B7280',
       produtividade: tag.produtividade,
       departamento_id: tag.departamento_id || '',
-      palavras_chave: tag.palavras_chave || []
+      palavras_chave: tag.palavras_chave || [],
+      tier: tag.tier || 3
     });
   };
 
@@ -515,19 +516,33 @@ const TagManagement = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        tag.tier === 5 
-                          ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' 
-                          : tag.tier === 4 
-                          ? 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
-                          : tag.tier === 3
-                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
-                          : tag.tier === 2
-                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
-                          : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
-                      }`}>
-                        Tier {tag.tier || 3}
-                      </span>
+                      {editingTag === tag.id ? (
+                        <select
+                          value={editForm.tier || 3}
+                          onChange={(e) => setEditForm({...editForm, tier: parseInt(e.target.value)})}
+                          className="px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="5">5 - Máxima</option>
+                          <option value="4">4 - Alta</option>
+                          <option value="3">3 - Normal</option>
+                          <option value="2">2 - Baixa</option>
+                          <option value="1">1 - Mínima</option>
+                        </select>
+                      ) : (
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          tag.tier === 5 
+                            ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' 
+                            : tag.tier === 4 
+                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
+                            : tag.tier === 3
+                            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+                            : tag.tier === 2
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                        }`}>
+                          Tier {tag.tier || 3}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

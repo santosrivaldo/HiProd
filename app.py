@@ -450,12 +450,25 @@ def init_db():
                 cor VARCHAR(7) DEFAULT '#6B7280',
                 produtividade VARCHAR(20) NOT NULL CHECK (produtividade IN ('productive', 'nonproductive', 'neutral')),
                 departamento_id INTEGER REFERENCES departamentos(id),
+                tier INTEGER DEFAULT 3 CHECK (tier >= 1 AND tier <= 5),
                 ativo BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(nome, departamento_id)
             );
             ''')
+            
+            # Verificar se coluna tier existe na tabela tags, se não, adicionar
+            db.cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name='tags' AND column_name='tier';
+            """)
+            
+            if not db.cursor.fetchone():
+                print("🔧 Adicionando coluna tier à tabela tags...")
+                db.cursor.execute("ALTER TABLE tags ADD COLUMN tier INTEGER DEFAULT 3 CHECK (tier >= 1 AND tier <= 5);")
+                print("✅ Coluna tier adicionada com sucesso!")
 
             # Tabela de palavras-chave das tags
             db.cursor.execute('''
@@ -1230,7 +1243,8 @@ def get_tags(current_user):
         with DatabaseConnection() as db:
             # Construir query base
             base_query = '''
-                SELECT t.*, d.nome as departamento_nome
+                SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade, t.departamento_id, 
+                       t.ativo, t.created_at, t.updated_at, t.tier, d.nome as departamento_nome
                 FROM tags t
                 LEFT JOIN departamentos d ON t.departamento_id = d.id
                 WHERE t.ativo = %s
@@ -1273,7 +1287,8 @@ def get_tags(current_user):
                     'ativo': tag[6],
                     'created_at': tag[7].isoformat() if tag[7] else None,
                     'updated_at': tag[8].isoformat() if tag[8] else None,
-                    'departamento_nome': tag[9] if len(tag) > 9 else None,
+                    'tier': tag[9] if len(tag) > 9 and tag[9] is not None else 3,
+                    'departamento_nome': tag[10] if len(tag) > 10 else None,
                     'palavras_chave': [{'palavra': p[0], 'peso': p[1]} for p in palavras_chave]
                 })
 
@@ -1296,6 +1311,10 @@ def create_tag(current_user):
     produtividade = data['produtividade']
     departamento_id = data.get('departamento_id')
     palavras_chave = data.get('palavras_chave', [])
+    tier = int(data.get('tier', 3))
+    
+    if tier < 1 or tier > 5:
+        return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
 
     if produtividade not in ['productive', 'nonproductive', 'neutral']:
         return jsonify({'message': 'Produtividade inválida!'}), 400
@@ -1304,10 +1323,10 @@ def create_tag(current_user):
         with DatabaseConnection() as db:
             # Criar tag
             db.cursor.execute('''
-                INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id, tier)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 RETURNING id;
-            ''', (nome, descricao, cor, produtividade, departamento_id))
+            ''', (nome, descricao, cor, produtividade, departamento_id, tier))
 
             tag_id = db.cursor.fetchone()[0]
 
@@ -1371,6 +1390,12 @@ def update_tag(current_user, tag_id):
             if 'ativo' in data:
                 update_fields.append('ativo = %s')
                 update_values.append(data['ativo'])
+            if 'tier' in data:
+                tier_value = int(data['tier']) if data['tier'] is not None else 3
+                if tier_value < 1 or tier_value > 5:
+                    return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
+                update_fields.append('tier = %s')
+                update_values.append(tier_value)
 
             update_fields.append('updated_at = CURRENT_TIMESTAMP')
             update_values.append(tag_id)
