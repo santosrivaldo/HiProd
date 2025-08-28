@@ -930,18 +930,38 @@ def get_monitored_users(current_user):
             
             if usuario_existente:
                 # Usuário existe, retornar seus dados
+                # Processar dados do usuário existente com segurança
+                created_at_value = None
+                updated_at_value = None
+                
+                if len(usuario_existente) > 5 and usuario_existente[5]:
+                    if hasattr(usuario_existente[5], 'isoformat'):
+                        created_at_value = usuario_existente[5].isoformat()
+                    else:
+                        created_at_value = str(usuario_existente[5])
+                
+                if len(usuario_existente) > 6 and usuario_existente[6]:
+                    if hasattr(usuario_existente[6], 'isoformat'):
+                        updated_at_value = usuario_existente[6].isoformat()
+                    else:
+                        updated_at_value = str(usuario_existente[6])
+                
+                departamento_info = None
+                if len(usuario_existente) > 7 and usuario_existente[7]:
+                    departamento_info = {
+                        'nome': usuario_existente[7],
+                        'cor': usuario_existente[8] if len(usuario_existente) > 8 else None
+                    }
+                
                 result = {
                     'id': usuario_existente[0], 
                     'nome': usuario_existente[1],
-                    'departamento_id': usuario_existente[2],
-                    'cargo': usuario_existente[3],
-                    'ativo': usuario_existente[4],
-                    'created_at': usuario_existente[5].isoformat() if usuario_existente[5] else None,
-                    'updated_at': usuario_existente[6].isoformat() if usuario_existente[6] else None,
-                    'departamento': {
-                        'nome': usuario_existente[7],
-                        'cor': usuario_existente[8]
-                    } if usuario_existente[7] else None,
+                    'departamento_id': usuario_existente[2] if len(usuario_existente) > 2 else None,
+                    'cargo': usuario_existente[3] if len(usuario_existente) > 3 else None,
+                    'ativo': usuario_existente[4] if len(usuario_existente) > 4 else True,
+                    'created_at': created_at_value,
+                    'updated_at': updated_at_value,
+                    'departamento': departamento_info,
                     'created': False
                 }
                 return jsonify(result)
@@ -956,14 +976,30 @@ def get_monitored_users(current_user):
                 novo_usuario = cursor.fetchone()
                 conn.commit()
                 
+                # Processar dados do novo usuário com segurança
+                created_at_value = None
+                updated_at_value = None
+                
+                if len(novo_usuario) > 5 and novo_usuario[5]:
+                    if hasattr(novo_usuario[5], 'isoformat'):
+                        created_at_value = novo_usuario[5].isoformat()
+                    else:
+                        created_at_value = str(novo_usuario[5])
+                
+                if len(novo_usuario) > 6 and novo_usuario[6]:
+                    if hasattr(novo_usuario[6], 'isoformat'):
+                        updated_at_value = novo_usuario[6].isoformat()
+                    else:
+                        updated_at_value = str(novo_usuario[6])
+                
                 result = {
                     'id': novo_usuario[0], 
                     'nome': novo_usuario[1],
-                    'departamento_id': novo_usuario[2],
-                    'cargo': novo_usuario[3],
-                    'ativo': novo_usuario[4],
-                    'created_at': novo_usuario[5].isoformat() if novo_usuario[5] else None,
-                    'updated_at': novo_usuario[6].isoformat() if novo_usuario[6] else None,
+                    'departamento_id': novo_usuario[2] if len(novo_usuario) > 2 else None,
+                    'cargo': novo_usuario[3] if len(novo_usuario) > 3 else None,
+                    'ativo': novo_usuario[4] if len(novo_usuario) > 4 else True,
+                    'created_at': created_at_value,
+                    'updated_at': updated_at_value,
                     'departamento': None,
                     'created': True
                 }
@@ -990,19 +1026,44 @@ def get_monitored_users(current_user):
             result = []
             if usuarios_monitorados:
                 for usuario in usuarios_monitorados:
-                    result.append({
-                        'id': usuario[0], 
-                        'nome': usuario[1],
-                        'departamento_id': usuario[2],
-                        'cargo': usuario[3],
-                        'ativo': usuario[4],
-                        'created_at': usuario[5].isoformat() if usuario[5] else None,
-                        'updated_at': usuario[6].isoformat() if usuario[6] else None,
-                        'departamento': {
-                            'nome': usuario[7],
-                            'cor': usuario[8]
-                        } if usuario[7] else None
-                    })
+                    try:
+                        # Verificar se os campos datetime existem e são válidos
+                        created_at_value = None
+                        updated_at_value = None
+                        
+                        if len(usuario) > 5 and usuario[5]:
+                            if hasattr(usuario[5], 'isoformat'):
+                                created_at_value = usuario[5].isoformat()
+                            else:
+                                created_at_value = str(usuario[5])
+                        
+                        if len(usuario) > 6 and usuario[6]:
+                            if hasattr(usuario[6], 'isoformat'):
+                                updated_at_value = usuario[6].isoformat()
+                            else:
+                                updated_at_value = str(usuario[6])
+                        
+                        # Verificar se campos do departamento existem
+                        departamento_info = None
+                        if len(usuario) > 7 and usuario[7]:
+                            departamento_info = {
+                                'nome': usuario[7],
+                                'cor': usuario[8] if len(usuario) > 8 else None
+                            }
+                        
+                        result.append({
+                            'id': usuario[0], 
+                            'nome': usuario[1],
+                            'departamento_id': usuario[2] if len(usuario) > 2 else None,
+                            'cargo': usuario[3] if len(usuario) > 3 else None,
+                            'ativo': usuario[4] if len(usuario) > 4 else True,
+                            'created_at': created_at_value,
+                            'updated_at': updated_at_value,
+                            'departamento': departamento_info
+                        })
+                    except (IndexError, AttributeError) as e:
+                        print(f"Erro ao processar usuário monitorado: {e}")
+                        continue
 
             return jsonify(result)
         except psycopg2.Error as e:
@@ -1016,17 +1077,35 @@ def get_departments(current_user):
     try:
         cursor.execute("SELECT * FROM departamentos WHERE ativo = TRUE ORDER BY nome;")
         departamentos = cursor.fetchall()
-        result = [{
-            'id': dept[0], 
-            'nome': dept[1], 
-            'descricao': dept[2],
-            'cor': dept[3], 
-            'ativo': dept[4],
-            'created_at': dept[5].isoformat() if dept[5] else None
-        } for dept in departamentos]
+        result = []
+        for dept in departamentos:
+            try:
+                # Verificar se created_at é datetime ou string
+                created_at_value = None
+                if dept[5]:
+                    if hasattr(dept[5], 'isoformat'):
+                        created_at_value = dept[5].isoformat()
+                    else:
+                        created_at_value = str(dept[5])
+                
+                result.append({
+                    'id': dept[0], 
+                    'nome': dept[1], 
+                    'descricao': dept[2],
+                    'cor': dept[3], 
+                    'ativo': dept[4],
+                    'created_at': created_at_value
+                })
+            except (IndexError, AttributeError) as e:
+                print(f"Erro ao processar departamento: {e}")
+                continue
+        
         return jsonify(result)
     except psycopg2.Error as e:
         print(f"Erro na consulta de departamentos: {e}")
+        return jsonify([]), 200
+    except Exception as e:
+        print(f"Erro inesperado em departamentos: {e}")
         return jsonify([]), 200
 
 # Rota para criar novo departamento
