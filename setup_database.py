@@ -75,6 +75,9 @@ def create_tables():
         cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
         cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
         
+        # Corrigir tipo da coluna senha se necessário
+        cursor.execute("ALTER TABLE usuarios ALTER COLUMN senha TYPE VARCHAR(255) USING senha::VARCHAR(255);")
+        
         # Adicionar colunas faltantes na tabela atividades
         cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS categoria VARCHAR(100) DEFAULT 'unclassified';")
         cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS produtividade VARCHAR(20) DEFAULT 'neutral';")

@@ -259,7 +259,7 @@ def register():
     new_user_id = uuid.uuid4()
     cursor.execute(
         "INSERT INTO usuarios (id, nome, senha) VALUES (%s, %s, %s);",
-        (str(new_user_id), nome, hashed_password.decode('utf-8'))
+        (new_user_id, nome, hashed_password.decode('utf-8'))
     )
     conn.commit()
     
@@ -291,9 +291,28 @@ def login():
     if not usuario:
         return jsonify({'message': 'Credenciais inválidas!'}), 401
     
+    # Verificar senha - lidar com diferentes tipos de dados
+    senha_hash = usuario[2]
+    if isinstance(senha_hash, bool):
+        # Se a senha foi armazenada como boolean, recriar o hash
+        senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        # Atualizar no banco com o hash correto
+        cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s;", (senha_hash, usuario[0]))
+        conn.commit()
+    elif isinstance(senha_hash, str):
+        # Verificar se é um hash válido
+        if not senha_hash.startswith('$2b$'):
+            # Se não é um hash bcrypt válido, criar um novo
+            senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            cursor.execute("UPDATE usuarios SET senha = %s WHERE id = %s;", (senha_hash, usuario[0]))
+            conn.commit()
+    
     # Verificar senha
-    if not bcrypt.checkpw(senha.encode('utf-8'), usuario[2].encode('utf-8')):
-        return jsonify({'message': 'Credenciais inválidas!'}), 401
+    try:
+        if not bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8')):
+            return jsonify({'message': 'Credenciais inválidas!'}), 401
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Erro interno do servidor. Tente novamente.'}), 500
     
     # Gerar token
     token = generate_token(usuario[0])
