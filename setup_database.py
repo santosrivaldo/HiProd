@@ -65,6 +65,19 @@ def create_tables():
     );
     ''')
     
+    # Verificar e adicionar colunas que podem estar faltando na tabela existente
+    try:
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS categoria VARCHAR(100) DEFAULT 'unclassified';")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS produtividade VARCHAR(20) DEFAULT 'neutral';")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS titulo_janela VARCHAR(500);")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS duracao INTEGER DEFAULT 0;")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS ip_address INET;")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS user_agent TEXT;")
+        cursor.execute("ALTER TABLE atividades ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;")
+    except Exception as e:
+        print(f"⚠️  Aviso ao adicionar colunas: {e}")
+        print("   Algumas colunas podem já existir, continuando...")
+    
     # Tabela para categorias de aplicações
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS categorias_app (
