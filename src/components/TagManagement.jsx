@@ -5,11 +5,16 @@ import api from '../services/api'
 const TagManagement = () => {
   const { user } = useAuth()
   const [tags, setTags] = useState([])
-  const [departments, setDepartments] = useState([])
+  const [filteredTags, setFilteredTags] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
   const [editingTag, setEditingTag] = useState(null)
+  const [showForm, setShowForm] = useState(false)
   const [message, setMessage] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterCategoria, setFilterCategoria] = useState('')
+  const [filterProdutividade, setFilterProdutividade] = useState('')
+  const [filterAtivo, setFilterAtivo] = useState('')
+  const [departments, setDepartments] = useState([])
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
@@ -19,30 +24,18 @@ const TagManagement = () => {
     palavras_chave: [''],
     tier: 3
   })
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filteredTags, setFilteredTags] = useState([])
 
   useEffect(() => {
     fetchData()
   }, [])
 
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredTags(tags)
-    } else {
-      const filtered = tags.filter(tag => 
-        tag.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tag.descricao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tag.produtividade.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tag.departamento_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tag.palavras_chave?.some(p => p.palavra.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
-      setFilteredTags(filtered)
-    }
-  }, [tags, searchTerm])
+    applyFilters()
+  }, [tags, searchTerm, filterCategoria, filterProdutividade, filterAtivo])
 
   const fetchData = async () => {
     try {
+      setLoading(true) // Ensure loading is true at the start of fetch
       const [tagsRes, departmentsRes] = await Promise.all([
         api.get('/tags'),
         api.get('/departamentos')
@@ -50,6 +43,8 @@ const TagManagement = () => {
 
       setTags(tagsRes.data || [])
       setDepartments(departmentsRes.data || [])
+      // Apply filters immediately after fetching tags if filters are already set
+      applyFilters() 
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       setMessage('Erro ao carregar dados')
@@ -77,7 +72,7 @@ const TagManagement = () => {
         setMessage('Tag criada com sucesso!')
       }
 
-      fetchData()
+      fetchData() // Refetch data after successful submission
       resetForm()
       setTimeout(() => setMessage(''), 3000)
     } catch (error) {
@@ -106,7 +101,7 @@ const TagManagement = () => {
       try {
         await api.delete(`/tags/${tagId}`)
         setMessage('Tag excluída com sucesso!')
-        fetchData()
+        fetchData() // Refetch data after deletion
         setTimeout(() => setMessage(''), 3000)
       } catch (error) {
         console.error('Erro ao excluir tag:', error)
@@ -153,38 +148,56 @@ const TagManagement = () => {
     })
   }
 
-  const getProdutividadeColor = (produtividade) => {
-    switch (produtividade) {
-      case 'productive': return 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
-      case 'nonproductive': return 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
-      case 'neutral': return 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
-    }
-  }
+  const applyFilters = () => {
+    let filtered = tags
 
-  const getProdutividadeLabel = (produtividade) => {
-    switch (produtividade) {
-      case 'productive': return 'Produtivo'
-      case 'nonproductive': return 'Não Produtivo'
-      case 'neutral': return 'Neutro'
-      default: return 'Desconhecido'
+    if (searchTerm) {
+      filtered = filtered.filter(tag => 
+        tag.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (tag.palavras_chave && tag.palavras_chave.some(palavra => 
+          palavra.toLowerCase().includes(searchTerm.toLowerCase())
+        ))
+      )
     }
+
+    if (filterCategoria) {
+      filtered = filtered.filter(tag => 
+        tag.categoria && tag.categoria.toLowerCase().includes(filterCategoria.toLowerCase())
+      )
+    }
+
+    if (filterProdutividade) {
+      filtered = filtered.filter(tag => tag.produtividade === filterProdutividade)
+    }
+
+    if (filterAtivo) {
+      const isActive = filterAtivo === 'true'
+      filtered = filtered.filter(tag => tag.ativo === isActive)
+    }
+
+    setFilteredTags(filtered)
   }
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
+      {/* Header and Add Button */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Gerenciamento de Tags
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Gerenciamento de Tags
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Configure tags para classificação automática de atividades
+          </p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -194,26 +207,87 @@ const TagManagement = () => {
       </div>
 
       {message && (
-        <div className={`p-4 rounded-md ${message.includes('sucesso') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+        <div className={`p-4 rounded-md ${message.includes('sucesso') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
           {message}
         </div>
       )}
 
-      {/* Barra de Busca */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
-            </svg>
+      {/* Search and Filters */}
+      <div className="mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Buscar
+            </label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Nome da tag ou palavra-chave..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Buscar tags por nome, descrição, produtividade, departamento ou palavra-chave..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-          />
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Categoria
+            </label>
+            <input
+              type="text"
+              value={filterCategoria}
+              onChange={(e) => setFilterCategoria(e.target.value)}
+              placeholder="Filtrar por categoria..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Produtividade
+            </label>
+            <select
+              value={filterProdutividade}
+              onChange={(e) => setFilterProdutividade(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">Todos</option>
+              <option value="productive">Produtivo</option>
+              <option value="nonproductive">Não Produtivo</option>
+              <option value="neutral">Neutro</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Status
+            </label>
+            <select
+              value={filterAtivo}
+              onChange={(e) => setFilterAtivo(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="">Todos</option>
+              <option value="true">Ativo</option>
+              <option value="false">Inativo</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Mostrando {filteredTags.length} de {tags.length} tags
+          </div>
+          <button
+            onClick={() => {
+              setSearchTerm('')
+              setFilterCategoria('')
+              setFilterProdutividade('')
+              setFilterAtivo('')
+            }}
+            className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+          >
+            Limpar Filtros
+          </button>
         </div>
       </div>
 
@@ -363,7 +437,7 @@ const TagManagement = () => {
         </div>
       )}
 
-      {/* Lista de Tags */}
+      {/* List of Tags */}
       <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
           {filteredTags && filteredTags.length > 0 ? (
             <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
@@ -478,17 +552,22 @@ const TagManagement = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a.997.997 0 01-1.414 0l-7-7A1.997 1.997 0 013 12V7a4 4 0 014-4z" />
                 </svg>
                 <p className="text-sm font-medium">
-                  {searchTerm ? 'Nenhuma tag encontrada para a busca' : 'Nenhuma tag encontrada'}
+                  {searchTerm || filterCategoria || filterProdutividade || filterAtivo ? 'Nenhuma tag encontrada com os filtros aplicados' : 'Nenhuma tag encontrada'}
                 </p>
                 <p className="text-xs mt-1">
-                  {searchTerm ? 'Tente uma busca diferente' : 'Crie sua primeira tag para classificar atividades automaticamente'}
+                  {searchTerm || filterCategoria || filterProdutividade || filterAtivo ? 'Tente ajustar os filtros ou a busca' : 'Crie sua primeira tag para classificar atividades automaticamente'}
                 </p>
-                {searchTerm && (
+                {(searchTerm || filterCategoria || filterProdutividade || filterAtivo) && (
                   <button
-                    onClick={() => setSearchTerm('')}
-                    className="mt-4 text-sm text-indigo-600 hover:text-indigo-800"
+                    onClick={() => {
+                      setSearchTerm('')
+                      setFilterCategoria('')
+                      setFilterProdutividade('')
+                      setFilterAtivo('')
+                    }}
+                    className="mt-4 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                   >
-                    Limpar busca
+                    Limpar filtros e busca
                   </button>
                 )}
               </div>

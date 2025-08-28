@@ -191,32 +191,32 @@ def token_required(f):
             conn.rollback()
 
         try:
-            # Verificar se o usuário ainda existe
-            cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s AND ativo = TRUE;", (uuid.UUID(user_id),))
+            # Garantir que cursor está limpo
+            try:
+                cursor.fetchall()  # Limpar resultados pendentes
+            except psycopg2.ProgrammingError:
+                pass  # Ignorar se não há resultados pendentes
+
+            cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
             current_user = cursor.fetchone()
             if not current_user:
                 print(f"❌ Usuário não encontrado ou inativo para token: {user_id}")
                 return jsonify({'message': 'Usuário não encontrado ou inativo!'}), 401
-        except (psycopg2.ProgrammingError, psycopg2.errors.InFailedSqlTransaction) as e:
+        except (psycopg2.Error, psycopg2.ProgrammingError) as db_error:
+            print(f"Erro ao verificar usuário: {db_error}")
             conn.rollback()
-            print(f"Erro ao verificar usuário: {e}")
-            # Try to reconnect and verify again
+
             try:
-                conn = get_db_connection()
+                # Criar novo cursor
+                cursor.close()
                 cursor = conn.cursor()
-                # Register UUID adapter again after reconnection
-                psycopg2.extras.register_uuid()
-                cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s AND ativo = TRUE;", (uuid.UUID(user_id),))
+                cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
                 current_user = cursor.fetchone()
                 if not current_user:
-                    return jsonify({'message': 'Usuário não encontrado após reconexão!'}), 401
+                    return jsonify({'message': 'Usuário não encontrado!'}), 401
             except Exception as reconnect_error:
                 print(f"Erro na reconexão: {reconnect_error}")
                 return jsonify({'message': 'Erro interno do servidor!'}), 500
-        except psycopg2.Error as e:
-            conn.rollback()
-            print(f"Erro de banco ao verificar usuário: {e}")
-            return jsonify({'message': 'Erro interno do servidor!'}), 500
         except Exception as e:
             conn.rollback()
             print(f"Erro inesperado ao verificar usuário: {e}")
@@ -411,8 +411,9 @@ def init_db():
             departamento_id INTEGER REFERENCES departamentos(id),
             ativo BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(nome, departamento_id)
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            -- tier INTEGER CHECK (tier >= 1 AND tier <= 5)  -- Descomentar se for usar tiers
+            -- UNIQUE(nome, departamento_id) -- Pode causar problemas se a tag for global e tiver o mesmo nome de uma departamental
         );
         ''')
 
@@ -496,7 +497,7 @@ def init_db():
         # Categorias globais padrão
         cursor.execute("SELECT COUNT(*) FROM categorias_app WHERE is_global = TRUE;")
         global_categories_count = cursor.fetchone()[0]
-        
+
         if global_categories_count == 0:
             cursor.execute('''
             INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao, is_global)
@@ -511,7 +512,7 @@ def init_db():
         # Categorias específicas por departamento
         cursor.execute("SELECT COUNT(*) FROM categorias_app WHERE departamento_id IS NOT NULL;")
         dept_categories_count = cursor.fetchone()[0]
-        
+
         if dept_categories_count == 0:
             cursor.execute('''
             INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao)
@@ -545,7 +546,7 @@ def init_db():
         # Regras de classificação padrão por departamento
         cursor.execute("SELECT COUNT(*) FROM regras_classificacao WHERE departamento_id IS NOT NULL;")
         dept_rules_count = cursor.fetchone()[0]
-        
+
         if dept_rules_count == 0:
             cursor.execute('''
             INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo)
@@ -579,7 +580,7 @@ def init_db():
         # Regras globais
         cursor.execute("SELECT COUNT(*) FROM regras_classificacao WHERE departamento_id IS NULL;")
         global_rules_count = cursor.fetchone()[0]
-        
+
         if global_rules_count == 0:
             cursor.execute('''
             INSERT INTO regras_classificacao (pattern, categoria_id, tipo)
@@ -606,7 +607,7 @@ def init_db():
         cursor.execute("SELECT COUNT(*) FROM tags;")
         tag_count_result = cursor.fetchone()
         tag_count = tag_count_result[0] if tag_count_result else 0
-        
+
         if tag_count == 0:
             # Inserir tags uma por vez para evitar problemas
             tags_to_insert = [
@@ -619,7 +620,7 @@ def init_db():
                 ('Comunicação', 'Ferramentas de comunicação e colaboração', 'productive', None, '#06B6D4'),
                 ('Navegação Web', 'Navegação geral na internet', 'neutral', None, '#F59E0B')
             ]
-            
+
             for tag_nome, tag_desc, tag_prod, dept_nome, tag_cor in tags_to_insert:
                 if dept_nome:
                     cursor.execute('''
@@ -641,11 +642,11 @@ def init_db():
         cursor.execute("SELECT COUNT(*) FROM tag_palavras_chave;")
         keyword_count_result = cursor.fetchone()
         keyword_count = keyword_count_result[0] if keyword_count_result else 0
-        
+
         if keyword_count == 0:
             # Inserir palavras-chave uma por vez
             keywords_data = [
-                ('Desenvolvimento Web', ['Visual Studio Code', 'VS Code', 'GitHub', 'React', 'Node.js', 'Replit'], [5, 5, 4, 4, 4, 5]),
+                ('Desenvolvimento Web', ['Visual Studio Code', 'VS Code', 'GitHub', 'Replit', 'Node.js', 'React'], [5, 5, 4, 5, 4, 4]),
                 ('Banco de Dados', ['pgAdmin', 'PostgreSQL', 'MySQL', 'MongoDB'], [5, 4, 4, 4]),
                 ('Design UI/UX', ['Figma', 'Adobe XD', 'Photoshop'], [5, 5, 4]),
                 ('Análise de Dados', ['Excel', 'Power BI'], [5, 5]),
@@ -654,7 +655,7 @@ def init_db():
                 ('Comunicação', ['WhatsApp', 'Slack', 'Teams', 'Zoom'], [4, 4, 4, 4]),
                 ('Navegação Web', ['Google Chrome', 'Firefox', 'Edge'], [3, 3, 3])
             ]
-            
+
             for tag_nome, palavras, pesos in keywords_data:
                 cursor.execute("SELECT id FROM tags WHERE nome = %s;", (tag_nome,))
                 tag_result = cursor.fetchone()
@@ -1708,63 +1709,90 @@ def set_department_config(current_user, departamento_id):
 @app.route('/tags', methods=['GET'])
 @token_required
 def get_tags(current_user):
-    departamento_id = request.args.get('departamento_id')
-    ativo = request.args.get('ativo', 'true').lower() == 'true'
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
     try:
-        if departamento_id:
-            cursor.execute('''
-                SELECT t.*, d.nome as departamento_nome
-                FROM tags t
-                LEFT JOIN departamentos d ON t.departamento_id = d.id
-                WHERE (t.departamento_id = %s OR t.departamento_id IS NULL) AND t.ativo = %s
-                ORDER BY t.nome;
-            ''', (departamento_id, ativo))
-        else:
-            cursor.execute('''
-                SELECT t.*, d.nome as departamento_nome
-                FROM tags t
-                LEFT JOIN departamentos d ON t.departamento_id = d.id
-                WHERE t.ativo = %s
-                ORDER BY t.nome;
-            ''', (ativo,))
+        # Buscar parâmetros de filtro
+        nome_filtro = request.args.get('nome', '').strip()
+        categoria_filtro = request.args.get('categoria', '').strip()
+        produtividade_filtro = request.args.get('produtividade', '').strip()
+        ativo_filtro = request.args.get('ativo', '').strip()
+        departamento_id_filtro = request.args.get('departamento_id')
 
-        tags = cursor.fetchall()
-        result = []
+        # Construir query com filtros
+        where_conditions = []
+        params = []
 
-        for tag in tags:
-            # Buscar palavras-chave da tag
-            cursor.execute('''
-                SELECT palavra_chave, peso
-                FROM tag_palavras_chave
-                WHERE tag_id = %s
-                ORDER BY peso DESC;
-            ''', (tag[0],))
-            palavras_chave = cursor.fetchall()
+        if nome_filtro:
+            where_conditions.append("t.nome ILIKE %s")
+            params.append(f"%{nome_filtro}%")
 
-            result.append({
-                'id': tag[0],
-                'nome': tag[1],
-                'descricao': tag[2],
-                'cor': tag[3],
-                'produtividade': tag[4],
-                'departamento_id': tag[5],
-                'ativo': tag[6],
-                'created_at': tag[7].isoformat() if tag[7] else None,
-                'updated_at': tag[8].isoformat() if tag[8] else None,
-                'departamento_nome': tag[9] if len(tag) > 9 else None,
-                'palavras_chave': [{'palavra': p[0], 'peso': p[1]} for p in palavras_chave]
-            })
+        if categoria_filtro:
+            where_conditions.append("t.categoria ILIKE %s")
+            params.append(f"%{categoria_filtro}%")
 
-        return jsonify(result)
-    except (psycopg2.Error, psycopg2.ProgrammingError) as e:
-        conn.rollback()
-        print(f"Erro ao buscar tags: {e}")
-        return jsonify([]), 200
+        if produtividade_filtro:
+            where_conditions.append("t.produtividade = %s")
+            params.append(produtividade_filtro)
+
+        if ativo_filtro.lower() in ['true', 'false']:
+            where_conditions.append("t.ativo = %s")
+            params.append(ativo_filtro.lower() == 'true')
+        
+        if departamento_id_filtro:
+            where_conditions.append("(t.departamento_id = %s OR t.departamento_id IS NULL)")
+            params.append(departamento_id_filtro)
+
+
+        where_clause = ""
+        if where_conditions:
+            where_clause = "WHERE " + " AND ".join(where_conditions)
+
+        # Limpar cursor antes da consulta
+        try:
+            cursor.fetchall()
+        except psycopg2.ProgrammingError:
+            pass
+
+        query = f"""
+            SELECT t.id, t.nome, t.produtividade, t.categoria, t.ativo, t.tier,
+                   array_agg(DISTINCT tp.palavra_chave) FILTER (WHERE tp.palavra_chave IS NOT NULL) as palavras_chave,
+                   d.nome as departamento_nome
+            FROM tags t
+            LEFT JOIN tag_palavras_chave tp ON t.id = tp.tag_id
+            LEFT JOIN departamentos d ON t.departamento_id = d.id
+            {where_clause}
+            GROUP BY t.id, t.nome, t.produtividade, t.categoria, t.ativo, t.tier, d.nome
+            ORDER BY t.tier DESC, t.nome;
+        """
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        tags = []
+        for row in rows:
+            tag = {
+                'id': row[0],
+                'nome': row[1],
+                'produtividade': row[2],
+                'categoria': row[3],
+                'ativo': row[4],
+                'tier': row[5],
+                'palavras_chave': row[6] if row[6] else [],
+                'departamento_nome': row[7]
+            }
+            tags.append(tag)
+
+        return jsonify(tags)
+
     except Exception as e:
+        print(f"Erro ao buscar tags: {e}")
         conn.rollback()
-        print(f"Erro inesperado ao buscar tags: {e}")
-        return jsonify([]), 200
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.route('/tags', methods=['POST'])
 @token_required
@@ -1780,17 +1808,37 @@ def create_tag(current_user):
     produtividade = data['produtividade']
     departamento_id = data.get('departamento_id')
     palavras_chave = data.get('palavras_chave', [])
+    tier = data.get('tier') # Permitir que 'tier' seja opcional
 
     if produtividade not in ['productive', 'nonproductive', 'neutral']:
         return jsonify({'message': 'Produtividade inválida!'}), 400
+    
+    if departamento_id is not None:
+        try:
+            dept_id = int(departamento_id)
+        except ValueError:
+            return jsonify({'message': 'ID do departamento inválido!'}), 400
+    else:
+        dept_id = None
+
+    if tier is not None:
+        try:
+            tier_value = int(tier)
+            if not (1 <= tier_value <= 5):
+                return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
+        except ValueError:
+            return jsonify({'message': 'Valor de tier inválido!'}), 400
+    else:
+        tier_value = None # Definir como None se não fornecido
+
 
     try:
         # Criar tag
         cursor.execute('''
-            INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id, tier)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id;
-        ''', (nome, descricao, cor, produtividade, departamento_id))
+        ''', (nome, descricao, cor, produtividade, dept_id, tier_value))
 
         tag_id = cursor.fetchone()[0]
 
@@ -1857,10 +1905,33 @@ def update_tag(current_user, tag_id):
             update_values.append(data['ativo'])
         if 'tier' in data:
             tier_value = data['tier']
-            if tier_value < 1 or tier_value > 5:
-                return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
+            if tier_value is not None:
+                try:
+                    tier_value = int(tier_value)
+                    if not (1 <= tier_value <= 5):
+                        return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
+                except ValueError:
+                    return jsonify({'message': 'Valor de tier inválido!'}), 400
             update_fields.append('tier = %s')
             update_values.append(tier_value)
+        if 'departamento_id' in data:
+            dept_id = data.get('departamento_id')
+            if dept_id is not None:
+                try:
+                    dept_id = int(dept_id)
+                    # Verificar se o departamento existe
+                    cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
+                    if not cursor.fetchone():
+                        return jsonify({'message': 'Departamento não encontrado ou inativo!'}), 404
+                except ValueError:
+                    return jsonify({'message': 'ID de departamento inválido!'}), 400
+            update_fields.append('departamento_id = %s')
+            update_values.append(dept_id)
+
+
+        if not update_fields: # Se nenhum campo válido foi passado para atualização
+            return jsonify({'message': 'Nenhum campo válido para atualizar!'}), 400
+
 
         update_fields.append('updated_at = CURRENT_TIMESTAMP')
         update_values.append(tag_id)
@@ -1878,17 +1949,17 @@ def update_tag(current_user, tag_id):
             # Adicionar novas palavras-chave
             for palavra in data['palavras_chave']:
                 if isinstance(palavra, dict):
-                    palavra_chave = palavra.get('palavra', '')
+                    palavra_chave_text = palavra.get('palavra', '')
                     peso = palavra.get('peso', 1)
                 else:
-                    palavra_chave = str(palavra)
+                    palavra_chave_text = str(palavra)
                     peso = 1
 
-                if palavra_chave.strip():
+                if palavra_chave_text.strip():
                     cursor.execute('''
                         INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
                         VALUES (%s, %s, %s);
-                    ''', (tag_id, palavra_chave.strip(), peso))
+                    ''', (tag_id, palavra_chave_text.strip(), peso))
 
         conn.commit()
         return jsonify({'message': 'Tag atualizada com sucesso!'}), 200
@@ -1931,12 +2002,24 @@ def create_monitored_user(current_user):
     cargo = data.get('cargo', 'Usuário')
     departamento_id = data.get('departamento_id')
 
+    if departamento_id is not None:
+        try:
+            dept_id = int(departamento_id)
+            # Verificar se o departamento existe e está ativo
+            cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
+            if not cursor.fetchone():
+                return jsonify({'message': 'Departamento não encontrado ou inativo!'}), 400
+        except ValueError:
+            return jsonify({'message': 'ID de departamento inválido!'}), 400
+    else:
+        dept_id = None
+
     try:
         cursor.execute('''
             INSERT INTO usuarios_monitorados (nome, cargo, departamento_id)
             VALUES (%s, %s, %s)
             RETURNING id, nome, cargo, departamento_id, ativo, created_at;
-        ''', (nome, cargo, departamento_id))
+        ''', (nome, cargo, dept_id))
 
         usuario = cursor.fetchone()
         conn.commit()
@@ -1983,11 +2066,26 @@ def update_monitored_user(current_user, user_id):
             update_fields.append('cargo = %s')
             update_values.append(data['cargo'])
         if 'departamento_id' in data:
+            dept_id = data.get('departamento_id')
+            if dept_id is not None:
+                try:
+                    dept_id = int(dept_id)
+                    # Verificar se o departamento existe e está ativo
+                    cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
+                    if not cursor.fetchone():
+                        return jsonify({'message': 'Departamento não encontrado ou inativo!'}), 404
+                except ValueError:
+                    return jsonify({'message': 'ID de departamento inválido!'}), 400
+            else:
+                dept_id = None # Permitir definir departamento_id como NULL
             update_fields.append('departamento_id = %s')
-            update_values.append(data['departamento_id'])
+            update_values.append(dept_id)
         if 'ativo' in data:
             update_fields.append('ativo = %s')
             update_values.append(data['ativo'])
+
+        if not update_fields:
+            return jsonify({'message': 'Nenhum campo válido para atualizar!'}), 400
 
         update_fields.append('updated_at = CURRENT_TIMESTAMP')
         update_values.append(user_id)

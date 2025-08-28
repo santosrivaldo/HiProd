@@ -34,6 +34,8 @@ export default function Dashboard() {
   const [departamentos, setDepartamentos] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingActivities, setLoadingActivities] = useState(false)
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [loadingDepartments, setLoadingDepartments] = useState(false)
   const [dateRange, setDateRange] = useState(7)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [selectedUser, setSelectedUser] = useState('all')
@@ -62,52 +64,53 @@ export default function Dashboard() {
         setLoadingActivities(true)
       }
 
-      const pageSize = 100
-      const promises = [
-        api.get(`/atividades?agrupar=true&pagina=${page}&limite=${pageSize}`),
-      ]
-
+      // Limitar dados para dashboard - menor pageSize para melhor performance
+      const pageSize = 50
+      
+      const activitiesPromise = api.get(`/atividades?agrupar=true&pagina=${page}&limite=${pageSize}`)
+      
       // Buscar usuários e departamentos apenas na primeira página
       if (page === 1) {
-        promises.push(
-          api.get('/usuarios-monitorados'),
-          api.get('/departamentos')
-        )
-      }
+        setLoadingUsers(true)
+        setLoadingDepartments(true)
+        
+        const [activitiesRes, usuariosRes, departamentosRes] = await Promise.all([
+          activitiesPromise,
+          api.get('/usuarios-monitorados').finally(() => setLoadingUsers(false)),
+          api.get('/departamentos').finally(() => setLoadingDepartments(false))
+        ])
 
-      const responses = await Promise.all(promises)
-      const activitiesRes = responses[0]
+        // Validar e filtrar dados
+        const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
+        const validUsuarios = Array.isArray(usuariosRes.data) ? 
+          usuariosRes.data.filter(u => u && u.id && u.nome) : []
+        const validDepartamentos = Array.isArray(departamentosRes.data) ? 
+          departamentosRes.data.filter(d => d && d.id && d.nome) : []
 
-      // Validar e filtrar dados antes de definir no state
-      const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-
-      if (page === 1 || reset) {
         setActivities(validActivities)
+        setUsuariosMonitorados(validUsuarios)
+        setDepartamentos(validDepartamentos)
         setActivitiesPage(1)
         setHasMoreActivities(validActivities.length === pageSize)
-
-        if (responses.length > 1) {
-          const usuariosRes = responses[1]
-          const departamentosRes = responses[2]
-
-          const validUsuarios = Array.isArray(usuariosRes.data) ? 
-            usuariosRes.data.filter(u => u && u.id && u.nome) : []
-          const validDepartamentos = Array.isArray(departamentosRes.data) ? 
-            departamentosRes.data.filter(d => d && d.id && d.nome) : []
-
-          setUsuariosMonitorados(validUsuarios)
-          setDepartamentos(validDepartamentos)
-        }
       } else {
-        setActivities(prev => [...prev, ...validActivities])
-        setActivitiesPage(page)
+        const activitiesRes = await activitiesPromise
+        const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
+        
+        if (reset) {
+          setActivities(validActivities)
+          setActivitiesPage(1)
+        } else {
+          setActivities(prev => [...prev, ...validActivities])
+          setActivitiesPage(page)
+        }
         setHasMoreActivities(validActivities.length === pageSize)
       }
 
-      console.log('Dados carregados:', {
-        atividades: validActivities.length,
+      console.log('Dados carregados para dashboard:', {
+        atividades: activities.length,
         página: page,
-        temMais: validActivities.length === pageSize
+        usuários: usuariosMonitorados.length,
+        departamentos: departamentos.length
       })
     } catch (error) {
       console.error('Erro ao buscar dados:', error)
@@ -119,6 +122,8 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
       setLoadingActivities(false)
+      setLoadingUsers(false)
+      setLoadingDepartments(false)
     }
   }
 
@@ -323,10 +328,13 @@ export default function Dashboard() {
           <select
             value={selectedUser}
             onChange={(e) => setSelectedUser(e.target.value)}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px]"
+            disabled={loadingUsers}
+            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px] disabled:opacity-50"
           >
-            <option value="all">Todos os usuários</option>
-            {Array.isArray(usuariosMonitorados) && usuariosMonitorados.length > 0 ? (
+            <option value="all">
+              {loadingUsers ? 'Carregando usuários...' : 'Todos os usuários'}
+            </option>
+            {!loadingUsers && Array.isArray(usuariosMonitorados) && usuariosMonitorados.length > 0 ? (
             usuariosMonitorados
               .filter(usuario => usuario && usuario.id && usuario.nome)
               .map(usuario => (
@@ -334,9 +342,9 @@ export default function Dashboard() {
                   {usuario.nome}
                 </option>
               ))
-          ) : (
+          ) : !loadingUsers ? (
             <option value="" disabled>Nenhum usuário monitorado disponível</option>
-          )}
+          ) : null}
           </select>
         </div>
 
@@ -347,10 +355,13 @@ export default function Dashboard() {
           <select
             value={selectedDepartment}
             onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px]"
+            disabled={loadingDepartments}
+            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm min-w-[150px] disabled:opacity-50"
           >
-            <option value="all">Todos os departamentos</option>
-            {Array.isArray(departamentos) && departamentos
+            <option value="all">
+              {loadingDepartments ? 'Carregando departamentos...' : 'Todos os departamentos'}
+            </option>
+            {!loadingDepartments && Array.isArray(departamentos) && departamentos
               .filter(dept => dept && dept.id && dept.nome)
               .map(dept => (
                 <option key={`dept-${dept.id}`} value={dept.id}>
