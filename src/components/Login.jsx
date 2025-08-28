@@ -36,18 +36,23 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    let result
-    if (isLogin) {
-      result = await login(formData.username.trim(), formData.password)
-    } else {
-      result = await register(formData.username.trim(), formData.password, formData.confirmPassword)
+    try {
+      let result
+      if (isLogin) {
+        result = await login(formData.username.trim(), formData.password)
+      } else {
+        result = await register(formData.username.trim(), formData.password, formData.confirmPassword)
+      }
+      
+      if (!result.success) {
+        setError(result.error)
+      }
+    } catch (error) {
+      console.error('Erro no submit:', error)
+      setError('Erro inesperado. Tente novamente.')
+    } finally {
+      setLoading(false)
     }
-    
-    if (!result.success) {
-      setError(result.error)
-    }
-    
-    setLoading(false)
   }
 
   const toggleMode = () => {

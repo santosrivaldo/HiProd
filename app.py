@@ -457,14 +457,14 @@ def init_db():
                 UNIQUE(nome, departamento_id)
             );
             ''')
-            
+
             # Verificar se coluna tier existe na tabela tags, se não, adicionar
             db.cursor.execute("""
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name='tags' AND column_name='tier';
             """)
-            
+
             if not db.cursor.fetchone():
                 print("🔧 Adicionando coluna tier à tabela tags...")
                 db.cursor.execute("ALTER TABLE tags ADD COLUMN tier INTEGER DEFAULT 3 CHECK (tier >= 1 AND tier <= 5);")
@@ -740,26 +740,44 @@ def get_profile(current_user):
 # Rota para verificar token
 @app.route('/verify-token', methods=['POST'])
 def verify_token_route():
-    data = request.json
-    if not data or 'token' not in data:
-        return jsonify({'valid': False}), 400
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'valid': False, 'error': 'Dados não fornecidos'}), 200
 
-    user_id = verify_token(data['token'])
-    if user_id:
-        try:
-            with DatabaseConnection() as db:
-                db.cursor.execute("SELECT * FROM usuarios WHERE id = %s;", (uuid.UUID(user_id),))
-                usuario = db.cursor.fetchone()
-                if usuario:
-                    return jsonify({
-                        'valid': True,
-                        'usuario_id': str(usuario[0]),
-                        'usuario': usuario[1]
-                    }), 200
-        except Exception as e:
-            print(f"Erro ao verificar token: {e}")
+        token = data.get('token')
 
-    return jsonify({'valid': False}), 401
+        if not token:
+            return jsonify({'valid': False, 'error': 'Token não fornecido'}), 200
+
+        # Decodifica o token JWT
+        payload = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        usuario_id = payload.get('user_id') # Changed key to 'user_id' to match generate_token
+
+        if not usuario_id:
+            return jsonify({'valid': False, 'error': 'Token mal formado'}), 200
+
+        # Verifica se o usuário ainda existe
+        with DatabaseConnection() as db:
+            db.cursor.execute("SELECT nome FROM usuarios WHERE id = %s", (uuid.UUID(usuario_id),)) # Ensure UUID conversion
+            result = db.cursor.fetchone()
+
+            if result:
+                return jsonify({
+                    'valid': True,
+                    'usuario_id': usuario_id,
+                    'usuario': result[0]
+                }), 200
+            else:
+                return jsonify({'valid': False, 'error': 'Usuário não encontrado'}), 200
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({'valid': False, 'error': 'Token expirado'}), 200
+    except jwt.InvalidTokenError:
+        return jsonify({'valid': False, 'error': 'Token inválido'}), 200
+    except Exception as e:
+        print(f"Erro ao verificar token: {e}")
+        return jsonify({'valid': False, 'error': f'Erro interno: {str(e)}'}), 200
 
 # Rota para adicionar atividade (protegida)
 @app.route('/atividade', methods=['POST'])
@@ -841,7 +859,7 @@ def add_activity(current_user):
             ))
 
             activity_id = db.cursor.fetchone()[0]
-            
+
             # Fazer commit da atividade antes de tentar classificar
             db.conn.commit()
 
@@ -1243,7 +1261,7 @@ def get_tags(current_user):
         with DatabaseConnection() as db:
             # Construir query base
             base_query = '''
-                SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade, t.departamento_id, 
+                SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade, t.departamento_id,
                        t.ativo, t.created_at, t.updated_at, t.tier, d.nome as departamento_nome
                 FROM tags t
                 LEFT JOIN departamentos d ON t.departamento_id = d.id
@@ -1312,7 +1330,7 @@ def create_tag(current_user):
     departamento_id = data.get('departamento_id')
     palavras_chave = data.get('palavras_chave', [])
     tier = int(data.get('tier', 3))
-    
+
     if tier < 1 or tier > 5:
         return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
 

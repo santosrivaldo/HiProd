@@ -3,7 +3,7 @@ import api from '../services/api'
 
 const AuthContext = createContext(null)
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext)
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider')
@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
   const verifyToken = async (token) => {
     try {
       const response = await api.post('/verify-token', { token })
-      if (response.data.valid) {
+      if (response.data && response.data.valid) {
         const userData = {
           usuario_id: response.data.usuario_id,
           usuario: response.data.usuario
@@ -40,12 +40,19 @@ export function AuthProvider({ children }) {
         setIsAuthenticated(true)
         localStorage.setItem('user', JSON.stringify(userData))
       } else {
+        // Token inválido, limpar dados
         localStorage.removeItem('token')
         localStorage.removeItem('user')
+        setUser(null)
+        setIsAuthenticated(false)
       }
     } catch (error) {
+      console.error('Erro na verificação do token:', error)
+      // Erro na verificação, limpar dados
       localStorage.removeItem('token')
       localStorage.removeItem('user')
+      setUser(null)
+      setIsAuthenticated(false)
     } finally {
       setLoading(false)
     }
@@ -58,21 +65,29 @@ export function AuthProvider({ children }) {
         senha: password
       })
 
-      const userData = {
-        usuario_id: response.data.usuario_id,
-        usuario: response.data.usuario
+      if (response.data && response.data.token) {
+        const userData = {
+          usuario_id: response.data.usuario_id,
+          usuario: response.data.usuario
+        }
+
+        setUser(userData)
+        setIsAuthenticated(true)
+        localStorage.setItem('user', JSON.stringify(userData))
+        localStorage.setItem('token', response.data.token)
+
+        return { success: true }
+      } else {
+        return { 
+          success: false, 
+          error: 'Resposta inválida do servidor' 
+        }
       }
-
-      setUser(userData)
-      setIsAuthenticated(true)
-      localStorage.setItem('user', JSON.stringify(userData))
-      localStorage.setItem('token', response.data.token)
-
-      return { success: true }
     } catch (error) {
+      console.error('Erro no login:', error)
       return { 
         success: false, 
-        error: error.response?.data?.message || 'Erro no login' 
+        error: error.response?.data?.message || error.message || 'Erro no login' 
       }
     }
   }
