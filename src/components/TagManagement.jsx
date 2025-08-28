@@ -16,12 +16,30 @@ const TagManagement = () => {
     cor: '#6B7280',
     produtividade: 'neutral',
     departamento_id: '',
-    palavras_chave: ['']
+    palavras_chave: [''],
+    tier: 3
   })
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filteredTags, setFilteredTags] = useState([])
 
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredTags(tags)
+    } else {
+      const filtered = tags.filter(tag => 
+        tag.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tag.descricao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tag.produtividade.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tag.departamento_nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tag.palavras_chave?.some(p => p.palavra.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+      setFilteredTags(filtered)
+    }
+  }, [tags, searchTerm])
 
   const fetchData = async () => {
     try {
@@ -77,7 +95,8 @@ const TagManagement = () => {
       cor: tag.cor,
       produtividade: tag.produtividade,
       departamento_id: tag.departamento_id || '',
-      palavras_chave: tag.palavras_chave?.map(p => p.palavra) || ['']
+      palavras_chave: tag.palavras_chave?.map(p => p.palavra) || [''],
+      tier: tag.tier || 3
     })
     setShowForm(true)
   }
@@ -104,7 +123,8 @@ const TagManagement = () => {
       cor: '#6B7280',
       produtividade: 'neutral',
       departamento_id: '',
-      palavras_chave: ['']
+      palavras_chave: [''],
+      tier: 3
     })
     setEditingTag(null)
     setShowForm(false)
@@ -179,6 +199,24 @@ const TagManagement = () => {
         </div>
       )}
 
+      {/* Barra de Busca */}
+      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mb-6">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar tags por nome, descrição, produtividade, departamento ou palavra-chave..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+      </div>
+
       {showForm && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
@@ -186,7 +224,7 @@ const TagManagement = () => {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Nome da Tag
@@ -212,6 +250,23 @@ const TagManagement = () => {
                   <option value="productive">Produtivo</option>
                   <option value="nonproductive">Não Produtivo</option>
                   <option value="neutral">Neutro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Tier (Prioridade)
+                </label>
+                <select
+                  value={formData.tier}
+                  onChange={(e) => setFormData({ ...formData, tier: parseInt(e.target.value) })}
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="5">5 - Máxima Prioridade</option>
+                  <option value="4">4 - Alta Prioridade</option>
+                  <option value="3">3 - Prioridade Normal</option>
+                  <option value="2">2 - Baixa Prioridade</option>
+                  <option value="1">1 - Mínima Prioridade</option>
                 </select>
               </div>
 
@@ -310,12 +365,15 @@ const TagManagement = () => {
 
       {/* Lista de Tags */}
       <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-          {tags && tags.length > 0 ? (
+          {filteredTags && filteredTags.length > 0 ? (
             <table className="min-w-full divide-y divide-gray-300 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Nome
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Tier
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Produtividade
@@ -329,13 +387,13 @@ const TagManagement = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {tags.map((tag) => (
+                {filteredTags.map((tag) => (
                   <tr key={tag.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -347,6 +405,21 @@ const TagManagement = () => {
                           {tag.nome}
                         </div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        tag.tier === 5 
+                          ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' 
+                          : tag.tier === 4 
+                          ? 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
+                          : tag.tier === 3
+                          ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+                          : tag.tier === 2
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                          : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                      }`}>
+                        Tier {tag.tier || 3}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -379,18 +452,20 @@ const TagManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleEdit(tag)}
-                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-4"
-                      >
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => handleDelete(tag.id)}
-                        className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
-                      >
-                        Excluir
-                      </button>
+                      <div className="flex justify-end space-x-2">
+                        <button
+                          onClick={() => handleEdit(tag)}
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(tag.id)}
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900"
+                        >
+                          Excluir
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -402,8 +477,20 @@ const TagManagement = () => {
                 <svg className="mx-auto h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a.997.997 0 01-1.414 0l-7-7A1.997 1.997 0 013 12V7a4 4 0 014-4z" />
                 </svg>
-                <p className="text-sm font-medium">Nenhuma tag encontrada</p>
-                <p className="text-xs mt-1">Crie sua primeira tag para classificar atividades automaticamente</p>
+                <p className="text-sm font-medium">
+                  {searchTerm ? 'Nenhuma tag encontrada para a busca' : 'Nenhuma tag encontrada'}
+                </p>
+                <p className="text-xs mt-1">
+                  {searchTerm ? 'Tente uma busca diferente' : 'Crie sua primeira tag para classificar atividades automaticamente'}
+                </p>
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="mt-4 text-sm text-indigo-600 hover:text-indigo-800"
+                  >
+                    Limpar busca
+                  </button>
+                )}
               </div>
             </div>
           )}
