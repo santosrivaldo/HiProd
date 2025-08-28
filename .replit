@@ -1,4 +1,4 @@
-modules = ["python-3.12"]
+modules = ["nodejs-20", "python-3.12"]
 run = "python app.py"
 
 [nix]
@@ -23,3 +23,7 @@ args = "npm install"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run dev"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
