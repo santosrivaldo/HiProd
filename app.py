@@ -73,13 +73,29 @@ def verify_token(token):
         return None
 
 # Função para classificar atividade automaticamente
-def classify_activity(active_window, ociosidade):
-    # Buscar regras de classificação
+def classify_activity(active_window, ociosidade, user_department_id=None):
+    # Buscar regras de classificação específicas do departamento primeiro
+    if user_department_id:
+        cursor.execute('''
+        SELECT c.nome, c.tipo_produtividade 
+        FROM regras_classificacao r 
+        JOIN categorias_app c ON r.categoria_id = c.id 
+        WHERE r.ativo = TRUE AND r.departamento_id = %s AND %s ILIKE '%' || r.pattern || '%'
+        ORDER BY LENGTH(r.pattern) DESC 
+        LIMIT 1;
+        ''', (user_department_id, active_window))
+        
+        result = cursor.fetchone()
+        if result:
+            categoria, produtividade = result
+            return categoria, produtividade
+    
+    # Buscar regras globais (sem departamento específico)
     cursor.execute('''
     SELECT c.nome, c.tipo_produtividade 
     FROM regras_classificacao r 
     JOIN categorias_app c ON r.categoria_id = c.id 
-    WHERE r.ativo = TRUE AND %s ILIKE '%' || r.pattern || '%'
+    WHERE r.ativo = TRUE AND r.departamento_id IS NULL AND %s ILIKE '%' || r.pattern || '%'
     ORDER BY LENGTH(r.pattern) DESC 
     LIMIT 1;
     ''', (active_window,))
@@ -165,12 +181,25 @@ def init_db():
     );
     ''')
 
+    # Tabela de departamentos
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS departamentos (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL UNIQUE,
+        descricao TEXT,
+        cor VARCHAR(7) DEFAULT '#6B7280',
+        ativo BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+
     # Tabela de usuários monitorados (para login de administradores/operadores)
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS usuarios_monitorados (
         id SERIAL PRIMARY KEY,
         nome VARCHAR(100) NOT NULL UNIQUE,
-        departamento VARCHAR(100),
+        departamento_id INTEGER REFERENCES departamentos(id),
         cargo VARCHAR(100),
         ativo BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -201,11 +230,14 @@ def init_db():
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS categorias_app (
         id SERIAL PRIMARY KEY,
-        nome VARCHAR(100) NOT NULL UNIQUE,
+        nome VARCHAR(100) NOT NULL,
+        departamento_id INTEGER REFERENCES departamentos(id),
         tipo_produtividade VARCHAR(20) NOT NULL CHECK (tipo_produtividade IN ('productive', 'nonproductive', 'neutral')),
         cor VARCHAR(7) DEFAULT '#6B7280',
         descricao TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        is_global BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(nome, departamento_id)
     );
     ''')
 
@@ -215,11 +247,30 @@ def init_db():
         id SERIAL PRIMARY KEY,
         pattern VARCHAR(255) NOT NULL,
         categoria_id INTEGER REFERENCES categorias_app(id),
+        departamento_id INTEGER REFERENCES departamentos(id),
         tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('window_title', 'application_name')),
         ativo BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     ''')
+
+    # Tabela para configurações de departamento
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS departamento_configuracoes (
+        id SERIAL PRIMARY KEY,
+        departamento_id INTEGER REFERENCES departamentos(id),
+        configuracao_chave VARCHAR(100) NOT NULL,
+        configuracao_valor TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(departamento_id, configuracao_chave)
+    );
+    ''')
+
+    # Adicionar coluna departamento_id na tabela usuarios se não existir
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS departamento_id INTEGER REFERENCES departamentos(id);")
+    except Exception as e:
+        print(f"Aviso: {e}")
 
     # Criar índices para melhor performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_atividades_usuario_id ON atividades(usuario_id);')
@@ -228,39 +279,95 @@ def init_db():
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_nome ON usuarios(nome);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_ativo ON usuarios(ativo);')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_usuarios_monitorados_nome ON usuarios_monitorados(nome);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_departamentos_nome ON departamentos(nome);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_categorias_departamento ON categorias_app(departamento_id);')
 
-    # Inserir categorias padrão
+    # Inserir departamentos padrão
     cursor.execute('''
-    INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao) 
+    INSERT INTO departamentos (nome, descricao, cor) 
     VALUES 
-        ('Desenvolvimento', 'productive', '#10B981', 'Atividades de programação e desenvolvimento'),
-        ('Comunicação', 'productive', '#3B82F6', 'E-mails, mensagens e reuniões'),
-        ('Navegação', 'neutral', '#F59E0B', 'Navegação web geral'),
-        ('Entretenimento', 'nonproductive', '#EF4444', 'Jogos, vídeos e redes sociais'),
-        ('Sistema', 'neutral', '#6B7280', 'Atividades do sistema operacional')
+        ('TI', 'Tecnologia da Informação', '#10B981'),
+        ('Marketing', 'Marketing e Comunicação', '#3B82F6'),
+        ('RH', 'Recursos Humanos', '#F59E0B'),
+        ('Financeiro', 'Departamento Financeiro', '#EF4444'),
+        ('Vendas', 'Departamento de Vendas', '#8B5CF6'),
+        ('Geral', 'Categorias gerais para todos os departamentos', '#6B7280')
     ON CONFLICT (nome) DO NOTHING;
     ''')
 
-    # Inserir regras de classificação padrão
+    # Inserir categorias globais padrão
+    cursor.execute('''
+    INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao, is_global) 
+    VALUES 
+        ('Sistema', 'neutral', '#6B7280', 'Atividades do sistema operacional', TRUE),
+        ('Entretenimento', 'nonproductive', '#EF4444', 'Jogos, vídeos e redes sociais', TRUE),
+        ('Navegação Geral', 'neutral', '#F59E0B', 'Navegação web geral', TRUE)
+    ON CONFLICT (nome, departamento_id) DO NOTHING;
+    ''')
+
+    # Inserir categorias específicas por departamento
+    cursor.execute('''
+    INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao) 
+    SELECT 'Desenvolvimento', d.id, 'productive', '#10B981', 'Atividades de programação e desenvolvimento'
+    FROM departamentos d WHERE d.nome = 'TI'
+    UNION ALL
+    SELECT 'DevOps', d.id, 'productive', '#059669', 'Atividades de infraestrutura e deploy'
+    FROM departamentos d WHERE d.nome = 'TI'
+    UNION ALL
+    SELECT 'Design Gráfico', d.id, 'productive', '#7C3AED', 'Criação de materiais visuais'
+    FROM departamentos d WHERE d.nome = 'Marketing'
+    UNION ALL
+    SELECT 'Mídias Sociais', d.id, 'productive', '#EC4899', 'Gestão de redes sociais'
+    FROM departamentos d WHERE d.nome = 'Marketing'
+    UNION ALL
+    SELECT 'Recrutamento', d.id, 'productive', '#DC2626', 'Atividades de contratação'
+    FROM departamentos d WHERE d.nome = 'RH'
+    UNION ALL
+    SELECT 'Treinamento', d.id, 'productive', '#EA580C', 'Capacitação de funcionários'
+    FROM departamentos d WHERE d.nome = 'RH'
+    ON CONFLICT (nome, departamento_id) DO NOTHING;
+    ''')
+
+    # Inserir regras de classificação padrão por departamento
+    cursor.execute('''
+    INSERT INTO regras_classificacao (pattern, categoria_id, departamento_id, tipo) 
+    SELECT 'Visual Studio Code', c.id, c.departamento_id, 'application_name' 
+    FROM categorias_app c WHERE c.nome = 'Desenvolvimento'
+    UNION ALL
+    SELECT 'IntelliJ', c.id, c.departamento_id, 'application_name' 
+    FROM categorias_app c WHERE c.nome = 'Desenvolvimento'
+    UNION ALL
+    SELECT 'Docker', c.id, c.departamento_id, 'application_name' 
+    FROM categorias_app c WHERE c.nome = 'DevOps'
+    UNION ALL
+    SELECT 'Photoshop', c.id, c.departamento_id, 'application_name' 
+    FROM categorias_app c WHERE c.nome = 'Design Gráfico'
+    UNION ALL
+    SELECT 'Figma', c.id, c.departamento_id, 'window_title' 
+    FROM categorias_app c WHERE c.nome = 'Design Gráfico'
+    UNION ALL
+    SELECT 'LinkedIn', c.id, c.departamento_id, 'window_title' 
+    FROM categorias_app c WHERE c.nome = 'Recrutamento'
+    ON CONFLICT DO NOTHING;
+    ''')
+
+    # Inserir regras globais
     cursor.execute('''
     INSERT INTO regras_classificacao (pattern, categoria_id, tipo) 
-    SELECT 'Visual Studio Code', id, 'application_name' FROM categorias_app WHERE nome = 'Desenvolvimento'
+    SELECT 'YouTube', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento' AND is_global = TRUE
     UNION ALL
-    SELECT 'Chrome', id, 'application_name' FROM categorias_app WHERE nome = 'Navegação'
-    UNION ALL
-    SELECT 'Outlook', id, 'application_name' FROM categorias_app WHERE nome = 'Comunicação'
-    UNION ALL
-    SELECT 'YouTube', id, 'window_title' FROM categorias_app WHERE nome = 'Entretenimento'
+    SELECT 'Windows Explorer', id, 'application_name' FROM categorias_app WHERE nome = 'Sistema' AND is_global = TRUE
     ON CONFLICT DO NOTHING;
     ''')
 
     # Inserir usuários monitorados padrão
     cursor.execute('''
-    INSERT INTO usuarios_monitorados (nome, departamento, cargo) 
-    VALUES 
-        ('João Silva', 'TI', 'Desenvolvedor'),
-        ('Maria Santos', 'Marketing', 'Analista'),
-        ('Pedro Costa', 'RH', 'Assistente')
+    INSERT INTO usuarios_monitorados (nome, departamento_id, cargo) 
+    SELECT 'João Silva', d.id, 'Desenvolvedor' FROM departamentos d WHERE d.nome = 'TI'
+    UNION ALL
+    SELECT 'Maria Santos', d.id, 'Analista' FROM departamentos d WHERE d.nome = 'Marketing'
+    UNION ALL
+    SELECT 'Pedro Costa', d.id, 'Assistente' FROM departamentos d WHERE d.nome = 'RH'
     ON CONFLICT (nome) DO NOTHING;
     ''')
 
@@ -399,10 +506,15 @@ def add_activity(current_user):
     if 'ociosidade' not in data or 'active_window' not in data:
         return jsonify({'message': 'Dados inválidos!'}), 400
 
+    # Obter departamento do usuário
+    cursor.execute("SELECT departamento_id FROM usuarios WHERE id = %s;", (current_user[0],))
+    user_department = cursor.fetchone()
+    user_department_id = user_department[0] if user_department and user_department[0] else None
+
     # Classificar atividade automaticamente
     ociosidade = int(data.get('ociosidade', 0))
     active_window = data['active_window']
-    categoria, produtividade = classify_activity(active_window, ociosidade)
+    categoria, produtividade = classify_activity(active_window, ociosidade, user_department_id)
 
     # Extrair informações adicionais
     titulo_janela = data.get('titulo_janela', active_window)
@@ -541,19 +653,88 @@ def get_users(current_user):
         print(f"Erro na consulta de usuários: {e}")
         return jsonify([]), 200  # Return empty array instead of error
 
+# Rota para obter departamentos
+@app.route('/departamentos', methods=['GET'])
+@token_required
+def get_departments(current_user):
+    try:
+        cursor.execute("SELECT * FROM departamentos WHERE ativo = TRUE ORDER BY nome;")
+        departamentos = cursor.fetchall()
+        result = [{
+            'id': dept[0], 
+            'nome': dept[1], 
+            'descricao': dept[2],
+            'cor': dept[3], 
+            'ativo': dept[4],
+            'created_at': dept[5].isoformat() if dept[5] else None
+        } for dept in departamentos]
+        return jsonify(result)
+    except psycopg2.Error as e:
+        print(f"Erro na consulta de departamentos: {e}")
+        return jsonify([]), 200
+
+# Rota para criar novo departamento
+@app.route('/departamentos', methods=['POST'])
+@token_required
+def create_department(current_user):
+    data = request.json
+
+    if not data or 'nome' not in data:
+        return jsonify({'message': 'Nome do departamento é obrigatório!'}), 400
+
+    nome = data['nome'].strip()
+    descricao = data.get('descricao', '')
+    cor = data.get('cor', '#6B7280')
+
+    try:
+        cursor.execute('''
+            INSERT INTO departamentos (nome, descricao, cor) 
+            VALUES (%s, %s, %s) RETURNING id;
+        ''', (nome, descricao, cor))
+        department_id = cursor.fetchone()[0]
+        conn.commit()
+
+        return jsonify({
+            'message': 'Departamento criado com sucesso!',
+            'id': department_id
+        }), 201
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        return jsonify({'message': 'Departamento já existe!'}), 409
+
 # Rota para obter categorias
 @app.route('/categorias', methods=['GET'])
 @token_required
 def get_categories(current_user):
-    cursor.execute("SELECT * FROM categorias_app ORDER BY nome;")
+    departamento_id = request.args.get('departamento_id')
+    
+    if departamento_id:
+        # Categorias específicas do departamento + globais
+        cursor.execute('''
+            SELECT c.*, d.nome as departamento_nome FROM categorias_app c
+            LEFT JOIN departamentos d ON c.departamento_id = d.id
+            WHERE c.departamento_id = %s OR c.is_global = TRUE
+            ORDER BY c.nome;
+        ''', (departamento_id,))
+    else:
+        # Todas as categorias
+        cursor.execute('''
+            SELECT c.*, d.nome as departamento_nome FROM categorias_app c
+            LEFT JOIN departamentos d ON c.departamento_id = d.id
+            ORDER BY c.nome;
+        ''')
+    
     categorias = cursor.fetchall()
     result = [{
         'id': cat[0], 
         'nome': cat[1], 
-        'tipo_produtividade': cat[2], 
-        'cor': cat[3], 
-        'descricao': cat[4],
-        'created_at': cat[5].isoformat() if cat[5] else None
+        'departamento_id': cat[2],
+        'tipo_produtividade': cat[3], 
+        'cor': cat[4], 
+        'descricao': cat[5],
+        'is_global': cat[6],
+        'created_at': cat[7].isoformat() if cat[7] else None,
+        'departamento_nome': cat[8] if len(cat) > 8 else None
     } for cat in categorias]
     return jsonify(result)
 
@@ -568,17 +749,19 @@ def create_category(current_user):
 
     nome = data['nome'].strip()
     tipo = data['tipo_produtividade']
+    departamento_id = data.get('departamento_id')
     cor = data.get('cor', '#6B7280')
     descricao = data.get('descricao', '')
+    is_global = data.get('is_global', False)
 
     if tipo not in ['productive', 'nonproductive', 'neutral']:
         return jsonify({'message': 'Tipo de produtividade inválido!'}), 400
 
     try:
         cursor.execute('''
-            INSERT INTO categorias_app (nome, tipo_produtividade, cor, descricao) 
-            VALUES (%s, %s, %s, %s) RETURNING id;
-        ''', (nome, tipo, cor, descricao))
+            INSERT INTO categorias_app (nome, departamento_id, tipo_produtividade, cor, descricao, is_global) 
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id;
+        ''', (nome, departamento_id, tipo, cor, descricao, is_global))
         category_id = cursor.fetchone()[0]
         conn.commit()
 
@@ -588,7 +771,7 @@ def create_category(current_user):
         }), 201
     except psycopg2.IntegrityError:
         conn.rollback()
-        return jsonify({'message': 'Categoria já existe!'}), 409
+        return jsonify({'message': 'Categoria já existe para este departamento!'}), 409
 
 # Rota para atualizar atividade (protegida)
 @app.route('/atividades/<int:activity_id>', methods=['PATCH'])
@@ -660,6 +843,80 @@ def delete_activity(current_user, activity_id):
     conn.commit()
 
     return jsonify({'message': 'Atividade excluída com sucesso!'}), 200
+
+# Rota para atualizar departamento do usuário
+@app.route('/usuarios/<usuario_id>/departamento', methods=['PATCH'])
+@token_required
+def update_user_department(current_user, usuario_id):
+    data = request.json
+    
+    if not data or 'departamento_id' not in data:
+        return jsonify({'message': 'ID do departamento é obrigatório!'}), 400
+    
+    departamento_id = data['departamento_id']
+    
+    # Verificar se o departamento existe
+    cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (departamento_id,))
+    if not cursor.fetchone():
+        return jsonify({'message': 'Departamento não encontrado!'}), 404
+    
+    try:
+        cursor.execute('''
+            UPDATE usuarios 
+            SET departamento_id = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s;
+        ''', (departamento_id, uuid.UUID(usuario_id)))
+        
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Usuário não encontrado!'}), 404
+        
+        conn.commit()
+        return jsonify({'message': 'Departamento do usuário atualizado com sucesso!'}), 200
+        
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(f"Erro ao atualizar departamento do usuário: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+# Rota para obter configurações do departamento
+@app.route('/departamentos/<int:departamento_id>/configuracoes', methods=['GET'])
+@token_required
+def get_department_config(current_user, departamento_id):
+    cursor.execute('''
+        SELECT configuracao_chave, configuracao_valor 
+        FROM departamento_configuracoes 
+        WHERE departamento_id = %s;
+    ''', (departamento_id,))
+    
+    configs = cursor.fetchall()
+    result = {config[0]: config[1] for config in configs}
+    return jsonify(result)
+
+# Rota para definir configuração do departamento
+@app.route('/departamentos/<int:departamento_id>/configuracoes', methods=['POST'])
+@token_required
+def set_department_config(current_user, departamento_id):
+    data = request.json
+    
+    if not data:
+        return jsonify({'message': 'Configurações não fornecidas!'}), 400
+    
+    try:
+        for chave, valor in data.items():
+            cursor.execute('''
+                INSERT INTO departamento_configuracoes (departamento_id, configuracao_chave, configuracao_valor)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (departamento_id, configuracao_chave)
+                DO UPDATE SET configuracao_valor = EXCLUDED.configuracao_valor;
+            ''', (departamento_id, chave, str(valor)))
+        
+        conn.commit()
+        return jsonify({'message': 'Configurações atualizadas com sucesso!'}), 200
+        
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(f"Erro ao salvar configurações: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
 
 # Rota para estatísticas avançadas
 @app.route('/estatisticas', methods=['GET'])
