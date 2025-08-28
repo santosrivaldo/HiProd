@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import psycopg2
 import uuid
 from datetime import datetime
@@ -11,6 +12,7 @@ import os
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 
 # Configurando a conexão com o PostgreSQL usando variáveis de ambiente
 conn = psycopg2.connect(
@@ -104,4 +106,4 @@ def get_users():
 
 if __name__ == '__main__':
     init_db()  # Inicializa o banco de dados
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
