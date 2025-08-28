@@ -1004,7 +1004,7 @@ def get_atividades(current_user):
             """
         else:
             count_query = f"SELECT COUNT(*) FROM atividades a {where_clause};"
-        
+
         cursor.execute(count_query, params)
         total_count = cursor.fetchone()[0]
 
@@ -1052,7 +1052,7 @@ def get_atividades(current_user):
                 ORDER BY a.horario DESC
                 LIMIT %s OFFSET %s;
             """
-        
+
         params.extend([limite, offset])
         cursor.execute(query, params)
         rows = cursor.fetchall()
@@ -1829,6 +1829,12 @@ def update_tag(current_user, tag_id):
         if 'ativo' in data:
             update_fields.append('ativo = %s')
             update_values.append(data['ativo'])
+        if 'tier' in data:
+            tier_value = data['tier']
+            if tier_value < 1 or tier_value > 5:
+                return jsonify({'message': 'Tier deve estar entre 1 e 5!'}), 400
+            update_fields.append('tier = %s')
+            update_values.append(tier_value)
 
         update_fields.append('updated_at = CURRENT_TIMESTAMP')
         update_values.append(tag_id)
