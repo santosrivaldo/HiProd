@@ -44,8 +44,9 @@ export default function Dashboard() {
   const [selectedDepartment, setSelectedDepartment] = useState('all')
   const [activitiesPage, setActivitiesPage] = useState(1)
   const [hasMoreActivities, setHasMoreActivities] = useState(true)
-  const [summary, setSummary] = useState({ productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 });
-  const loadingRef = useRef(false); // Ref para evitar múltiplas chamadas simultâneas
+  const [summary, setSummary] = useState({ productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 })
+  const [userStats, setUserStats] = useState({})
+  const loadingRef = useRef(false) // Ref para evitar múltiplas chamadas simultâneas
 
   const carregarDados = useCallback(async () => {
     if (loadingRef.current) return // Evita múltiplas chamadas simultâneas
@@ -195,7 +196,7 @@ export default function Dashboard() {
       }
     })
 
-    setSummary(timeData); // Atualiza o estado do summary
+    setSummary(timeData) // Atualiza o estado do summary
 
     const pieData = [
       { name: 'Produtivo', value: timeData.productive, color: COLORS.productive },
@@ -236,7 +237,7 @@ export default function Dashboard() {
     const timelineData = Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date))
 
     // Estatísticas por usuário
-    const userStats = {}
+    const newUserStats = {}
     filteredActivities.forEach(activity => {
       if (!activity || !activity.usuario_monitorado_id) return
 
@@ -245,8 +246,8 @@ export default function Dashboard() {
                       usuariosMonitorados.find(u => u.id === userId)?.nome ||
                       `Usuário ${userId}`
 
-      if (!userStats[userId]) {
-        userStats[userId] = {
+      if (!newUserStats[userId]) {
+        newUserStats[userId] = {
           nome: userName,
           productive: 0,
           nonproductive: 0,
@@ -259,22 +260,25 @@ export default function Dashboard() {
       const duration = Math.max(activity.duracao || 10, 1) // Garantir que duracao seja pelo menos 1
       const produtividade = activity.produtividade || 'neutral'
 
-      userStats[userId].total += duration
-      if (userStats[userId][produtividade] !== undefined) {
-        userStats[userId][produtividade] += duration
+      newUserStats[userId].total += duration
+      if (newUserStats[userId][produtividade] !== undefined) {
+        newUserStats[userId][produtividade] += duration
       } else {
         if (activity.ociosidade >= 600) {
-          userStats[userId].idle += duration
+          newUserStats[userId].idle += duration
         } else {
-          userStats[userId].neutral += duration
+          newUserStats[userId].neutral += duration
         }
       }
     })
 
+    // Atualizar o estado do userStats
+    setUserStats(newUserStats)
+
     const recentActivities = filteredActivities.slice().sort((a, b) => new Date(b.horario) - new Date(a.horario));
 
-    return { pieData, timelineData, totalTime, userStats, recentActivities, summary: timeData }
-  }, [activities, dateRange, selectedUser, selectedDepartment, usuariosMonitorados])
+    return { pieData, timelineData, totalTime, userStats: newUserStats, recentActivities, summary: timeData }
+  }, [activities, dateRange, selectedUser, selectedDepartment, usuariosMonitorados, setUserStats])
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600)
@@ -397,7 +401,7 @@ export default function Dashboard() {
     )
   }
 
-  const { pieData, timelineData, userStats, recentActivities } = processActivityData()
+  const { pieData, timelineData, recentActivities } = processActivityData()
 
   return (
     <div className="p-6">
