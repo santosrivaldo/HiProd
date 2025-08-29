@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import api from '../services/api'
 
-const AuthContext = createContext(null)
+const AuthContext = createContext({
+  user: null,
+  isAuthenticated: false,
+  login: () => Promise.resolve({ success: false }),
+  register: () => Promise.resolve({ success: false }),
+  logout: () => {},
+  loading: true
+})
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
+  if (context === undefined || context === null) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
@@ -60,7 +67,11 @@ export function AuthProvider({ children }) {
   const verifyToken = async (token, userData) => {
     try {
       // Fazer requisição sem interceptor para evitar loop
-      const response = await fetch(`${import.meta.env.VITE_API_URL || window.location.origin}/verify-token`, {
+      const baseURL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:5000' 
+        : `${window.location.protocol}//${window.location.hostname}:5000`
+      
+      const response = await fetch(`${baseURL}/verify-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
