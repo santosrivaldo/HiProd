@@ -1,5 +1,4 @@
-
-import React, { useState, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format, subDays, startOfDay, endOfDay } from 'date-fns'
@@ -37,11 +36,12 @@ export default function Dashboard() {
   const [departments, setDepartments] = useState([])
 
   const loadDashboardData = useCallback(async () => {
+    if (loading) return
+
     setLoading(true)
     try {
       console.log('🔄 Carregando dados do dashboard...')
-      
-      // Carregar dados básicos
+
       const [activitiesRes, usersRes, departmentsRes] = await Promise.all([
         api.get('/atividades?agrupar=true&limite=100'),
         api.get('/usuarios-monitorados'),
@@ -55,11 +55,10 @@ export default function Dashboard() {
       setUsers(usersList)
       setDepartments(departmentsList)
 
-      // Processar dados para o dashboard
       const processedData = processActivities(activities, usersList, departmentsList)
       setDashboardData(processedData)
 
-      console.log('✅ Dashboard carregado com sucesso:', processedData.summary)
+      console.log('✅ Dashboard carregado com sucesso')
     } catch (error) {
       console.error('❌ Erro ao carregar dashboard:', error)
       setDashboardData({
@@ -72,21 +71,19 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loading])
 
-  const processActivities = (activities, usersList, departmentsList) => {
+  const processActivities = useCallback((activities, usersList, departmentsList) => {
     const now = new Date()
     const startDate = startOfDay(subDays(now, dateRange))
     const endDate = endOfDay(now)
 
-    // Filtrar atividades por data
     let filteredActivities = activities.filter(activity => {
       if (!activity?.horario) return false
       const activityDate = new Date(activity.horario)
       return activityDate >= startDate && activityDate <= endDate
     })
 
-    // Filtrar por usuário
     if (selectedUser !== 'all') {
       const userId = parseInt(selectedUser)
       if (!isNaN(userId)) {
@@ -96,7 +93,6 @@ export default function Dashboard() {
       }
     }
 
-    // Filtrar por departamento
     if (selectedDepartment !== 'all') {
       const deptId = parseInt(selectedDepartment)
       if (!isNaN(deptId)) {
@@ -108,7 +104,6 @@ export default function Dashboard() {
       }
     }
 
-    // Calcular resumo
     const summary = {
       productive: 0,
       nonproductive: 0,
@@ -133,7 +128,6 @@ export default function Dashboard() {
       }
     })
 
-    // Dados para gráfico de pizza
     const pieData = [
       { name: 'Produtivo', value: summary.productive, color: COLORS.productive },
       { name: 'Não Produtivo', value: summary.nonproductive, color: COLORS.nonproductive },
@@ -141,7 +135,6 @@ export default function Dashboard() {
       { name: 'Ocioso', value: summary.idle, color: COLORS.idle }
     ].filter(item => item.value > 0)
 
-    // Dados por dia
     const dailyData = {}
     filteredActivities.forEach(activity => {
       const day = format(new Date(activity.horario), 'yyyy-MM-dd')
@@ -171,12 +164,11 @@ export default function Dashboard() {
 
     const timelineData = Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date))
 
-    // Estatísticas por usuário
     const userStatsMap = {}
     filteredActivities.forEach(activity => {
       const userId = activity.usuario_monitorado_id
-      const userName = activity.usuario_monitorado_nome || 
-                      usersList.find(u => u.id === userId)?.nome || 
+      const userName = activity.usuario_monitorado_nome ||
+                      usersList.find(u => u.id === userId)?.nome ||
                       `Usuário ${userId}`
 
       if (!userStatsMap[userId]) {
@@ -207,7 +199,6 @@ export default function Dashboard() {
 
     const userStats = Object.values(userStatsMap)
 
-    // Atividades recentes
     const recentActivities = filteredActivities
       .sort((a, b) => new Date(b.horario) - new Date(a.horario))
       .slice(0, 10)
@@ -219,7 +210,18 @@ export default function Dashboard() {
       summary,
       recentActivities
     }
-  }
+  }, [dateRange, selectedUser, selectedDepartment])
+
+  useEffect(() => {
+    if (dashboardData && users.length > 0 && departments.length > 0) {
+      const processedData = processActivities(
+        dashboardData.recentActivities || [],
+        users,
+        departments
+      )
+      setDashboardData(processedData)
+    }
+  }, [dateRange, selectedUser, selectedDepartment, processActivities])
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600)
@@ -431,7 +433,7 @@ export default function Dashboard() {
       </div>
 
       {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gráfico de Pizza */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
@@ -489,65 +491,6 @@ export default function Dashboard() {
           )}
         </div>
       </div>
-
-      {/* Estatísticas por Usuário */}
-      {userStats.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-6">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Estatísticas por Usuário
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Usuário
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Produtivo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Não Produtivo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Neutro
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Ocioso
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {userStats.map((stats, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {stats.nome}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400">
-                      {formatTime(stats.productive)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400">
-                      {formatTime(stats.nonproductive)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-600 dark:text-yellow-400">
-                      {formatTime(stats.neutral)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {formatTime(stats.idle)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {formatTime(stats.total)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Atividades Recentes */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">

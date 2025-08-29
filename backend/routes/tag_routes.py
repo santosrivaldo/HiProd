@@ -105,6 +105,7 @@ def create_tag(current_user):
             tag_id = db.cursor.fetchone()[0]
 
             # Adicionar palavras-chave
+            palavras_adicionadas = set()  # Para evitar duplicatas
             for palavra in palavras_chave:
                 if isinstance(palavra, dict):
                     palavra_chave = palavra.get('palavra', '')
@@ -113,12 +114,18 @@ def create_tag(current_user):
                     palavra_chave = str(palavra)
                     peso = 1
 
-                if palavra_chave.strip():
-                    db.cursor.execute('''
-                        INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (tag_id, palavra_chave) DO UPDATE SET peso = EXCLUDED.peso;
-                    ''', (tag_id, palavra_chave.strip(), peso))
+                palavra_chave = palavra_chave.strip()
+                if palavra_chave and palavra_chave not in palavras_adicionadas:
+                    try:
+                        db.cursor.execute('''
+                            INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (tag_id, palavra_chave) DO UPDATE SET peso = EXCLUDED.peso;
+                        ''', (tag_id, palavra_chave, peso))
+                        palavras_adicionadas.add(palavra_chave)
+                    except psycopg2.IntegrityError:
+                        # Ignorar se já existe
+                        continue
 
             return jsonify({'message': 'Tag criada com sucesso!', 'id': tag_id}), 201
 
@@ -185,6 +192,7 @@ def update_tag(current_user, tag_id):
                 db.cursor.execute('DELETE FROM tag_palavras_chave WHERE tag_id = %s;', (tag_id,))
 
                 # Adicionar novas palavras-chave
+                palavras_adicionadas = set()  # Para evitar duplicatas
                 for palavra in data['palavras_chave']:
                     if isinstance(palavra, dict):
                         palavra_chave = palavra.get('palavra', '')
@@ -193,11 +201,17 @@ def update_tag(current_user, tag_id):
                         palavra_chave = str(palavra)
                         peso = 1
 
-                    if palavra_chave.strip():
-                        db.cursor.execute('''
-                            INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
-                            VALUES (%s, %s, %s);
-                        ''', (tag_id, palavra_chave.strip(), peso))
+                    palavra_chave = palavra_chave.strip()
+                    if palavra_chave and palavra_chave not in palavras_adicionadas:
+                        try:
+                            db.cursor.execute('''
+                                INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                                VALUES (%s, %s, %s);
+                            ''', (tag_id, palavra_chave, peso))
+                            palavras_adicionadas.add(palavra_chave)
+                        except psycopg2.IntegrityError:
+                            # Ignorar se já existe (por segurança)
+                            continue
 
             return jsonify({'message': 'Tag atualizada com sucesso!'}), 200
 
