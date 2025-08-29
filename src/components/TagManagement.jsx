@@ -629,16 +629,48 @@ const TagManagement = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        tag.produtividade === 'productive' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
-                          : tag.produtividade === 'nonproductive'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
-                          : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
-                      }`}>
-                        {tag.produtividade === 'productive' ? 'Produtiva' : 
-                         tag.produtividade === 'nonproductive' ? 'Não Produtiva' : 'Neutra'}
-                      </span>
+                      {editingTag === tag.id ? (
+                        <select
+                          value={editForm.produtividade}
+                          onChange={(e) => setEditForm({...editForm, produtividade: e.target.value})}
+                          className="px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="productive">Produtiva</option>
+                          <option value="nonproductive">Não Produtiva</option>
+                          <option value="neutral">Neutra</option>
+                        </select>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            const newProductivity = tag.produtividade === 'productive' 
+                              ? 'nonproductive' 
+                              : tag.produtividade === 'nonproductive' 
+                              ? 'neutral' 
+                              : 'productive';
+                            
+                            try {
+                              await api.put(`/tags/${tag.id}`, { produtividade: newProductivity });
+                              fetchData();
+                              setMessage('Produtividade atualizada com sucesso!');
+                              setTimeout(() => setMessage(''), 3000);
+                            } catch (error) {
+                              console.error('Erro ao atualizar produtividade:', error);
+                              setMessage('Erro ao atualizar produtividade');
+                              setTimeout(() => setMessage(''), 3000);
+                            }
+                          }}
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full cursor-pointer hover:opacity-80 transition-opacity ${
+                            tag.produtividade === 'productive' 
+                              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+                              : tag.produtividade === 'nonproductive'
+                              ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100'
+                          }`}
+                        >
+                          {tag.produtividade === 'productive' ? 'Produtiva' : 
+                           tag.produtividade === 'nonproductive' ? 'Não Produtiva' : 'Neutra'}
+                        </button>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                       {tag.departamento_nome || 'Global'}
@@ -710,13 +742,27 @@ const TagManagement = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        tag.ativo 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
-                          : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
-                      }`}>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.put(`/tags/${tag.id}`, { ativo: !tag.ativo });
+                            fetchData();
+                            setMessage(`Tag ${!tag.ativo ? 'ativada' : 'desativada'} com sucesso!`);
+                            setTimeout(() => setMessage(''), 3000);
+                          } catch (error) {
+                            console.error('Erro ao alterar status:', error);
+                            setMessage('Erro ao alterar status da tag');
+                            setTimeout(() => setMessage(''), 3000);
+                          }
+                        }}
+                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full cursor-pointer hover:opacity-80 transition-opacity ${
+                          tag.ativo 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+                            : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+                        }`}
+                      >
                         {tag.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center space-x-2">
