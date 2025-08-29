@@ -17,42 +17,74 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    const storedUser = localStorage.getItem('user')
+    const initAuth = async () => {
+      const token = localStorage.getItem('token')
+      const storedUser = localStorage.getItem('user')
 
-    if (token && storedUser) {
-      // Verificar se o token ainda é válido
-      verifyToken(token)
-    } else {
-      setLoading(false)
+      if (token && storedUser) {
+        try {
+          const userData = JSON.parse(storedUser)
+          // Verificar se o token ainda é válido
+          await verifyToken(token, userData)
+        } catch (error) {
+          console.error('Erro ao parsear dados do usuário:', error)
+          clearAuthData()
+        }
+      } else {
+        setLoading(false)
+      }
+    }
+
+    // Event listener para logout forçado
+    const handleLogout = () => {
+      console.log('Logout forçado recebido')
+      clearAuthData()
+    }
+
+    window.addEventListener('auth:logout', handleLogout)
+    initAuth()
+
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout)
     }
   }, [])
 
-  const verifyToken = async (token) => {
+  const clearAuthData = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    setUser(null)
+    setIsAuthenticated(false)
+    setLoading(false)
+  }
+
+  const verifyToken = async (token, userData) => {
     try {
-      const response = await api.post('/verify-token', { token })
-      if (response.data && response.data.valid) {
-        const userData = {
-          usuario_id: response.data.usuario_id,
-          usuario: response.data.usuario
+      // Fazer requisição sem interceptor para evitar loop
+      const response = await fetch(`${import.meta.env.VITE_API_URL || window.location.origin}/verify-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token })
+      })
+
+      const data = await response.json()
+      
+      if (response.ok && data.valid) {
+        const validUserData = {
+          usuario_id: data.usuario_id,
+          usuario: data.usuario
         }
-        setUser(userData)
+        setUser(validUserData)
         setIsAuthenticated(true)
-        localStorage.setItem('user', JSON.stringify(userData))
+        localStorage.setItem('user', JSON.stringify(validUserData))
       } else {
-        // Token inválido, limpar dados
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        setUser(null)
-        setIsAuthenticated(false)
+        console.log('Token inválido ou expirado')
+        clearAuthData()
       }
     } catch (error) {
       console.error('Erro na verificação do token:', error)
-      // Erro na verificação, limpar dados
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      setUser(null)
-      setIsAuthenticated(false)
+      clearAuthData()
     } finally {
       setLoading(false)
     }
@@ -75,6 +107,9 @@ export function AuthProvider({ children }) {
           usuario: response.data.usuario
         }
 
+        // Aguardar um pouco antes de definir o estado
+        await new Promise(resolve => setTimeout(resolve, 100))
+
         setUser(userData)
         setIsAuthenticated(true)
         localStorage.setItem('user', JSON.stringify(userData))
@@ -95,12 +130,10 @@ export function AuthProvider({ children }) {
       let errorMessage = 'Erro no login'
       
       if (error.response) {
-        // Erro HTTP
         console.error('Status:', error.response.status)
         console.error('Data:', error.response.data)
         errorMessage = error.response.data?.message || `Erro ${error.response.status}`
       } else if (error.request) {
-        // Erro de rede
         console.error('Erro de rede:', error.request)
         errorMessage = 'Erro de conexão com o servidor'
       } else {

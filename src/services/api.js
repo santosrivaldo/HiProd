@@ -28,14 +28,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !error.config.url?.includes('/login') && !error.config.url?.includes('/verify-token')) {
+    // Só tratar erro 401 se não for das rotas de auth
+    if (error.response?.status === 401 && 
+        !error.config.url?.includes('/login') && 
+        !error.config.url?.includes('/register') &&
+        !error.config.url?.includes('/verify-token')) {
+      
       console.log('Token expirado, removendo credenciais...')
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      // Evitar loop infinito - não recarregar se já estiver na página de login
-      if (window.location.pathname !== '/login') {
-        window.location.reload()
-      }
+      
+      // Emitir evento customizado para AuthContext lidar com logout
+      window.dispatchEvent(new CustomEvent('auth:logout'))
     }
     return Promise.reject(error)
   }

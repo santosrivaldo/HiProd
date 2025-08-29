@@ -144,10 +144,19 @@ def get_profile(current_user):
         'created_at': current_user[6].isoformat() if len(current_user) > 6 and current_user[6] else None
     }), 200
 
-@auth_bp.route('/verify-token', methods=['POST'])
+@auth_bp.route('/verify-token', methods=['POST', 'OPTIONS'])
 def verify_token_route():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+
     try:
         data = request.get_json()
+        print(f"🔍 Verificação de token recebida: {bool(data)}")
+        
         if not data:
             return jsonify({'valid': False, 'error': 'Dados não fornecidos'}), 200
 
@@ -165,22 +174,26 @@ def verify_token_route():
 
         # Verifica se o usuário ainda existe
         with DatabaseConnection() as db:
-            db.cursor.execute("SELECT nome FROM usuarios WHERE id = %s", (uuid.UUID(usuario_id),))
+            db.cursor.execute("SELECT nome FROM usuarios WHERE id = %s AND ativo = TRUE", (uuid.UUID(usuario_id),))
             result = db.cursor.fetchone()
 
             if result:
+                print(f"✅ Token válido para usuário: {result[0]}")
                 return jsonify({
                     'valid': True,
                     'usuario_id': usuario_id,
                     'usuario': result[0]
                 }), 200
             else:
+                print(f"❌ Usuário não encontrado para token: {usuario_id}")
                 return jsonify({'valid': False, 'error': 'Usuário não encontrado'}), 200
 
     except jwt.ExpiredSignatureError:
+        print("❌ Token expirado")
         return jsonify({'valid': False, 'error': 'Token expirado'}), 200
     except jwt.InvalidTokenError:
+        print("❌ Token inválido")
         return jsonify({'valid': False, 'error': 'Token inválido'}), 200
     except Exception as e:
-        print(f"Erro ao verificar token: {e}")
+        print(f"❌ Erro ao verificar token: {e}")
         return jsonify({'valid': False, 'error': f'Erro interno: {str(e)}'}), 200
