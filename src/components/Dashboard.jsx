@@ -47,10 +47,10 @@ export default function Dashboard() {
   const loadingRef = useRef(false); // Ref para evitar múltiplas chamadas simultâneas
 
   const carregarDados = useCallback(async () => {
-    if (loadingRef.current) return
+    if (loadingRef.current) return // Evita múltiplas chamadas simultâneas
 
-    setLoading(true) // Define loading geral para true no início de cada carregamento completo
     loadingRef.current = true
+    setLoading(true) // Define loading para true no início
 
     try {
       // Carrega atividades, usuários e departamentos na primeira página
@@ -91,7 +91,7 @@ export default function Dashboard() {
       setLoading(false) // Define loading geral para false após o carregamento inicial
       loadingRef.current = false
     }
-  }, []) // Dependências vazias pois usa setActivities, setUsuariosMonitorados, setDepartamentos, etc.
+  }, [setActivities, setUsuariosMonitorados, setDepartamentos]) // Incluir setters nas dependências
 
 
   useEffect(() => {
@@ -99,11 +99,13 @@ export default function Dashboard() {
   }, [carregarDados])
 
   useEffect(() => {
+    if (!autoRefresh) return
+
     const interval = setInterval(() => {
       carregarDados()
     }, 30000) // Atualizar a cada 30 segundos
     return () => clearInterval(interval)
-  }, [carregarDados])
+  }, [carregarDados, autoRefresh])
 
   const loadMoreActivities = () => {
     if (hasMoreActivities && !loadingActivities) {
@@ -121,7 +123,7 @@ export default function Dashboard() {
     }
   }
 
-  const processActivityData = () => {
+  const processActivityData = useCallback(() => {
     const now = new Date()
     const startDate = startOfDay(subDays(now, dateRange))
     const endDate = endOfDay(now)
@@ -271,7 +273,7 @@ export default function Dashboard() {
     const recentActivities = filteredActivities.slice().sort((a, b) => new Date(b.horario) - new Date(a.horario));
 
     return { pieData, timelineData, totalTime, userStats, recentActivities, summary: timeData }
-  }
+  }, [activities, dateRange, selectedUser, selectedDepartment, usuariosMonitorados])
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600)
@@ -279,7 +281,7 @@ export default function Dashboard() {
     return `${hours}h ${minutes}m`
   }
 
-  const handleExportDashboard = () => {
+  const handleExportDashboard = useCallback(() => {
     const summaryData = [
       {
         'Métrica': 'Tempo Total',
@@ -319,9 +321,9 @@ export default function Dashboard() {
     setTimeout(() => {
       exportToCSV(userStatsData, 'dashboard_usuarios')
     }, 500)
-  }
+  }, [summary, userStats, formatTime])
 
-  const handlePrintDashboard = () => {
+  const handlePrintDashboard = useCallback(() => {
     const summaryColumns = [
       {
         header: 'Métrica',
@@ -342,7 +344,19 @@ export default function Dashboard() {
     ]
 
     printData('Dashboard - Resumo de Atividades', summaryPrintData, summaryColumns)
-  }
+  }, [summary, formatTime])
+
+  // Effect to toggle auto-refresh based on autoRefresh state
+  useEffect(() => {
+    if (!autoRefresh) return
+
+    const interval = setInterval(() => {
+      carregarDados()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [autoRefresh, carregarDados])
+
 
   if (loading) {
     return <LoadingSpinner size="xl" text="Carregando dashboard..." fullScreen />
