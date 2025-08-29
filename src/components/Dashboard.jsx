@@ -94,7 +94,7 @@ export default function Dashboard() {
       setHasLoadedData(true) // Marca que os dados foram carregados
       loadingRef.current = false
     }
-  }, [setActivities, setUsuariosMonitorados, setDepartamentos]) // Incluir setters nas dependências
+  }, []) // Remover dependências que causam loop
 
 
   // Removido useEffect que carregava automaticamente os dados
@@ -278,7 +278,7 @@ export default function Dashboard() {
     const recentActivities = filteredActivities.slice().sort((a, b) => new Date(b.horario) - new Date(a.horario));
 
     return { pieData, timelineData, totalTime, userStats: newUserStats, recentActivities, summary: timeData }
-  }, [activities, dateRange, selectedUser, selectedDepartment, usuariosMonitorados, setUserStats])
+  }, [activities, dateRange, selectedUser, selectedDepartment, usuariosMonitorados])
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600)
@@ -326,7 +326,7 @@ export default function Dashboard() {
     setTimeout(() => {
       exportToCSV(userStatsData, 'dashboard_usuarios')
     }, 500)
-  }, [summary, userStats, formatTime])
+  }, [summary, userStats])
 
   const handlePrintDashboard = useCallback(() => {
     const summaryColumns = [
@@ -349,7 +349,7 @@ export default function Dashboard() {
     ]
 
     printData('Dashboard - Resumo de Atividades', summaryPrintData, summaryColumns)
-  }, [summary, formatTime])
+  }, [summary])
 
   // Effect to toggle auto-refresh based on autoRefresh state
   useEffect(() => {
@@ -401,7 +401,12 @@ export default function Dashboard() {
     )
   }
 
-  const { pieData, timelineData, recentActivities } = processActivityData()
+  const processedData = processActivityData()
+  if (!processedData) {
+    return <LoadingSpinner size="xl" text="Processando dados..." fullScreen />
+  }
+  
+  const { pieData, timelineData, recentActivities } = processedData
 
   return (
     <div className="p-6">
@@ -708,7 +713,7 @@ export default function Dashboard() {
       </div>
 
       {/* User Statistics */}
-      {Object.keys(userStats).length > 0 && (
+      {userStats && Object.keys(userStats).length > 0 && (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             Estatísticas por Usuário
@@ -738,25 +743,25 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {Object.values(userStats).map((stats, index) => (
-                  <tr key={index}>
+                {Object.values(userStats).filter(stats => stats && stats.nome).map((stats, index) => (
+                  <tr key={`user-stats-${index}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {stats.nome}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400">
-                      {formatTime(stats.productive)}
+                      {formatTime(stats.productive || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400">
-                      {formatTime(stats.nonproductive)}
+                      {formatTime(stats.nonproductive || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-600 dark:text-yellow-400">
-                      {formatTime(stats.neutral)}
+                      {formatTime(stats.neutral || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                      {formatTime(stats.idle)}
+                      {formatTime(stats.idle || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {formatTime(stats.total)}
+                      {formatTime((stats.total || 0))}
                     </td>
                   </tr>
                 ))}
