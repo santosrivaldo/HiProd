@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format, subDays, startOfDay, endOfDay } from 'date-fns'
@@ -44,95 +44,80 @@ export default function Dashboard() {
   const [activitiesPage, setActivitiesPage] = useState(1)
   const [hasMoreActivities, setHasMoreActivities] = useState(true)
   const [summary, setSummary] = useState({ productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 });
+  const loadingRef = useRef(false); // Ref para evitar múltiplas chamadas simultâneas
 
+  const carregarDados = useCallback(async () => {
+    if (loadingRef.current) return
 
-  useEffect(() => {
-    fetchData(1, true)
+    setLoading(true) // Define loading geral para true no início de cada carregamento completo
+    loadingRef.current = true
 
-    let interval
-    if (autoRefresh) {
-      interval = setInterval(() => fetchData(1, true), 30000)
-    }
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [dateRange, autoRefresh])
-
-  const fetchData = async (page = 1, reset = false) => {
     try {
-      if (page === 1) {
-        setLoading(true)
-      } else {
-        setLoadingActivities(true)
-      }
-
-      // Limitar dados para dashboard - menor pageSize para melhor performance
+      // Carrega atividades, usuários e departamentos na primeira página
       const pageSize = 50
+      const activitiesPromise = api.get(`/atividades?agrupar=true&pagina=1&limite=${pageSize}`)
+      setLoadingUsers(true)
+      setLoadingDepartments(true)
+      const [activitiesRes, usuariosRes, departamentosRes] = await Promise.all([
+        activitiesPromise,
+        api.get('/usuarios-monitorados').finally(() => setLoadingUsers(false)),
+        api.get('/departamentos').finally(() => setLoadingDepartments(false))
+      ])
 
-      const activitiesPromise = api.get(`/atividades?agrupar=true&pagina=${page}&limite=${pageSize}`)
+      const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
+      const validUsuarios = Array.isArray(usuariosRes.data) ?
+        usuariosRes.data.filter(u => u && u.id && u.nome) : []
+      const validDepartamentos = Array.isArray(departamentosRes.data) ?
+        departamentosRes.data.filter(d => d && d.id && d.nome) : []
 
-      // Buscar usuários e departamentos apenas na primeira página
-      if (page === 1) {
-        setLoadingUsers(true)
-        setLoadingDepartments(true)
-
-        const [activitiesRes, usuariosRes, departamentosRes] = await Promise.all([
-          activitiesPromise,
-          api.get('/usuarios-monitorados').finally(() => setLoadingUsers(false)),
-          api.get('/departamentos').finally(() => setLoadingDepartments(false))
-        ])
-
-        // Validar e filtrar dados
-        const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-        const validUsuarios = Array.isArray(usuariosRes.data) ?
-          usuariosRes.data.filter(u => u && u.id && u.nome) : []
-        const validDepartamentos = Array.isArray(departamentosRes.data) ?
-          departamentosRes.data.filter(d => d && d.id && d.nome) : []
-
-        setActivities(validActivities)
-        setUsuariosMonitorados(validUsuarios)
-        setDepartamentos(validDepartamentos)
-        setActivitiesPage(1)
-        setHasMoreActivities(validActivities.length === pageSize)
-      } else {
-        const activitiesRes = await activitiesPromise
-        const validActivities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-
-        if (reset) {
-          setActivities(validActivities)
-          setActivitiesPage(1)
-        } else {
-          setActivities(prev => [...prev, ...validActivities])
-          setActivitiesPage(page)
-        }
-        setHasMoreActivities(validActivities.length === pageSize)
-      }
+      setActivities(validActivities)
+      setUsuariosMonitorados(validUsuarios)
+      setDepartamentos(validDepartamentos)
+      setActivitiesPage(1)
+      setHasMoreActivities(validActivities.length === pageSize)
 
       console.log('Dados carregados para dashboard:', {
-        atividades: activities.length,
-        página: page,
-        usuários: usuariosMonitorados.length,
-        departamentos: departamentos.length
+        atividades: validActivities.length,
+        página: 1,
+        usuários: validUsuarios.length,
+        departamentos: validDepartamentos.length
       })
     } catch (error) {
       console.error('Erro ao buscar dados:', error)
-      if (page === 1) {
-        setActivities([])
-        setUsuariosMonitorados([])
-        setDepartamentos([])
-      }
+      setActivities([])
+      setUsuariosMonitorados([])
+      setDepartamentos([])
     } finally {
-      setLoading(false)
-      setLoadingActivities(false)
-      setLoadingUsers(false)
-      setLoadingDepartments(false)
+      setLoading(false) // Define loading geral para false após o carregamento inicial
+      loadingRef.current = false
     }
-  }
+  }, []) // Dependências vazias pois usa setActivities, setUsuariosMonitorados, setDepartamentos, etc.
+
+
+  useEffect(() => {
+    carregarDados()
+  }, [carregarDados])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      carregarDados()
+    }, 30000) // Atualizar a cada 30 segundos
+    return () => clearInterval(interval)
+  }, [carregarDados])
 
   const loadMoreActivities = () => {
     if (hasMoreActivities && !loadingActivities) {
-      fetchData(activitiesPage + 1, false)
+      setLoadingActivities(true)
+      const nextPage = activitiesPage + 1
+      api.get(`/atividades?agrupar=true&pagina=${nextPage}&limite=50`)
+        .then(res => {
+          const validActivities = Array.isArray(res.data) ? res.data : []
+          setActivities(prev => [...prev, ...validActivities])
+          setActivitiesPage(nextPage)
+          setHasMoreActivities(validActivities.length === 50)
+        })
+        .catch(err => console.error('Erro ao carregar mais atividades:', err))
+        .finally(() => setLoadingActivities(false))
     }
   }
 
@@ -484,7 +469,7 @@ export default function Dashboard() {
         </div>
 
         <button
-          onClick={() => fetchData(1, true)}
+          onClick={() => carregarDados()} // Chama a função memoizada
           disabled={loading}
           className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
         >

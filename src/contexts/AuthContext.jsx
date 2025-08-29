@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import api from '../services/api'
 
 const AuthContext = createContext(null)
@@ -90,7 +90,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const login = async (username, password) => {
+  const login = useCallback(async (username, password) => {
     try {
       console.log('Iniciando login...', { username })
       
@@ -146,9 +146,9 @@ export function AuthProvider({ children }) {
         error: errorMessage
       }
     }
-  }
+  }, [])
 
-  const register = async (username, password, confirmPassword) => {
+  const register = useCallback(async (username, password, confirmPassword) => {
     if (password !== confirmPassword) {
       return { success: false, error: 'Senhas não coincidem' }
     }
@@ -176,23 +176,23 @@ export function AuthProvider({ children }) {
         error: error.response?.data?.message || 'Erro no registro' 
       }
     }
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null)
     setIsAuthenticated(false)
     localStorage.removeItem('user')
     localStorage.removeItem('token')
-  }
+  }, [])
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     isAuthenticated,
     login,
     register,
     logout,
     loading
-  }
+  }), [user, isAuthenticated, loading])
 
   return (
     <AuthContext.Provider value={value}>
