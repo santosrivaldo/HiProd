@@ -33,7 +33,8 @@ export default function Dashboard() {
   const [activities, setActivities] = useState([])
   const [usuariosMonitorados, setUsuariosMonitorados] = useState([])
   const [departamentos, setDepartamentos] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [hasLoadedData, setHasLoadedData] = useState(false)
   const [loadingActivities, setLoadingActivities] = useState(false)
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [loadingDepartments, setLoadingDepartments] = useState(false)
@@ -89,14 +90,14 @@ export default function Dashboard() {
       setDepartamentos([])
     } finally {
       setLoading(false) // Define loading geral para false após o carregamento inicial
+      setHasLoadedData(true) // Marca que os dados foram carregados
       loadingRef.current = false
     }
   }, [setActivities, setUsuariosMonitorados, setDepartamentos]) // Incluir setters nas dependências
 
 
-  useEffect(() => {
-    carregarDados()
-  }, [carregarDados])
+  // Removido useEffect que carregava automaticamente os dados
+  // Os dados agora só são carregados quando o usuário clica em "Carregar Dados"
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -362,6 +363,40 @@ export default function Dashboard() {
     return <LoadingSpinner size="xl" text="Carregando dashboard..." fullScreen />
   }
 
+  if (!hasLoadedData) {
+    return (
+      <div className="p-6">
+        <div className="mb-6 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Bem-vindo de volta, {user?.usuario}!
+            </p>
+          </div>
+        </div>
+
+        <div className="text-center py-12">
+          <div className="text-gray-400 dark:text-gray-500">
+            <ChartBarIcon className="mx-auto h-16 w-16 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              Dashboard não carregado
+            </h3>
+            <p className="text-sm mb-6">
+              Clique no botão abaixo para carregar os dados do dashboard
+            </p>
+            <button
+              onClick={() => carregarDados()}
+              disabled={loading}
+              className="px-6 py-3 bg-indigo-600 text-white text-base font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {loading ? 'Carregando...' : 'Carregar Dados'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const { pieData, timelineData, userStats, recentActivities } = processActivityData()
 
   return (
@@ -487,7 +522,7 @@ export default function Dashboard() {
           disabled={loading}
           className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
         >
-          {loading ? 'Atualizando...' : 'Atualizar'}
+          {loading ? 'Carregando...' : hasLoadedData ? 'Atualizar' : 'Carregar Dados'}
         </button>
       </div>
 
