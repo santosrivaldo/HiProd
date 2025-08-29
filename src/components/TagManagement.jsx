@@ -69,6 +69,7 @@ const TagManagement = () => {
     try {
       const dataToSend = {
         ...formData,
+        departamento_id: formData.departamento_id === '' ? null : formData.departamento_id,
         palavras_chave: formData.palavras_chave
           .filter(palavra => palavra.trim())
           .map(palavra => ({ palavra: palavra.trim(), peso: 1 }))
@@ -108,9 +109,24 @@ const TagManagement = () => {
   const handleSaveEdit = async () => {
     setLoading(true);
     try {
-      await api.put(`/tags/${editingTag}`, editForm);
+      // Preparar dados para envio, tratando campos vazios
+      const dataToSend = {
+        ...editForm,
+        departamento_id: editForm.departamento_id === '' ? null : editForm.departamento_id,
+        palavras_chave: editForm.palavras_chave
+          .filter(palavra => typeof palavra === 'string' ? palavra.trim() : palavra.palavra?.trim())
+          .map(palavra => {
+            if (typeof palavra === 'string') {
+              return { palavra: palavra.trim(), peso: 1 };
+            }
+            return { palavra: palavra.palavra?.trim() || '', peso: palavra.peso || 1 };
+          })
+      };
+      
+      await api.put(`/tags/${editingTag}`, dataToSend);
       setEditingTag(null);
       fetchData(); // Refetch data after successful submission
+      setMessage('Tag atualizada com sucesso!');
       setTimeout(() => setMessage(''), 3000)
     } catch (error) {
       console.error('Erro ao atualizar tag:', error);

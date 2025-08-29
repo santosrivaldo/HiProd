@@ -84,6 +84,14 @@ def create_tag(current_user):
     cor = data.get('cor', '#6B7280')
     produtividade = data['produtividade']
     departamento_id = data.get('departamento_id')
+    # Converter string vazia para None
+    if departamento_id == '' or departamento_id == 'null':
+        departamento_id = None
+    elif departamento_id is not None:
+        try:
+            departamento_id = int(departamento_id)
+        except (ValueError, TypeError):
+            departamento_id = None
     palavras_chave = data.get('palavras_chave', [])
     tier = int(data.get('tier', 3))
 
@@ -171,6 +179,17 @@ def update_tag(current_user, tag_id):
             if 'ativo' in data:
                 update_fields.append('ativo = %s')
                 update_values.append(data['ativo'])
+            if 'departamento_id' in data:
+                dept_id = data['departamento_id']
+                if dept_id == '' or dept_id == 'null':
+                    dept_id = None
+                elif dept_id is not None:
+                    try:
+                        dept_id = int(dept_id)
+                    except (ValueError, TypeError):
+                        dept_id = None
+                update_fields.append('departamento_id = %s')
+                update_values.append(dept_id)
             if 'tier' in data:
                 tier_value = int(data['tier']) if data['tier'] is not None else 3
                 if tier_value < 1 or tier_value > 5:
