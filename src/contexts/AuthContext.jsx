@@ -203,7 +203,7 @@ export function AuthProvider({ children }) {
     register,
     logout,
     loading
-  }), [user, isAuthenticated, loading])
+  }), [user, isAuthenticated, loading, login, register, logout])
 
   return (
     <AuthContext.Provider value={value}>

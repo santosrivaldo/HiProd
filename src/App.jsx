@@ -8,13 +8,7 @@ import { useAuth } from './contexts/AuthContext'
 import LoadingSpinner from './components/LoadingSpinner'
 
 function AppContent() {
-  const auth = useAuth()
-
-  if (!auth) {
-    return <div>Erro: AuthContext não disponível</div>
-  }
-
-  const { isAuthenticated, loading } = auth
+  const { isAuthenticated, loading } = useAuth()
 
   if (loading) {
     return <LoadingSpinner size="xl" text="Carregando..." fullScreen />
