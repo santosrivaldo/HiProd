@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import { useTheme } from '../contexts/ThemeContext'
+import React, { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { useTheme } from "../contexts/ThemeContext";
 import {
   ChartBarIcon,
   Cog6ToothIcon,
@@ -9,50 +9,59 @@ import {
   SunIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
-  XMarkIcon
-} from '@heroicons/react/24/outline'
-import Dashboard from './Dashboard'
-import ActivityManagement from './ActivityManagement'
-import TagManagement from './TagManagement'
-import UserManagement from './UserManagement'
-import Settings from './Settings'
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
+import Dashboard from "./Dashboard";
+import ActivityManagement from "./ActivityManagement";
+import TagManagement from "./TagManagement";
+import UserManagement from "./UserManagement";
+import Settings from "./Settings";
 
 const navigation = [
-  { name: 'Dashboard', icon: ChartBarIcon, component: 'dashboard' },
-  { name: 'Gerenciamento', icon: ClipboardDocumentListIcon, component: 'management' },
-  { name: 'Tags', icon: ClipboardDocumentListIcon, component: 'tags'},
-  { name: 'Usuários', icon: ClipboardDocumentListIcon, component: 'users'},
-  { name: 'Configurações', icon: Cog6ToothIcon, component: 'settings' },
-]
+  { name: "Dashboard", icon: ChartBarIcon, component: "dashboard" },
+  {
+    name: "Gerenciamento",
+    icon: ClipboardDocumentListIcon,
+    component: "management",
+  },
+  { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags" },
+  { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users" },
+  { name: "Configurações", icon: Cog6ToothIcon, component: "settings" },
+];
 
 export default function Layout({ children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [currentView, setCurrentView] = useState('dashboard')
-  const { user, logout } = useAuth()
-  const { isDark, toggleTheme } = useTheme()
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentView, setCurrentView] = useState("dashboard");
+  const { user, logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
 
   const renderCurrentView = () => {
     switch (currentView) {
-      case 'dashboard':
-        return <Dashboard />
-      case 'management':
-        return <ActivityManagement />
-      case 'tags':
-        return <TagManagement />
-      case 'users':
-        return <UserManagement />
-      case 'settings':
-        return <Settings />
+      case "dashboard":
+        return <Dashboard />;
+      case "management":
+        return <ActivityManagement />;
+      case "tags":
+        return <TagManagement />;
+      case "users":
+        return <UserManagement />;
+      case "settings":
+        return <Settings />;
       default:
-        return <Dashboard />
+        return <Dashboard />;
     }
-  }
+  };
 
   return (
     <div className="h-screen flex bg-gray-100 dark:bg-gray-900">
       {/* Mobile sidebar */}
-      <div className={`fixed inset-0 flex z-40 md:hidden ${sidebarOpen ? '' : 'hidden'}`}>
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
+      <div
+        className={`fixed inset-0 flex z-40 md:hidden ${sidebarOpen ? "" : "hidden"}`}
+      >
+        <div
+          className="fixed inset-0 bg-gray-600 bg-opacity-75"
+          onClick={() => setSidebarOpen(false)}
+        />
         <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-gray-800">
           <div className="absolute top-0 right-0 -mr-12 pt-2">
             <button
@@ -74,13 +83,13 @@ export default function Layout({ children }) {
                 <button
                   key={item.name}
                   onClick={() => {
-                    setCurrentView(item.component)
-                    setSidebarOpen(false)
+                    setCurrentView(item.component);
+                    setSidebarOpen(false);
                   }}
                   className={`w-full group flex items-center px-2 py-2 text-base font-medium rounded-md ${
                     currentView === item.component
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                   }`}
                 >
                   <item.icon className="mr-4 flex-shrink-0 h-6 w-6" />
@@ -103,7 +112,11 @@ export default function Layout({ children }) {
                   onClick={toggleTheme}
                   className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
-                  {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+                  {isDark ? (
+                    <SunIcon className="h-5 w-5" />
+                  ) : (
+                    <MoonIcon className="h-5 w-5" />
+                  )}
                 </button>
                 <button
                   onClick={logout}
@@ -134,8 +147,8 @@ export default function Layout({ children }) {
                     onClick={() => setCurrentView(item.component)}
                     className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
                       currentView === item.component
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
+                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                     }`}
                   >
                     <item.icon className="mr-3 flex-shrink-0 h-6 w-6" />
@@ -158,7 +171,11 @@ export default function Layout({ children }) {
                     onClick={toggleTheme}
                     className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
                   >
-                    {isDark ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+                    {isDark ? (
+                      <SunIcon className="h-5 w-5" />
+                    ) : (
+                      <MoonIcon className="h-5 w-5" />
+                    )}
                   </button>
                   <button
                     onClick={logout}
@@ -185,16 +202,16 @@ export default function Layout({ children }) {
         </div>
         <main className="flex-1 relative z-0 overflow-y-auto focus:outline-none">
           <div className="py-6">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-              {currentView === 'dashboard' && <Dashboard />}
-              {currentView === 'activities' && <ActivityManagement />}
-              {currentView === 'tags' && <TagManagement />}
-              {currentView === 'users' && <UserManagement />}
-              {currentView === 'settings' && <Settings />}
+            <div className="max-w-8xl mx-auto px-4 sm:px-6 md:px-8">
+              {currentView === "dashboard" && <Dashboard />}
+              {currentView === "activities" && <ActivityManagement />}
+              {currentView === "tags" && <TagManagement />}
+              {currentView === "users" && <UserManagement />}
+              {currentView === "settings" && <Settings />}
             </div>
           </div>
         </main>
       </div>
     </div>
-  )
+  );
 }
