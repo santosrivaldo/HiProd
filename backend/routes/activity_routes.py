@@ -4,8 +4,73 @@ from datetime import datetime, timezone, timedelta
 from ..auth import token_required
 from ..database import DatabaseConnection
 from ..utils import classify_activity_with_tags
+import re
 
 activity_bp = Blueprint('activity', __name__)
+
+def extract_domain_from_window(active_window):
+    """Extrair domínio do título da janela ativa"""
+    if not active_window:
+        return None
+    
+    # Tentar encontrar URLs no título da janela
+    url_match = re.search(r'https?://([^/\s]+)', active_window)
+    if url_match:
+        return url_match.group(1)
+    
+    # Procurar por padrões conhecidos de domínio
+    domain_patterns = [
+        r'- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})',
+        r'\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)',
+        r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,})'
+    ]
+    
+    for pattern in domain_patterns:
+        match = re.search(pattern, active_window)
+        if match:
+            return match.group(1)
+    
+    return None
+
+def extract_application_from_window(active_window):
+    """Extrair aplicação do título da janela ativa"""
+    if not active_window:
+        return None
+    
+    # Aplicações conhecidas
+    known_apps = {
+        'chrome': 'Google Chrome',
+        'firefox': 'Firefox',
+        'edge': 'Microsoft Edge',
+        'code': 'VS Code',
+        'visual studio': 'Visual Studio',
+        'notepad': 'Notepad',
+        'explorer': 'Windows Explorer',
+        'teams': 'Microsoft Teams',
+        'outlook': 'Outlook',
+        'word': 'Microsoft Word',
+        'excel': 'Microsoft Excel',
+        'powerpoint': 'PowerPoint',
+        'slack': 'Slack',
+        'discord': 'Discord',
+        'whatsapp': 'WhatsApp',
+        'telegram': 'Telegram'
+    }
+    
+    lower_window = active_window.lower()
+    
+    for key, value in known_apps.items():
+        if key in lower_window:
+            return value
+    
+    # Tentar extrair o nome da aplicação do início do título
+    app_match = re.match(r'^([^-–]+)', active_window)
+    if app_match:
+        app_name = app_match.group(1).strip()
+        if 0 < len(app_name) < 50:
+            return app_name
+    
+    return None
 
 @activity_bp.route('/atividade', methods=['POST'])
 @token_required
@@ -60,8 +125,15 @@ def add_activity(current_user):
             # Extrair informações adicionais
             titulo_janela = data.get('titulo_janela', active_window)
             duracao = data.get('duracao', 0)
-            domain = data.get('domain')  # Novo: domínio capturado
-            application = data.get('application', 'unknown')  # Novo: aplicação identificada
+            
+            # Extrair domínio e aplicação do active_window se não fornecidos
+            domain = data.get('domain')
+            if not domain:
+                domain = extract_domain_from_window(active_window)
+            
+            application = data.get('application')
+            if not application:
+                application = extract_application_from_window(active_window)
 
             # Obter IP real do agente (considerando proxies)
             ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))

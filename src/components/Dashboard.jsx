@@ -42,6 +42,77 @@ const CHART_COLORS = [
   '#06B6D4', '#F97316', '#84CC16', '#EC4899', '#6B7280'
 ]
 
+// Função auxiliar para extrair domínio
+const extractDomainFromWindow = (activeWindow) => {
+  if (!activeWindow) return null
+  
+  // Tentar encontrar URLs no título da janela
+  const urlMatch = activeWindow.match(/https?:\/\/([^\/\s]+)/)
+  if (urlMatch) {
+    return urlMatch[1]
+  }
+  
+  // Procurar por padrões conhecidos de domínio
+  const domainPatterns = [
+    /- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/,
+    /\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)/,
+    /([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/
+  ]
+  
+  for (const pattern of domainPatterns) {
+    const match = activeWindow.match(pattern)
+    if (match) {
+      return match[1]
+    }
+  }
+  
+  return null
+}
+
+// Função auxiliar para extrair aplicação
+const extractApplicationFromWindow = (activeWindow) => {
+  if (!activeWindow) return null
+  
+  // Aplicações conhecidas
+  const knownApps = {
+    'chrome': 'Google Chrome',
+    'firefox': 'Firefox',
+    'edge': 'Microsoft Edge',
+    'code': 'VS Code',
+    'visual studio': 'Visual Studio',
+    'notepad': 'Notepad',
+    'explorer': 'Windows Explorer',
+    'teams': 'Microsoft Teams',
+    'outlook': 'Outlook',
+    'word': 'Microsoft Word',
+    'excel': 'Microsoft Excel',
+    'powerpoint': 'PowerPoint',
+    'slack': 'Slack',
+    'discord': 'Discord',
+    'whatsapp': 'WhatsApp',
+    'telegram': 'Telegram'
+  }
+  
+  const lowerWindow = activeWindow.toLowerCase()
+  
+  for (const [key, value] of Object.entries(knownApps)) {
+    if (lowerWindow.includes(key)) {
+      return value
+    }
+  }
+  
+  // Tentar extrair o nome da aplicação do início do título
+  const appMatch = activeWindow.match(/^([^-–]+)/)
+  if (appMatch) {
+    const appName = appMatch[1].trim()
+    if (appName.length > 0 && appName.length < 50) {
+      return appName
+    }
+  }
+  
+  return null
+}
+
 export default function Dashboard() {
   const { user } = useAuth()
   const [dashboardData, setDashboardData] = useState(null)
@@ -74,6 +145,7 @@ export default function Dashboard() {
       setDepartments(departmentsList)
 
       const processedData = processActivities(activities, usersList, departmentsList)
+      processedData.rawActivities = activities // Store raw data for reprocessing
       setDashboardData(processedData)
 
       console.log('✅ Dashboard carregado com sucesso')
@@ -99,11 +171,15 @@ export default function Dashboard() {
     const startDate = startOfDay(subDays(now, dateRange))
     const endDate = endOfDay(now)
 
+    console.log(`📊 Processando ${activities.length} atividades no período de ${startDate.toISOString()} a ${endDate.toISOString()}`)
+
     let filteredActivities = activities.filter(activity => {
       if (!activity?.horario) return false
       const activityDate = new Date(activity.horario)
       return activityDate >= startDate && activityDate <= endDate
     })
+
+    console.log(`🔍 ${filteredActivities.length} atividades após filtro de data`)
 
     if (selectedUser !== 'all') {
       const userId = parseInt(selectedUser)
@@ -111,6 +187,7 @@ export default function Dashboard() {
         filteredActivities = filteredActivities.filter(activity =>
           activity.usuario_monitorado_id === userId
         )
+        console.log(`👤 ${filteredActivities.length} atividades após filtro de usuário`)
       }
     }
 
@@ -122,6 +199,7 @@ export default function Dashboard() {
         filteredActivities = filteredActivities.filter(activity =>
           userIds.includes(activity.usuario_monitorado_id)
         )
+        console.log(`🏢 ${filteredActivities.length} atividades após filtro de departamento`)
       }
     }
 
@@ -135,7 +213,7 @@ export default function Dashboard() {
     }
 
     filteredActivities.forEach(activity => {
-      const duration = activity.duracao || 10
+      const duration = activity.duracao || activity.duracao_total || 10
       summary.total += duration
 
       const produtividade = activity.produtividade || 'neutral'
@@ -150,11 +228,16 @@ export default function Dashboard() {
       }
     })
 
+    console.log('📈 Summary calculado:', summary)
+
     // Processar dados por domínio
     const domainMap = {}
     filteredActivities.forEach(activity => {
-      const domain = activity.domain || this.extractDomainFromWindow(activity.active_window) || 'Sistema Local'
-      const duration = activity.duracao || 10
+      let domain = activity.domain
+      if (!domain) {
+        domain = extractDomainFromWindow(activity.active_window) || 'Sistema Local'
+      }
+      const duration = activity.duracao || activity.duracao_total || 10
       
       if (!domainMap[domain]) {
         domainMap[domain] = { name: domain, value: 0, activities: 0 }
@@ -167,11 +250,16 @@ export default function Dashboard() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 10)
 
+    console.log('🌐 Dados de domínio processados:', domainData)
+
     // Processar dados por aplicação
     const applicationMap = {}
     filteredActivities.forEach(activity => {
-      const application = activity.application || this.extractApplicationFromWindow(activity.active_window) || 'Aplicação Desconhecida'
-      const duration = activity.duracao || 10
+      let application = activity.application
+      if (!application) {
+        application = extractApplicationFromWindow(activity.active_window) || 'Aplicação Desconhecida'
+      }
+      const duration = activity.duracao || activity.duracao_total || 10
       
       if (!applicationMap[application]) {
         applicationMap[application] = { name: application, value: 0, activities: 0 }
@@ -291,6 +379,13 @@ export default function Dashboard() {
     const recentActivities = filteredActivities
       .sort((a, b) => new Date(b.horario) - new Date(a.horario))
       .slice(0, 10)
+      .map(activity => ({
+        ...activity,
+        domain: activity.domain || extractDomainFromWindow(activity.active_window),
+        application: activity.application || extractApplicationFromWindow(activity.active_window)
+      }))
+
+    console.log('📰 Atividades recentes processadas:', recentActivities.length)
 
     return {
       pieData,
@@ -304,82 +399,18 @@ export default function Dashboard() {
     }
   }, [dateRange, selectedUser, selectedDepartment])
 
-  // Função auxiliar para extrair domínio
-  const extractDomainFromWindow = (activeWindow) => {
-    if (!activeWindow) return null
-    
-    // Tentar encontrar URLs no título da janela
-    const urlMatch = activeWindow.match(/https?:\/\/([^\/\s]+)/)
-    if (urlMatch) {
-      return urlMatch[1]
-    }
-    
-    // Procurar por padrões conhecidos de domínio
-    const domainPatterns = [
-      /- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/,
-      /\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)/,
-      /([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/
-    ]
-    
-    for (const pattern of domainPatterns) {
-      const match = activeWindow.match(pattern)
-      if (match) {
-        return match[1]
-      }
-    }
-    
-    return null
-  }
-
-  // Função auxiliar para extrair aplicação
-  const extractApplicationFromWindow = (activeWindow) => {
-    if (!activeWindow) return null
-    
-    // Aplicações conhecidas
-    const knownApps = {
-      'chrome': 'Google Chrome',
-      'firefox': 'Firefox',
-      'edge': 'Microsoft Edge',
-      'code': 'VS Code',
-      'notepad': 'Notepad',
-      'explorer': 'Windows Explorer',
-      'teams': 'Microsoft Teams',
-      'outlook': 'Outlook',
-      'word': 'Microsoft Word',
-      'excel': 'Microsoft Excel',
-      'powerpoint': 'PowerPoint'
-    }
-    
-    const lowerWindow = activeWindow.toLowerCase()
-    
-    for (const [key, value] of Object.entries(knownApps)) {
-      if (lowerWindow.includes(key)) {
-        return value
-      }
-    }
-    
-    // Tentar extrair o nome da aplicação do início do título
-    const appMatch = activeWindow.match(/^([^-–]+)/)
-    if (appMatch) {
-      const appName = appMatch[1].trim()
-      if (appName.length > 0 && appName.length < 50) {
-        return appName
-      }
-    }
-    
-    return null
-  }
+  
 
   useEffect(() => {
-    if (dashboardData && users.length > 0 && departments.length > 0) {
+    if (dashboardData && dashboardData.rawActivities && users.length > 0 && departments.length > 0) {
       const processedData = processActivities(
-        dashboardData.recentActivities || [],
+        dashboardData.rawActivities,
         users,
         departments
       )
-      setDashboardData(processedData)
+      setDashboardData(prev => ({ ...prev, ...processedData }))
     }
-  }, [dateRange, selectedUser, selectedDepartment, processActivities])
+  }, [dateRange, selectedUser, selectedDepartment, processActivities, dashboardData?.rawActivities])
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600)
