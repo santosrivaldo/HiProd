@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -13,9 +14,20 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  Area,
+  AreaChart
 } from 'recharts'
-import { ChartBarIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
+import { 
+  ChartBarIcon, 
+  ArrowPathIcon, 
+  GlobeAltIcon,
+  ComputerDesktopIcon,
+  ClockIcon,
+  CalendarDaysIcon
+} from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 
 const COLORS = {
@@ -24,6 +36,11 @@ const COLORS = {
   neutral: '#F59E0B',
   idle: '#6B7280'
 }
+
+const CHART_COLORS = [
+  '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', 
+  '#06B6D4', '#F97316', '#84CC16', '#EC4899', '#6B7280'
+]
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -34,6 +51,7 @@ export default function Dashboard() {
   const [selectedDepartment, setSelectedDepartment] = useState('all')
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
+  const [viewMode, setViewMode] = useState('overview') // overview, domains, applications, timeline
 
   const loadDashboardData = useCallback(async () => {
     if (loading) return
@@ -43,7 +61,7 @@ export default function Dashboard() {
       console.log('🔄 Carregando dados do dashboard...')
 
       const [activitiesRes, usersRes, departmentsRes] = await Promise.all([
-        api.get('/atividades?agrupar=true&limite=100'),
+        api.get('/atividades?agrupar=true&limite=500'),
         api.get('/usuarios-monitorados'),
         api.get('/departamentos')
       ])
@@ -66,7 +84,10 @@ export default function Dashboard() {
         timelineData: [],
         userStats: [],
         summary: { productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 },
-        recentActivities: []
+        recentActivities: [],
+        domainData: [],
+        applicationData: [],
+        hourlyData: []
       })
     } finally {
       setLoading(false)
@@ -104,6 +125,7 @@ export default function Dashboard() {
       }
     }
 
+    // Processar summary
     const summary = {
       productive: 0,
       nonproductive: 0,
@@ -128,6 +150,73 @@ export default function Dashboard() {
       }
     })
 
+    // Processar dados por domínio
+    const domainMap = {}
+    filteredActivities.forEach(activity => {
+      const domain = activity.domain || this.extractDomainFromWindow(activity.active_window) || 'Sistema Local'
+      const duration = activity.duracao || 10
+      
+      if (!domainMap[domain]) {
+        domainMap[domain] = { name: domain, value: 0, activities: 0 }
+      }
+      domainMap[domain].value += duration
+      domainMap[domain].activities += activity.eventos_agrupados || 1
+    })
+
+    const domainData = Object.values(domainMap)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+
+    // Processar dados por aplicação
+    const applicationMap = {}
+    filteredActivities.forEach(activity => {
+      const application = activity.application || this.extractApplicationFromWindow(activity.active_window) || 'Aplicação Desconhecida'
+      const duration = activity.duracao || 10
+      
+      if (!applicationMap[application]) {
+        applicationMap[application] = { name: application, value: 0, activities: 0 }
+      }
+      applicationMap[application].value += duration
+      applicationMap[application].activities += activity.eventos_agrupados || 1
+    })
+
+    const applicationData = Object.values(applicationMap)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+
+    // Processar dados por hora
+    const hourlyMap = {}
+    for (let i = 0; i < 24; i++) {
+      hourlyMap[i] = {
+        hour: i,
+        productive: 0,
+        nonproductive: 0,
+        neutral: 0,
+        idle: 0,
+        total: 0
+      }
+    }
+
+    filteredActivities.forEach(activity => {
+      const hour = new Date(activity.horario).getHours()
+      const duration = activity.duracao || 10
+      const produtividade = activity.produtividade || 'neutral'
+      
+      hourlyMap[hour].total += duration
+      if (hourlyMap[hour][produtividade] !== undefined) {
+        hourlyMap[hour][produtividade] += duration
+      } else {
+        if (activity.ociosidade >= 600) {
+          hourlyMap[hour].idle += duration
+        } else {
+          hourlyMap[hour].neutral += duration
+        }
+      }
+    })
+
+    const hourlyData = Object.values(hourlyMap)
+
+    // Dados existentes (pie, timeline, etc.)
     const pieData = [
       { name: 'Produtivo', value: summary.productive, color: COLORS.productive },
       { name: 'Não Produtivo', value: summary.nonproductive, color: COLORS.nonproductive },
@@ -208,9 +297,78 @@ export default function Dashboard() {
       timelineData,
       userStats,
       summary,
-      recentActivities
+      recentActivities,
+      domainData,
+      applicationData,
+      hourlyData
     }
   }, [dateRange, selectedUser, selectedDepartment])
+
+  // Função auxiliar para extrair domínio
+  const extractDomainFromWindow = (activeWindow) => {
+    if (!activeWindow) return null
+    
+    // Tentar encontrar URLs no título da janela
+    const urlMatch = activeWindow.match(/https?:\/\/([^\/\s]+)/)
+    if (urlMatch) {
+      return urlMatch[1]
+    }
+    
+    // Procurar por padrões conhecidos de domínio
+    const domainPatterns = [
+      /- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/,
+      /\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)/,
+      /([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/
+    ]
+    
+    for (const pattern of domainPatterns) {
+      const match = activeWindow.match(pattern)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    return null
+  }
+
+  // Função auxiliar para extrair aplicação
+  const extractApplicationFromWindow = (activeWindow) => {
+    if (!activeWindow) return null
+    
+    // Aplicações conhecidas
+    const knownApps = {
+      'chrome': 'Google Chrome',
+      'firefox': 'Firefox',
+      'edge': 'Microsoft Edge',
+      'code': 'VS Code',
+      'notepad': 'Notepad',
+      'explorer': 'Windows Explorer',
+      'teams': 'Microsoft Teams',
+      'outlook': 'Outlook',
+      'word': 'Microsoft Word',
+      'excel': 'Microsoft Excel',
+      'powerpoint': 'PowerPoint'
+    }
+    
+    const lowerWindow = activeWindow.toLowerCase()
+    
+    for (const [key, value] of Object.entries(knownApps)) {
+      if (lowerWindow.includes(key)) {
+        return value
+      }
+    }
+    
+    // Tentar extrair o nome da aplicação do início do título
+    const appMatch = activeWindow.match(/^([^-–]+)/)
+    if (appMatch) {
+      const appName = appMatch[1].trim()
+      if (appName.length > 0 && appName.length < 50) {
+        return appName
+      }
+    }
+    
+    return null
+  }
 
   useEffect(() => {
     if (dashboardData && users.length > 0 && departments.length > 0) {
@@ -227,6 +385,10 @@ export default function Dashboard() {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     return `${hours}h ${minutes}m`
+  }
+
+  const formatHour = (hour) => {
+    return `${hour.toString().padStart(2, '0')}:00`
   }
 
   if (loading) {
@@ -266,10 +428,11 @@ export default function Dashboard() {
     )
   }
 
-  const { pieData, timelineData, userStats, summary, recentActivities } = dashboardData
+  const { pieData, timelineData, userStats, summary, recentActivities, domainData, applicationData, hourlyData } = dashboardData
 
   return (
     <div className="p-6">
+      {/* Header */}
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
@@ -288,56 +451,99 @@ export default function Dashboard() {
       </div>
 
       {/* Controles */}
-      <div className="mb-6 flex flex-wrap items-center gap-4">
-        <div className="flex items-center space-x-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Período:
-          </label>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(parseInt(e.target.value))}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-          >
-            <option value={1}>Hoje</option>
-            <option value={7}>Últimos 7 dias</option>
-            <option value={30}>Últimos 30 dias</option>
-          </select>
+      <div className="mb-6 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Período:
+            </label>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(parseInt(e.target.value))}
+              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              <option value={1}>Hoje</option>
+              <option value={7}>Últimos 7 dias</option>
+              <option value={30}>Últimos 30 dias</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Usuário:
+            </label>
+            <select
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              <option value="all">Todos os usuários</option>
+              {users.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Departamento:
+            </label>
+            <select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              <option value="all">Todos os departamentos</option>
+              {departments.map(dept => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Visualização:
+            </label>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value)}
+              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              <option value="overview">Visão Geral</option>
+              <option value="domains">Por Domínio</option>
+              <option value="applications">Por Aplicação</option>
+              <option value="timeline">Timeline Diária</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Usuário:
-          </label>
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-          >
-            <option value="all">Todos os usuários</option>
-            {users.map(user => (
-              <option key={user.id} value={user.id}>
-                {user.nome}
-              </option>
+        {/* Tabs de navegação */}
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-8">
+            {[
+              { id: 'overview', name: 'Visão Geral', icon: ChartBarIcon },
+              { id: 'domains', name: 'Domínios', icon: GlobeAltIcon },
+              { id: 'applications', name: 'Aplicações', icon: ComputerDesktopIcon },
+              { id: 'timeline', name: 'Timeline', icon: CalendarDaysIcon }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setViewMode(tab.id)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                  viewMode === tab.id
+                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <tab.icon className="h-4 w-4" />
+                <span>{tab.name}</span>
+              </button>
             ))}
-          </select>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Departamento:
-          </label>
-          <select
-            value={selectedDepartment}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-          >
-            <option value="all">Todos os departamentos</option>
-            {departments.map(dept => (
-              <option key={dept.id} value={dept.id}>
-                {dept.nome}
-              </option>
-            ))}
-          </select>
+          </nav>
         </div>
       </div>
 
@@ -420,10 +626,10 @@ export default function Dashboard() {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Tempo Ocioso
+                    Tempo Total
                   </dt>
                   <dd className="text-lg font-medium text-gray-900 dark:text-white">
-                    {formatTime(summary.idle)}
+                    {formatTime(summary.total)}
                   </dd>
                 </dl>
               </div>
@@ -432,65 +638,279 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfico de Pizza */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Distribuição de Tempo
-          </h2>
-          {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatTime(value)} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-              Nenhum dado disponível
-            </div>
-          )}
-        </div>
+      {/* Conteúdo baseado na visualização selecionada */}
+      {viewMode === 'overview' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Gráfico de Pizza */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Distribuição de Tempo por Produtividade
+            </h2>
+            {pieData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatTime(value)} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
 
-        {/* Gráfico de Barras */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Atividade por Dia
-          </h2>
-          {timelineData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={timelineData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM')} />
-                <YAxis tickFormatter={formatTime} />
-                <Tooltip formatter={(value) => formatTime(value)} />
-                <Legend />
-                <Bar dataKey="productive" stackId="a" fill={COLORS.productive} name="Produtivo" />
-                <Bar dataKey="nonproductive" stackId="a" fill={COLORS.nonproductive} name="Não Produtivo" />
-                <Bar dataKey="neutral" stackId="a" fill={COLORS.neutral} name="Neutro" />
-                <Bar dataKey="idle" stackId="a" fill={COLORS.idle} name="Ocioso" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-              Nenhum dado disponível
-            </div>
-          )}
+          {/* Timeline por Hora */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Distribuição por Hora do Dia
+            </h2>
+            {hourlyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={hourlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="hour" 
+                    tickFormatter={formatHour}
+                    interval={2}
+                  />
+                  <YAxis tickFormatter={formatTime} />
+                  <Tooltip 
+                    labelFormatter={(hour) => `${formatHour(hour)}`}
+                    formatter={(value, name) => [formatTime(value), name]}
+                  />
+                  <Legend />
+                  <Area 
+                    type="monotone" 
+                    dataKey="total" 
+                    stackId="1" 
+                    stroke="#3B82F6" 
+                    fill="#3B82F6" 
+                    fillOpacity={0.6}
+                    name="Total"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {viewMode === 'domains' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Top Domínios */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Top 10 Domínios por Tempo
+            </h2>
+            {domainData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={domainData} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" tickFormatter={formatTime} />
+                  <YAxis dataKey="name" type="category" width={120} />
+                  <Tooltip 
+                    formatter={(value, name) => [formatTime(value), name]}
+                    labelFormatter={(label) => `Domínio: ${label}`}
+                  />
+                  <Bar dataKey="value" fill="#3B82F6" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
+
+          {/* Domínios em Pizza */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Distribuição por Domínios
+            </h2>
+            {domainData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <PieChart>
+                  <Pie
+                    data={domainData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={120}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {domainData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatTime(value)} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'applications' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Top Aplicações */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Top 10 Aplicações por Tempo
+            </h2>
+            {applicationData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={applicationData} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" tickFormatter={formatTime} />
+                  <YAxis dataKey="name" type="category" width={120} />
+                  <Tooltip 
+                    formatter={(value, name) => [formatTime(value), name]}
+                    labelFormatter={(label) => `Aplicação: ${label}`}
+                  />
+                  <Bar dataKey="value" fill="#10B981" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
+
+          {/* Aplicações em Pizza */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Distribuição por Aplicações
+            </h2>
+            {applicationData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <PieChart>
+                  <Pie
+                    data={applicationData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={120}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {applicationData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatTime(value)} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'timeline' && (
+        <div className="grid grid-cols-1 gap-6 mb-6">
+          {/* Timeline Diária Completa */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Timeline Diária de Atividades
+            </h2>
+            {timelineData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={timelineData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM')} />
+                  <YAxis tickFormatter={formatTime} />
+                  <Tooltip formatter={(value) => formatTime(value)} />
+                  <Legend />
+                  <Bar dataKey="productive" stackId="a" fill={COLORS.productive} name="Produtivo" />
+                  <Bar dataKey="nonproductive" stackId="a" fill={COLORS.nonproductive} name="Não Produtivo" />
+                  <Bar dataKey="neutral" stackId="a" fill={COLORS.neutral} name="Neutro" />
+                  <Bar dataKey="idle" stackId="a" fill={COLORS.idle} name="Ocioso" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
+
+          {/* Distribuição Horária */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Padrão de Uso por Hora
+            </h2>
+            {hourlyData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={hourlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="hour" 
+                    tickFormatter={formatHour}
+                    interval={2}
+                  />
+                  <YAxis tickFormatter={formatTime} />
+                  <Tooltip 
+                    labelFormatter={(hour) => `${formatHour(hour)}`}
+                    formatter={(value, name) => [formatTime(value), name]}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="productive" 
+                    stroke={COLORS.productive} 
+                    strokeWidth={2}
+                    name="Produtivo"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="nonproductive" 
+                    stroke={COLORS.nonproductive} 
+                    strokeWidth={2}
+                    name="Não Produtivo"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="neutral" 
+                    stroke={COLORS.neutral} 
+                    strokeWidth={2}
+                    name="Neutro"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
+                Nenhum dado disponível
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Atividades Recentes */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
@@ -511,6 +931,16 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-500 dark:text-gray-300">
                     {activity.usuario_monitorado_nome} • {format(new Date(activity.horario), 'dd/MM/yyyy HH:mm')}
                   </p>
+                  {activity.domain && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      🌐 {activity.domain}
+                    </p>
+                  )}
+                  {activity.application && (
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      💻 {activity.application}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center space-x-2">
                   <span

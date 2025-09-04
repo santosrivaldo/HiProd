@@ -2,7 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
-import { MagnifyingGlassIcon, FunnelIcon, PrinterIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { 
+  MagnifyingGlassIcon, 
+  FunnelIcon, 
+  PrinterIcon, 
+  ArrowDownTrayIcon,
+  TagIcon,
+  SparklesIcon,
+  PlusIcon,
+  ChartBarIcon
+} from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 import useIntersectionObserver from '../hooks/useIntersectionObserver'
 import { exportToCSV, printData, formatTime } from '../utils/exportUtils'
@@ -32,16 +41,32 @@ export default function ActivityManagement() {
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false)
+  const [tagAnalysis, setTagAnalysis] = useState(null)
+  const [suggestedTags, setSuggestedTags] = useState([])
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false)
+  const [existingTags, setExistingTags] = useState([])
   
   const [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
 
   useEffect(() => {
     fetchData(1, true)
+    fetchExistingTags()
   }, [agruparAtividades])
 
   useEffect(() => {
     applyFilters()
   }, [activities, searchTerm, dateFilter, typeFilter, userFilter])
+
+  const fetchExistingTags = async () => {
+    try {
+      const response = await api.get('/tags')
+      setExistingTags(response.data || [])
+    } catch (error) {
+      console.error('Erro ao buscar tags existentes:', error)
+      setExistingTags([])
+    }
+  }
 
   const fetchData = async (page = 1, reset = false) => {
     try {
@@ -213,6 +238,271 @@ export default function ActivityManagement() {
     } catch (error) {
       console.error('Erro ao atualizar categoria:', error)
       setMessage('Erro ao atualizar categoria')
+      setTimeout(() => setMessage(''), 3000)
+    }
+  }
+
+  const analyzeActivityPatterns = async () => {
+    setLoadingAnalysis(true)
+    try {
+      // Analisar padrões nas atividades carregadas
+      const patterns = analyzePatterns(filteredActivities)
+      setTagAnalysis(patterns)
+      
+      // Gerar sugestões de tags baseadas nos padrões
+      const suggestions = generateTagSuggestions(patterns, existingTags)
+      setSuggestedTags(suggestions)
+      
+      setShowTagSuggestions(true)
+      setMessage('Análise de padrões concluída! Verifique as sugestões de tags.')
+      setTimeout(() => setMessage(''), 5000)
+    } catch (error) {
+      console.error('Erro ao analisar padrões:', error)
+      setMessage('Erro ao analisar padrões das atividades')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setLoadingAnalysis(false)
+    }
+  }
+
+  const analyzePatterns = (activities) => {
+    const patterns = {
+      domains: {},
+      applications: {},
+      keywords: {},
+      timePatterns: {},
+      userBehavior: {}
+    }
+
+    activities.forEach(activity => {
+      // Análise de domínios
+      const domain = extractDomainFromWindow(activity.active_window)
+      if (domain) {
+        patterns.domains[domain] = (patterns.domains[domain] || 0) + 1
+      }
+
+      // Análise de aplicações
+      const app = extractApplicationFromWindow(activity.active_window)
+      if (app) {
+        patterns.applications[app] = (patterns.applications[app] || 0) + 1
+      }
+
+      // Análise de palavras-chave
+      const keywords = extractKeywordsFromWindow(activity.active_window)
+      keywords.forEach(keyword => {
+        patterns.keywords[keyword] = (patterns.keywords[keyword] || 0) + 1
+      })
+
+      // Análise temporal
+      const hour = new Date(activity.horario).getHours()
+      const timeSlot = getTimeSlot(hour)
+      patterns.timePatterns[timeSlot] = (patterns.timePatterns[timeSlot] || 0) + 1
+
+      // Análise por usuário
+      const userId = activity.usuario_monitorado_id
+      if (!patterns.userBehavior[userId]) {
+        patterns.userBehavior[userId] = {
+          name: activity.usuario_monitorado_nome,
+          productive: 0,
+          nonproductive: 0,
+          neutral: 0,
+          total: 0
+        }
+      }
+      
+      patterns.userBehavior[userId].total++
+      const produtividade = activity.produtividade || 'neutral'
+      if (patterns.userBehavior[userId][produtividade] !== undefined) {
+        patterns.userBehavior[userId][produtividade]++
+      }
+    })
+
+    return patterns
+  }
+
+  const generateTagSuggestions = (patterns, existingTags) => {
+    const suggestions = []
+    const existingTagNames = existingTags.map(tag => tag.nome.toLowerCase())
+
+    // Sugestões baseadas em domínios populares
+    Object.entries(patterns.domains)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .forEach(([domain, count]) => {
+        const tagName = domain.replace(/\./g, '-')
+        if (!existingTagNames.includes(tagName.toLowerCase()) && count > 2) {
+          suggestions.push({
+            nome: tagName,
+            tipo: 'domain',
+            descricao: `Atividades relacionadas ao domínio ${domain}`,
+            cor: '#3B82F6',
+            produtividade: 'neutral',
+            confidence: Math.min(count / 10, 1),
+            pattern: domain,
+            occurrences: count
+          })
+        }
+      })
+
+    // Sugestões baseadas em aplicações
+    Object.entries(patterns.applications)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .forEach(([app, count]) => {
+        const tagName = app.toLowerCase().replace(/\s+/g, '-')
+        if (!existingTagNames.includes(tagName) && count > 2) {
+          let produtividade = 'neutral'
+          if (app.includes('Code') || app.includes('Development')) {
+            produtividade = 'productive'
+          } else if (app.includes('Social') || app.includes('Game')) {
+            produtividade = 'nonproductive'
+          }
+
+          suggestions.push({
+            nome: tagName,
+            tipo: 'application',
+            descricao: `Atividades na aplicação ${app}`,
+            cor: produtividade === 'productive' ? '#10B981' : produtividade === 'nonproductive' ? '#EF4444' : '#F59E0B',
+            produtividade,
+            confidence: Math.min(count / 10, 1),
+            pattern: app,
+            occurrences: count
+          })
+        }
+      })
+
+    // Sugestões baseadas em palavras-chave
+    Object.entries(patterns.keywords)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 10)
+      .forEach(([keyword, count]) => {
+        if (!existingTagNames.includes(keyword.toLowerCase()) && count > 3 && keyword.length > 3) {
+          suggestions.push({
+            nome: keyword,
+            tipo: 'keyword',
+            descricao: `Atividades relacionadas a "${keyword}"`,
+            cor: '#8B5CF6',
+            produtividade: 'neutral',
+            confidence: Math.min(count / 20, 1),
+            pattern: keyword,
+            occurrences: count
+          })
+        }
+      })
+
+    return suggestions.sort((a, b) => b.confidence - a.confidence)
+  }
+
+  const extractDomainFromWindow = (activeWindow) => {
+    if (!activeWindow) return null
+    
+    const urlMatch = activeWindow.match(/https?:\/\/([^\/\s]+)/)
+    if (urlMatch) {
+      return urlMatch[1]
+    }
+    
+    const domainPatterns = [
+      /- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/,
+      /\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)/,
+      /([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/
+    ]
+    
+    for (const pattern of domainPatterns) {
+      const match = activeWindow.match(pattern)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    return null
+  }
+
+  const extractApplicationFromWindow = (activeWindow) => {
+    if (!activeWindow) return null
+    
+    const knownApps = {
+      'chrome': 'Google Chrome',
+      'firefox': 'Firefox',
+      'edge': 'Microsoft Edge',
+      'code': 'VS Code',
+      'visual studio': 'Visual Studio',
+      'notepad': 'Notepad',
+      'explorer': 'Windows Explorer',
+      'teams': 'Microsoft Teams',
+      'outlook': 'Outlook',
+      'word': 'Microsoft Word',
+      'excel': 'Microsoft Excel',
+      'powerpoint': 'PowerPoint',
+      'slack': 'Slack',
+      'discord': 'Discord',
+      'whatsapp': 'WhatsApp',
+      'telegram': 'Telegram'
+    }
+    
+    const lowerWindow = activeWindow.toLowerCase()
+    
+    for (const [key, value] of Object.entries(knownApps)) {
+      if (lowerWindow.includes(key)) {
+        return value
+      }
+    }
+    
+    const appMatch = activeWindow.match(/^([^-–]+)/)
+    if (appMatch) {
+      const appName = appMatch[1].trim()
+      if (appName.length > 0 && appName.length < 50) {
+        return appName
+      }
+    }
+    
+    return null
+  }
+
+  const extractKeywordsFromWindow = (activeWindow) => {
+    if (!activeWindow) return []
+    
+    const text = activeWindow.toLowerCase()
+    const commonWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'can', 'may', 'might', 'must', 'shall', 'this', 'that', 'these', 'those', 'a', 'an', 'it', 'he', 'she', 'they', 'we', 'you', 'i', 'me', 'him', 'her', 'them', 'us']
+    
+    const words = text.match(/\b[a-zA-Z]{4,}\b/g) || []
+    
+    return words.filter(word => 
+      !commonWords.includes(word) && 
+      word.length >= 4 && 
+      word.length <= 20 &&
+      !/^\d+$/.test(word)
+    )
+  }
+
+  const getTimeSlot = (hour) => {
+    if (hour >= 6 && hour < 12) return 'manhã'
+    if (hour >= 12 && hour < 18) return 'tarde'
+    if (hour >= 18 && hour < 22) return 'noite'
+    return 'madrugada'
+  }
+
+  const createTagFromSuggestion = async (suggestion) => {
+    try {
+      const tagData = {
+        nome: suggestion.nome,
+        descricao: suggestion.descricao,
+        cor: suggestion.cor,
+        produtividade: suggestion.produtividade
+      }
+
+      await api.post('/tags', tagData)
+      
+      // Atualizar lista de tags existentes
+      await fetchExistingTags()
+      
+      // Remover da lista de sugestões
+      setSuggestedTags(prev => prev.filter(s => s.nome !== suggestion.nome))
+      
+      setMessage(`Tag "${suggestion.nome}" criada com sucesso!`)
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Erro ao criar tag:', error)
+      setMessage(`Erro ao criar tag "${suggestion.nome}"`)
       setTimeout(() => setMessage(''), 3000)
     }
   }
@@ -390,6 +680,22 @@ export default function ActivityManagement() {
             </label>
             <div className="flex space-x-2">
               <button
+                onClick={analyzeActivityPatterns}
+                disabled={loadingAnalysis || filteredActivities.length === 0}
+                className="inline-flex items-center px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 disabled:opacity-50"
+              >
+                <SparklesIcon className="h-4 w-4 mr-2" />
+                {loadingAnalysis ? 'Analisando...' : 'Analisar Padrões'}
+              </button>
+              <button
+                onClick={() => setShowTagSuggestions(!showTagSuggestions)}
+                disabled={suggestedTags.length === 0}
+                className="inline-flex items-center px-3 py-2 bg-yellow-600 text-white text-sm font-medium rounded-md hover:bg-yellow-700 disabled:opacity-50"
+              >
+                <TagIcon className="h-4 w-4 mr-2" />
+                Sugestões de Tags ({suggestedTags.length})
+              </button>
+              <button
                 onClick={handleExportCSV}
                 disabled={loading || filteredActivities.length === 0}
                 className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:opacity-50"
@@ -416,6 +722,151 @@ export default function ActivityManagement() {
           </div>
         </div>
       </div>
+
+      {/* Painel de Sugestões de Tags */}
+      {showTagSuggestions && suggestedTags.length > 0 && (
+        <div className="mb-6 bg-white dark:bg-gray-800 shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                Sugestões de Tags Baseadas em Padrões
+              </h3>
+              <button
+                onClick={() => setShowTagSuggestions(false)}
+                className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-400"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {suggestedTags.map((suggestion, index) => (
+                <div 
+                  key={index}
+                  className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div 
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: suggestion.cor }}
+                      ></div>
+                      <h4 className="font-medium text-gray-900 dark:text-white">
+                        {suggestion.nome}
+                      </h4>
+                    </div>
+                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded">
+                      {suggestion.tipo}
+                    </span>
+                  </div>
+                  
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    {suggestion.descricao}
+                  </p>
+                  
+                  <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    <span>Padrão: {suggestion.pattern}</span>
+                    <span>{suggestion.occurrences} ocorrências</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      suggestion.produtividade === 'productive' 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200'
+                        : suggestion.produtividade === 'nonproductive'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200'
+                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200'
+                    }`}>
+                      {suggestion.produtividade}
+                    </span>
+                    
+                    <button
+                      onClick={() => createTagFromSuggestion(suggestion)}
+                      className="inline-flex items-center px-2 py-1 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700"
+                    >
+                      <PlusIcon className="h-3 w-3 mr-1" />
+                      Criar Tag
+                    </button>
+                  </div>
+                  
+                  <div className="mt-2">
+                    <div className="bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                      <div 
+                        className="bg-indigo-600 h-2 rounded-full" 
+                        style={{ width: `${suggestion.confidence * 100}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Confiança: {Math.round(suggestion.confidence * 100)}%
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Painel de Análise de Padrões */}
+      {tagAnalysis && showTagSuggestions && (
+        <div className="mb-6 bg-white dark:bg-gray-800 shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+              Análise de Padrões das Atividades
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <ChartBarIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100">
+                    Domínios Únicos
+                  </h4>
+                </div>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {Object.keys(tagAnalysis.domains).length}
+                </p>
+              </div>
+              
+              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <ComputerDesktopIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <h4 className="font-medium text-green-900 dark:text-green-100">
+                    Aplicações
+                  </h4>
+                </div>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {Object.keys(tagAnalysis.applications).length}
+                </p>
+              </div>
+              
+              <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <TagIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <h4 className="font-medium text-purple-900 dark:text-purple-100">
+                    Palavras-chave
+                  </h4>
+                </div>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  {Object.keys(tagAnalysis.keywords).length}
+                </p>
+              </div>
+              
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
+                <div className="flex items-center space-x-2 mb-2">
+                  <SparklesIcon className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  <h4 className="font-medium text-yellow-900 dark:text-yellow-100">
+                    Tags Sugeridas
+                  </h4>
+                </div>
+                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                  {suggestedTags.length}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Activities Table */}
       <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
