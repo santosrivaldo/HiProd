@@ -146,7 +146,7 @@ def init_db():
 
             # Adicionar colunas de horário de trabalho se não existirem
             columns_to_add = [
-                ('escala_trabalho_id', "INTEGER REFERENCES escolas_trabalho(id)"),
+                ('escala_trabalho_id', "INTEGER REFERENCES escalas_trabalho(id)"),
                 ('horario_inicio_trabalho', "TIME DEFAULT '08:00:00'"),
                 ('horario_fim_trabalho', "TIME DEFAULT '18:00:00'"),
                 ('dias_trabalho', "VARCHAR(20) DEFAULT '1,2,3,4,5'"),
