@@ -125,7 +125,7 @@ def get_monitored_users(current_user):
                         INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
                         RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-                    ''', (nome, departamento_id, cargo, escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
+                    ''', (nome_usuario, None, 'Usuário', escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
 
                     novo_usuario = db.cursor.fetchone()
                     print(f"✅ Usuário monitorado criado: {nome_usuario} (ID: {novo_usuario[0]})")

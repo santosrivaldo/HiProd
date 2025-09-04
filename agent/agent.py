@@ -1,4 +1,3 @@
-
 import time
 import psutil
 import requests
@@ -70,14 +69,14 @@ def get_chrome_active_tab_url():
         try {
             Add-Type -AssemblyName UIAutomationClient
             $automation = [System.Windows.Automation.AutomationElement]::RootElement
-            
+
             # Procurar janela ativa do Chrome
             $activeWindow = $automation.FindFirst([System.Windows.Automation.TreeScope]::Children, 
                 [System.Windows.Automation.AndCondition]::new(@(
                     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, "Chrome_WidgetWin_1"),
                     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, (Get-Process -Name "chrome" | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object -First 1).Id)
                 )))
-            
+
             if ($activeWindow) {
                 # Buscar barra de endereço
                 $addressBar = $activeWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
@@ -85,7 +84,7 @@ def get_chrome_active_tab_url():
                         [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit),
                         [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, "L2")
                     )))
-                
+
                 if ($addressBar) {
                     $url = $addressBar.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)
                     if ($url -and $url.StartsWith("http")) {
@@ -97,19 +96,19 @@ def get_chrome_active_tab_url():
             # Silencioso se falhar
         }
         '''
-        
+
         result = subprocess.run(['powershell', '-Command', ps_script], 
                              capture_output=True, text=True, timeout=2)
-        
+
         if result.returncode == 0 and result.stdout.strip():
             url = result.stdout.strip()
             if url.startswith('http'):
                 parsed = urlparse(url)
                 return parsed.netloc
-                
+
     except Exception as e:
         print(f"⚠️ Erro ao capturar URL do Chrome: {e}")
-    
+
     return None
 
 
@@ -122,7 +121,7 @@ def extract_domain_from_title(window_title):
             r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,})',
             r'(?:https?://)?([a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+)',
         ]
-        
+
         for pattern in domain_patterns:
             match = re.search(pattern, window_title.lower())
             if match:
@@ -130,7 +129,7 @@ def extract_domain_from_title(window_title):
                 # Validar se parece um domínio real
                 if '.' in domain and len(domain.split('.')) >= 2:
                     return domain
-        
+
         # Padrões específicos para sites conhecidos
         known_patterns = {
             'youtube': 'youtube.com',
@@ -144,15 +143,15 @@ def extract_domain_from_title(window_title):
             'wikipedia': 'wikipedia.org',
             'amazon': 'amazon.com',
         }
-        
+
         title_lower = window_title.lower()
         for key, domain in known_patterns.items():
             if key in title_lower:
                 return domain
-                
+
     except Exception as e:
         print(f"⚠️ Erro ao extrair domínio do título: {e}")
-    
+
     return None
 
 
@@ -161,11 +160,11 @@ def get_active_window_info():
     try:
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
-        
+
         # Identificar aplicação primeiro
         application = get_application_name(window_title)
         domain = None
-        
+
         # Se for navegador, tentar capturar URL real
         if 'Chrome' in application:
             domain = get_chrome_active_tab_url()
@@ -176,7 +175,7 @@ def get_active_window_info():
                 domain = extract_domain_from_title(window_title)
                 if domain:
                     print(f"🔍 Domínio extraído do título: {domain}")
-        
+
         # Para aplicações não-navegador, usar o nome da aplicação como "domínio"
         elif application != 'Sistema Local':
             # Para aplicações desktop, não usar domínio web
@@ -187,13 +186,13 @@ def get_active_window_info():
             domain = extract_domain_from_title(window_title)
             if domain:
                 print(f"🔍 Domínio extraído do título: {domain}")
-        
+
         return {
             'window_title': window_title,
             'domain': domain,
             'application': application
         }
-        
+
     except Exception as e:
         print(f"❌ Erro ao capturar informações da janela: {e}")
         return {
@@ -210,11 +209,11 @@ def get_application_name(window_title):
         import win32process
         window = win32gui.GetForegroundWindow()
         _, process_id = win32process.GetWindowThreadProcessId(window)
-        
+
         try:
             process = psutil.Process(process_id)
             process_name = process.name().lower()
-            
+
             # Mapear nomes de processo para aplicações
             process_mapping = {
                 'chrome.exe': 'Google Chrome',
@@ -236,21 +235,21 @@ def get_application_name(window_title):
                 'sublime_text.exe': 'Sublime Text',
                 'atom.exe': 'Atom'
             }
-            
+
             if process_name in process_mapping:
                 return process_mapping[process_name]
-                
+
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
-            
+
     except ImportError:
         pass  # win32process não disponível
     except Exception:
         pass
-    
+
     # Fallback: usar título da janela
     title_lower = window_title.lower()
-    
+
     app_patterns = {
         'Google Chrome': ['chrome', 'google chrome'],
         'Firefox': ['firefox', 'mozilla firefox'],
@@ -267,12 +266,12 @@ def get_application_name(window_title):
         'WhatsApp': ['whatsapp'],
         'Telegram': ['telegram'],
     }
-    
+
     for app, patterns in app_patterns.items():
         for pattern in patterns:
             if pattern in title_lower:
                 return app
-    
+
     return 'Sistema Local'
 
 
@@ -356,34 +355,34 @@ def esta_em_horario_trabalho(usuario_nome, tz):
                 'dias_trabalho': '1,2,3,4,5',
                 'monitoramento_ativo': True
             }
-        
+
         # Se o monitoramento não está ativo, não enviar atividades
         if not config.get('monitoramento_ativo', True):
             print(f"⏸️ Monitoramento desativado para o usuário {usuario_nome}")
             return False
-        
+
         agora = datetime.now(tz)
-        
+
         # Verificar se é um dia de trabalho (1=Segunda, 7=Domingo)
         dia_semana = agora.isoweekday()
         dias_trabalho = [int(d) for d in config['dias_trabalho'].split(',')]
-        
+
         if dia_semana not in dias_trabalho:
             print(f"⏰ Fora dos dias de trabalho: hoje é {dia_semana}, dias de trabalho: {dias_trabalho}")
             return False
-        
+
         # Verificar se está no horário de trabalho
         horario_inicio = dt_time.fromisoformat(config['horario_inicio_trabalho'])
         horario_fim = dt_time.fromisoformat(config['horario_fim_trabalho'])
         hora_atual = agora.time()
-        
+
         if horario_inicio <= hora_atual <= horario_fim:
             print(f"✅ Dentro do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
             return True
         else:
             print(f"⏰ Fora do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
             return False
-            
+
     except Exception as e:
         print(f"❌ Erro ao verificar horário de trabalho: {e}")
         # Em caso de erro, permitir o envio para não quebrar o funcionamento
@@ -421,7 +420,7 @@ def main():
 
     last_usuario_nome = get_logged_user()
     usuario_monitorado_id = get_usuario_monitorado_id(last_usuario_nome)
-    
+
     # Contador para verificação periódica do usuário
     verificacao_contador = 0
 
@@ -465,7 +464,7 @@ def main():
             current_window_info['domain'] != last_window_info['domain'] or
             current_window_info['application'] != last_window_info['application']
         )
-        
+
         if window_changed:
             # Log da mudança para debug
             if current_window_info['window_title'] != last_window_info['window_title']:
@@ -474,7 +473,7 @@ def main():
                 print(f"🌐 Mudança de domínio: {last_window_info['domain']} -> {current_window_info['domain']}")
             if current_window_info['application'] != last_window_info['application']:
                 print(f"📱 Mudança de aplicação: {last_window_info['application']} -> {current_window_info['application']}")
-                
+
             ociosidade = 0
             last_window_info = current_window_info
         else:
@@ -485,7 +484,7 @@ def main():
             if usuario_monitorado_id is None:
                 print("⚠️ ID do usuário monitorado é None, tentando recriar...")
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
-                
+
             if usuario_monitorado_id is not None:
                 registro = {
                     'usuario_monitorado_id': usuario_monitorado_id,
