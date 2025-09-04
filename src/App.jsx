@@ -11,7 +11,7 @@ import TagManagement from './components/TagManagement'
 import ActivityManagement from './components/ActivityManagement'
 import WorkScheduleManagement from './components/WorkScheduleManagement'
 import Settings from './components/Settings'
-import { Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 
 function AppContent() {
@@ -21,27 +21,35 @@ function AppContent() {
     return <LoadingSpinner size="xl" text="Carregando..." fullScreen />
   }
 
+  if (!isAuthenticated) {
+    return <Login />
+  }
+
   return (
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/users" element={<UserManagement />} />
-      <Route path="/tags" element={<TagManagement />} />
-      <Route path="/activities" element={<ActivityManagement />} />
-      <Route path="/schedules" element={<WorkScheduleManagement />} />
-      <Route path="/settings" element={<Settings />} />
-    </Routes>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/users" element={<UserManagement />} />
+        <Route path="/tags" element={<TagManagement />} />
+        <Route path="/activities" element={<ActivityManagement />} />
+        <Route path="/schedules" element={<WorkScheduleManagement />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    </Layout>
   )
 }
 
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-          <AppContent />
-        </div>
-      </AuthProvider>
-    </ThemeProvider>
+    <BrowserRouter>
+      <ThemeProvider>
+        <AuthProvider>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+            <AppContent />
+          </div>
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
   )
 }
 
