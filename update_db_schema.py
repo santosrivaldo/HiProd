@@ -69,8 +69,8 @@ def update_database_schema():
                 ON atividades(domain);
             """)
             print("✅ Índice para 'domain' criado")
-        except:
-            print("⏭️ Índice para 'domain' já existe")
+        except Exception as e:
+            print(f"⏭️ Erro ao criar índice domain: {e}")
         
         try:
             cursor.execute("""
@@ -78,8 +78,8 @@ def update_database_schema():
                 ON atividades(application);
             """)
             print("✅ Índice para 'application' criado")
-        except:
-            print("⏭️ Índice para 'application' já existe")
+        except Exception as e:
+            print(f"⏭️ Erro ao criar índice application: {e}")
         
         # Commit das mudanças
         conn.commit()
@@ -90,6 +90,7 @@ def update_database_schema():
         
     except Exception as e:
         print(f"❌ Erro ao atualizar schema: {e}")
+        raise
 
 if __name__ == "__main__":
     update_database_schema()
