@@ -57,10 +57,10 @@ if __name__ == '__main__':
         # Inicializar pool de conexões
         init_connection_pool()
 
-        print(f"🚀 Servidor rodando em http://0.0.0.0:5000")
+        print(f"🚀 Servidor rodando em http://0.0.0.0:8000")
         print(f"🔌 Pool de conexões ativo com {Config.MIN_CONNECTIONS}-{Config.MAX_CONNECTIONS} conexões")
 
-        app.run(host='0.0.0.0', port=5000, debug=True)
+        app.run(host='0.0.0.0', port=8000, debug=True)
 
     except psycopg2.OperationalError as e:
         print(f"❌ Erro de conexão com o banco PostgreSQL: {e}")

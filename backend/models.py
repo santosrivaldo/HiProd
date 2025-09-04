@@ -129,6 +129,26 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             ''')
+            
+            # Adicionar colunas de horário de trabalho se não existirem
+            columns_to_add = [
+                ('horario_inicio_trabalho', "TIME DEFAULT '09:00:00'"),
+                ('horario_fim_trabalho', "TIME DEFAULT '18:00:00'"),
+                ('dias_trabalho', "VARCHAR(20) DEFAULT '1,2,3,4,5'"),
+                ('monitoramento_ativo', "BOOLEAN DEFAULT TRUE")
+            ]
+            
+            for column_name, column_type in columns_to_add:
+                db.cursor.execute(f"""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='usuarios_monitorados' AND column_name='{column_name}';
+                """)
+                
+                if not db.cursor.fetchone():
+                    print(f"🔧 Adicionando coluna {column_name} à tabela usuarios_monitorados...")
+                    db.cursor.execute(f"ALTER TABLE usuarios_monitorados ADD COLUMN {column_name} {column_type};")
+                    print(f"✅ Coluna {column_name} adicionada com sucesso!")
 
             # Tabela de categorias de aplicações
             db.cursor.execute('''

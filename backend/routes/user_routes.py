@@ -60,6 +60,7 @@ def get_monitored_users(current_user):
                 # Primeiro, tentar encontrar o usuário
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                           um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
                            d.nome as departamento_nome, d.cor as departamento_cor
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
@@ -71,10 +72,10 @@ def get_monitored_users(current_user):
                 if usuario_existente:
                     # Usuário existe, retornar seus dados
                     departamento_info = None
-                    if len(usuario_existente) > 7 and usuario_existente[7]:
+                    if len(usuario_existente) > 11 and usuario_existente[11]:
                         departamento_info = {
-                            'nome': usuario_existente[7],
-                            'cor': usuario_existente[8] if len(usuario_existente) > 8 else None
+                            'nome': usuario_existente[11],
+                            'cor': usuario_existente[12] if len(usuario_existente) > 12 else None
                         }
 
                     result = {
@@ -85,6 +86,10 @@ def get_monitored_users(current_user):
                         'ativo': usuario_existente[4] if len(usuario_existente) > 4 else True,
                         'created_at': usuario_existente[5].isoformat() if usuario_existente[5] else None,
                         'updated_at': usuario_existente[6].isoformat() if len(usuario_existente) > 6 and usuario_existente[6] else None,
+                        'horario_inicio_trabalho': str(usuario_existente[7]) if len(usuario_existente) > 7 and usuario_existente[7] else '09:00:00',
+                        'horario_fim_trabalho': str(usuario_existente[8]) if len(usuario_existente) > 8 and usuario_existente[8] else '18:00:00',
+                        'dias_trabalho': usuario_existente[9] if len(usuario_existente) > 9 and usuario_existente[9] else '1,2,3,4,5',
+                        'monitoramento_ativo': usuario_existente[10] if len(usuario_existente) > 10 and usuario_existente[10] is not None else True,
                         'departamento': departamento_info,
                         'created': False
                     }
@@ -110,6 +115,10 @@ def get_monitored_users(current_user):
                         'ativo': novo_usuario[4] if len(novo_usuario) > 4 else True,
                         'created_at': novo_usuario[5].isoformat() if novo_usuario[5] else None,
                         'updated_at': novo_usuario[6].isoformat() if len(novo_usuario) > 6 and novo_usuario[6] else None,
+                        'horario_inicio_trabalho': '09:00:00',
+                        'horario_fim_trabalho': '18:00:00',
+                        'dias_trabalho': '1,2,3,4,5',
+                        'monitoramento_ativo': True,
                         'departamento': None,
                         'created': True
                     }
@@ -137,6 +146,7 @@ def get_monitored_users(current_user):
             with DatabaseConnection() as db:
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                           um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
                            d.nome as departamento_nome, d.cor as departamento_cor
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
@@ -151,10 +161,10 @@ def get_monitored_users(current_user):
                         try:
                             # Verificar se campos do departamento existem
                             departamento_info = None
-                            if len(usuario) > 7 and usuario[7]:
+                            if len(usuario) > 11 and usuario[11]:
                                 departamento_info = {
-                                    'nome': usuario[7],
-                                    'cor': usuario[8] if len(usuario) > 8 else None
+                                    'nome': usuario[11],
+                                    'cor': usuario[12] if len(usuario) > 12 else None
                                 }
 
                             result.append({
@@ -165,6 +175,10 @@ def get_monitored_users(current_user):
                                 'ativo': usuario[4] if len(usuario) > 4 else True,
                                 'created_at': usuario[5].isoformat() if usuario[5] else None,
                                 'updated_at': usuario[6].isoformat() if len(usuario) > 6 and usuario[6] else None,
+                                'horario_inicio_trabalho': str(usuario[7]) if len(usuario) > 7 and usuario[7] else '09:00:00',
+                                'horario_fim_trabalho': str(usuario[8]) if len(usuario) > 8 and usuario[8] else '18:00:00',
+                                'dias_trabalho': usuario[9] if len(usuario) > 9 and usuario[9] else '1,2,3,4,5',
+                                'monitoramento_ativo': usuario[10] if len(usuario) > 10 and usuario[10] is not None else True,
                                 'departamento': departamento_info
                             })
                         except (IndexError, AttributeError) as e:
@@ -268,6 +282,18 @@ def update_monitored_user(current_user, user_id):
             if 'ativo' in data:
                 update_fields.append('ativo = %s')
                 update_values.append(data['ativo'])
+            if 'horario_inicio_trabalho' in data:
+                update_fields.append('horario_inicio_trabalho = %s')
+                update_values.append(data['horario_inicio_trabalho'])
+            if 'horario_fim_trabalho' in data:
+                update_fields.append('horario_fim_trabalho = %s')
+                update_values.append(data['horario_fim_trabalho'])
+            if 'dias_trabalho' in data:
+                update_fields.append('dias_trabalho = %s')
+                update_values.append(data['dias_trabalho'])
+            if 'monitoramento_ativo' in data:
+                update_fields.append('monitoramento_ativo = %s')
+                update_values.append(data['monitoramento_ativo'])
 
             if not update_fields:
                 return jsonify({'message': 'Nenhum campo válido para atualizar!'}), 400

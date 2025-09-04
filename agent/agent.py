@@ -2,11 +2,11 @@ import time
 import psutil
 import requests
 import win32gui
-from datetime import datetime
+from datetime import datetime, time as dt_time
 import pytz
 import os
 
-API_BASE_URL = 'https://30639375-c8ee-4839-b62a-4cdd5cf7f23e-00-29im557edjni.worf.replit.dev:5000'
+API_BASE_URL = 'https://30639375-c8ee-4839-b62a-4cdd5cf7f23e-00-29im557edjni.worf.replit.dev:8000'
 LOGIN_URL = f"{API_BASE_URL}/login"
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
@@ -101,6 +101,74 @@ def verificar_usuario_ativo(usuario_id):
         return False
 
 
+def obter_configuracoes_horario_usuario(usuario_nome):
+    """Obtém as configurações de horário de trabalho do usuário"""
+    try:
+        resp = requests.get(USUARIOS_MONITORADOS_URL,
+                            params={'nome': usuario_nome},
+                            headers=get_headers())
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                'horario_inicio_trabalho': data.get('horario_inicio_trabalho', '09:00:00'),
+                'horario_fim_trabalho': data.get('horario_fim_trabalho', '18:00:00'),
+                'dias_trabalho': data.get('dias_trabalho', '1,2,3,4,5'),
+                'monitoramento_ativo': data.get('monitoramento_ativo', True)
+            }
+        else:
+            print(f"❌ Erro ao buscar configurações do usuário: {resp.status_code}")
+            return None
+    except Exception as e:
+        print(f"❌ Erro ao consultar configurações do usuário: {e}")
+        return None
+
+
+def esta_em_horario_trabalho(usuario_nome, tz):
+    """Verifica se o horário atual está dentro do horário de trabalho do usuário"""
+    try:
+        config = obter_configuracoes_horario_usuario(usuario_nome)
+        if not config:
+            print("⚠️ Configurações não encontradas, usando horário padrão (9-18h, seg-sex)")
+            config = {
+                'horario_inicio_trabalho': '09:00:00',
+                'horario_fim_trabalho': '18:00:00',
+                'dias_trabalho': '1,2,3,4,5',
+                'monitoramento_ativo': True
+            }
+        
+        # Se o monitoramento não está ativo, não enviar atividades
+        if not config.get('monitoramento_ativo', True):
+            print(f"⏸️ Monitoramento desativado para o usuário {usuario_nome}")
+            return False
+        
+        agora = datetime.now(tz)
+        
+        # Verificar se é um dia de trabalho (1=Segunda, 7=Domingo)
+        dia_semana = agora.isoweekday()
+        dias_trabalho = [int(d) for d in config['dias_trabalho'].split(',')]
+        
+        if dia_semana not in dias_trabalho:
+            print(f"⏰ Fora dos dias de trabalho: hoje é {dia_semana}, dias de trabalho: {dias_trabalho}")
+            return False
+        
+        # Verificar se está no horário de trabalho
+        horario_inicio = dt_time.fromisoformat(config['horario_inicio_trabalho'])
+        horario_fim = dt_time.fromisoformat(config['horario_fim_trabalho'])
+        hora_atual = agora.time()
+        
+        if horario_inicio <= hora_atual <= horario_fim:
+            print(f"✅ Dentro do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
+            return True
+        else:
+            print(f"⏰ Fora do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Erro ao verificar horário de trabalho: {e}")
+        # Em caso de erro, permitir o envio para não quebrar o funcionamento
+        return True
+
+
 def enviar_atividade(registro):
     try:
         resp = requests.post(ATIVIDADE_URL,
@@ -186,9 +254,15 @@ def main():
                 print("❌ Não foi possível obter ID do usuário monitorado, pulando registro...")
 
         if len(registros) >= 6:
-            for r in registros:
-                enviar_atividade(r)
-            registros.clear()
+            # Verificar se estamos em horário de trabalho antes de enviar
+            if esta_em_horario_trabalho(current_usuario_nome, tz):
+                for r in registros:
+                    enviar_atividade(r)
+                registros.clear()
+            else:
+                # Fora do horário de trabalho, limpar registros sem enviar
+                print(f"⏰ Fora do horário de trabalho, descartando {len(registros)} registros")
+                registros.clear()
 
         time.sleep(10)
 
