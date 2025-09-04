@@ -1,3 +1,4 @@
+
 import time
 import psutil
 import requests
@@ -5,6 +6,16 @@ import win32gui
 from datetime import datetime, time as dt_time
 import pytz
 import os
+import json
+import subprocess
+import re
+from urllib.parse import urlparse
+try:
+    import pygetwindow as gw
+    import pyperclip
+except ImportError:
+    gw = None
+    pyperclip = None
 
 API_BASE_URL = 'https://30639375-c8ee-4839-b62a-4cdd5cf7f23e-00-29im557edjni.worf.replit.dev:8000'
 LOGIN_URL = f"{API_BASE_URL}/login"
@@ -51,9 +62,213 @@ def get_logged_user():
     return users[0].name if users else None
 
 
-def get_active_window_title():
-    window = win32gui.GetForegroundWindow()
-    return win32gui.GetWindowText(window)
+def get_chrome_active_tab_url():
+    """Tenta capturar a URL da aba ativa do Chrome usando diferentes métodos"""
+    try:
+        # Método 1: Tentar usar chrome-remote-interface (se disponível)
+        try:
+            result = subprocess.run([
+                'node', '-e', '''
+                const CDP = require('chrome-remote-interface');
+                CDP(async (client) => {
+                    const {Page, Runtime} = client;
+                    await Page.enable();
+                    const {frameTree} = await Page.getFrameTree();
+                    console.log(frameTree.frame.url);
+                    await client.close();
+                }).catch(err => console.error('Chrome not accessible'));
+                '''
+            ], capture_output=True, text=True, timeout=2)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                url = result.stdout.strip()
+                if url.startswith('http'):
+                    return urlparse(url).netloc
+        except:
+            pass
+
+        # Método 2: Tentar extrair URL do histórico do Chrome (último acesso)
+        try:
+            import sqlite3
+            chrome_history_paths = [
+                os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History'),
+                os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1\\History'),
+            ]
+            
+            for history_path in chrome_history_paths:
+                if os.path.exists(history_path):
+                    # Copiar para temp para evitar lock
+                    temp_history = history_path + '.temp'
+                    try:
+                        import shutil
+                        shutil.copy2(history_path, temp_history)
+                        
+                        conn = sqlite3.connect(temp_history)
+                        cursor = conn.cursor()
+                        
+                        # Pegar a URL mais recente (últimos 5 minutos)
+                        cursor.execute('''
+                            SELECT url FROM urls 
+                            WHERE last_visit_time > (strftime('%s','now') - 300) * 1000000 + 11644473600000000
+                            ORDER BY last_visit_time DESC 
+                            LIMIT 1
+                        ''')
+                        
+                        result = cursor.fetchone()
+                        conn.close()
+                        os.remove(temp_history)
+                        
+                        if result and result[0]:
+                            return urlparse(result[0]).netloc
+                    except:
+                        if os.path.exists(temp_history):
+                            os.remove(temp_history)
+        except:
+            pass
+
+        # Método 3: Usar PowerShell para extrair URL via UI Automation (Windows 10+)
+        try:
+            ps_script = '''
+            Add-Type -AssemblyName UIAutomationClient
+            $automation = [System.Windows.Automation.AutomationElement]::RootElement
+            $chromeWindows = $automation.FindAll([System.Windows.Automation.TreeScope]::Children, 
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, "*Chrome*"))
+            
+            foreach ($window in $chromeWindows) {
+                $addressBar = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, 
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, 
+                    [System.Windows.Automation.ControlType]::Edit))
+                if ($addressBar -and $addressBar.Current.Name) {
+                    Write-Output $addressBar.Current.Name
+                    break
+                }
+            }
+            '''
+            
+            result = subprocess.run(['powershell', '-Command', ps_script], 
+                                 capture_output=True, text=True, timeout=3)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                url_text = result.stdout.strip()
+                if 'http' in url_text:
+                    # Extrair URL da string
+                    url_match = re.search(r'https?://[^\s]+', url_text)
+                    if url_match:
+                        return urlparse(url_match.group()).netloc
+        except:
+            pass
+
+    except Exception as e:
+        print(f"⚠️ Erro ao capturar URL do Chrome: {e}")
+    
+    return None
+
+
+def extract_domain_from_title(window_title):
+    """Extrai domínio do título da janela quando possível"""
+    try:
+        # Padrões comuns de domínios em títulos
+        domain_patterns = [
+            r'([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br|co\.uk|de|fr|es|it|ru|cn|jp))',
+            r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,})',
+            r'(?:https?://)?([a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+)',
+        ]
+        
+        for pattern in domain_patterns:
+            match = re.search(pattern, window_title.lower())
+            if match:
+                domain = match.group(1)
+                # Validar se parece um domínio real
+                if '.' in domain and len(domain.split('.')) >= 2:
+                    return domain
+        
+        # Padrões específicos para sites conhecidos
+        known_patterns = {
+            'youtube': 'youtube.com',
+            'google': 'google.com',
+            'facebook': 'facebook.com',
+            'twitter': 'twitter.com',
+            'linkedin': 'linkedin.com',
+            'github': 'github.com',
+            'stackoverflow': 'stackoverflow.com',
+            'reddit': 'reddit.com',
+            'wikipedia': 'wikipedia.org',
+            'amazon': 'amazon.com',
+        }
+        
+        title_lower = window_title.lower()
+        for key, domain in known_patterns.items():
+            if key in title_lower:
+                return domain
+                
+    except Exception as e:
+        print(f"⚠️ Erro ao extrair domínio do título: {e}")
+    
+    return None
+
+
+def get_active_window_info():
+    """Captura informações da janela ativa incluindo domínio quando possível"""
+    try:
+        window = win32gui.GetForegroundWindow()
+        window_title = win32gui.GetWindowText(window)
+        
+        # Tentar capturar URL/domínio do Chrome
+        domain = None
+        
+        # Se for uma janela do Chrome, tentar capturar URL
+        if 'chrome' in window_title.lower():
+            domain = get_chrome_active_tab_url()
+            print(f"🌐 Domínio capturado do Chrome: {domain}")
+        
+        # Se não conseguiu capturar domínio, tentar extrair do título
+        if not domain:
+            domain = extract_domain_from_title(window_title)
+            if domain:
+                print(f"🔍 Domínio extraído do título: {domain}")
+        
+        return {
+            'window_title': window_title,
+            'domain': domain,
+            'application': get_application_name(window_title)
+        }
+        
+    except Exception as e:
+        print(f"❌ Erro ao capturar informações da janela: {e}")
+        return {
+            'window_title': 'Erro ao capturar janela',
+            'domain': None,
+            'application': 'unknown'
+        }
+
+
+def get_application_name(window_title):
+    """Identifica a aplicação baseada no título da janela"""
+    title_lower = window_title.lower()
+    
+    app_patterns = {
+        'chrome': ['chrome', 'google chrome'],
+        'firefox': ['firefox', 'mozilla firefox'],
+        'edge': ['edge', 'microsoft edge'],
+        'vscode': ['visual studio code', 'vscode'],
+        'notepad': ['notepad', 'bloco de notas'],
+        'excel': ['excel', 'microsoft excel'],
+        'word': ['word', 'microsoft word'],
+        'powerpoint': ['powerpoint', 'microsoft powerpoint'],
+        'outlook': ['outlook', 'microsoft outlook'],
+        'teams': ['teams', 'microsoft teams'],
+        'slack': ['slack'],
+        'discord': ['discord'],
+        'whatsapp': ['whatsapp'],
+        'telegram': ['telegram'],
+    }
+    
+    for app, patterns in app_patterns.items():
+        for pattern in patterns:
+            if pattern in title_lower:
+                return app
+    
+    return 'other'
 
 
 def get_usuario_monitorado_id(usuario_nome):
@@ -84,6 +299,7 @@ def get_usuario_monitorado_id(usuario_nome):
         print(f"❌ Erro ao consultar usuário monitorado: {e}")
         return None
 
+
 def verificar_usuario_ativo(usuario_id):
     """Verifica se o usuário monitorado ainda existe e está ativo"""
     try:
@@ -110,7 +326,7 @@ def obter_configuracoes_horario_usuario(usuario_nome):
         if resp.status_code == 200:
             data = resp.json()
             return {
-                'horario_inicio_trabalho': data.get('horario_inicio_trabalho', '09:00:00'),
+                'horario_inicio_trabalho': data.get('horario_inicio_trabalho', '08:00:00'),
                 'horario_fim_trabalho': data.get('horario_fim_trabalho', '18:00:00'),
                 'dias_trabalho': data.get('dias_trabalho', '1,2,3,4,5'),
                 'monitoramento_ativo': data.get('monitoramento_ativo', True)
@@ -128,9 +344,9 @@ def esta_em_horario_trabalho(usuario_nome, tz):
     try:
         config = obter_configuracoes_horario_usuario(usuario_nome)
         if not config:
-            print("⚠️ Configurações não encontradas, usando horário padrão (9-18h, seg-sex)")
+            print("⚠️ Configurações não encontradas, usando horário padrão (8-18h, seg-sex)")
             config = {
-                'horario_inicio_trabalho': '09:00:00',
+                'horario_inicio_trabalho': '08:00:00',
                 'horario_fim_trabalho': '18:00:00',
                 'dias_trabalho': '1,2,3,4,5',
                 'monitoramento_ativo': True
@@ -175,7 +391,8 @@ def enviar_atividade(registro):
                              json=registro,
                              headers=get_headers())
         if resp.status_code == 201:
-            print(f"✅ Atividade enviada: {registro['active_window']}")
+            domain_info = f" | Domínio: {registro.get('domain', 'N/A')}" if registro.get('domain') else ""
+            print(f"✅ Atividade enviada: {registro['active_window']}{domain_info}")
         elif resp.status_code == 401:
             print("⚠️ Token expirado, renovando...")
             login()
@@ -183,7 +400,6 @@ def enviar_atividade(registro):
         elif resp.status_code == 404 and "Usuário monitorado não encontrado" in resp.text:
             print(f"❌ Usuário monitorado ID {registro['usuario_monitorado_id']} não encontrado!")
             print("🔄 Tentando recriar usuário monitorado...")
-            # Não podemos recriar aqui pois não temos o nome, mas podemos marcar para verificação
             return False
         else:
             print(f"❌ Erro ao enviar atividade: {resp.status_code} {resp.text}")
@@ -204,14 +420,22 @@ def main():
     # Contador para verificação periódica do usuário
     verificacao_contador = 0
 
-    last_window_title = ""
+    last_window_info = {"window_title": "", "domain": None, "application": ""}
     ociosidade = 0
     registros = []
 
     tz = pytz.timezone('America/Sao_Paulo')
 
+    print("🚀 Agente iniciado com captura de domínio!")
+    print("📋 Métodos disponíveis:")
+    print("   - Chrome DevTools Protocol")
+    print("   - Histórico do Chrome")
+    print("   - UI Automation (PowerShell)")
+    print("   - Extração de domínio do título")
+    print()
+
     while True:
-        current_window_title = get_active_window_title()
+        current_window_info = get_active_window_info()
         current_usuario_nome = get_logged_user()
 
         # Verificar se o nome do usuário mudou
@@ -230,9 +454,11 @@ def main():
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0
 
-        if current_window_title != last_window_title:
+        # Verificar mudança de janela/domínio
+        if (current_window_info['window_title'] != last_window_info['window_title'] or 
+            current_window_info['domain'] != last_window_info['domain']):
             ociosidade = 0
-            last_window_title = current_window_title
+            last_window_info = current_window_info
         else:
             ociosidade += 10
 
@@ -246,7 +472,9 @@ def main():
                 registro = {
                     'usuario_monitorado_id': usuario_monitorado_id,
                     'ociosidade': ociosidade,
-                    'active_window': current_window_title,
+                    'active_window': current_window_info['window_title'],
+                    'domain': current_window_info['domain'],
+                    'application': current_window_info['application'],
                     'horario': datetime.now(tz).isoformat()
                 }
                 registros.append(registro)

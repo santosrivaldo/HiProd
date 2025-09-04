@@ -60,6 +60,8 @@ def add_activity(current_user):
             # Extrair informações adicionais
             titulo_janela = data.get('titulo_janela', active_window)
             duracao = data.get('duracao', 0)
+            domain = data.get('domain')  # Novo: domínio capturado
+            application = data.get('application', 'unknown')  # Novo: aplicação identificada
 
             # Obter IP real do agente (considerando proxies)
             ip_address = request.headers.get('X-Forwarded-For', request.headers.get('X-Real-IP', request.remote_addr))
@@ -76,13 +78,13 @@ def add_activity(current_user):
             db.cursor.execute('''
                 INSERT INTO atividades
                 (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade,
-                 horario, duracao, ip_address, user_agent)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 horario, duracao, ip_address, user_agent, domain, application)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
             ''', (
                 usuario_monitorado_id, ociosidade, active_window, titulo_janela,
                 'pending', 'neutral', horario_atual,
-                duracao, ip_address, user_agent
+                duracao, ip_address, user_agent, domain, application
             ))
 
             activity_id = db.cursor.fetchone()[0]
@@ -201,7 +203,9 @@ def get_atividades(current_user):
                         MIN(a.horario) as horario,
                         MIN(a.ociosidade) as ociosidade,
                         COUNT(*) as eventos_agrupados,
-                        SUM(COALESCE(a.duracao, 10)) as duracao_total
+                        SUM(COALESCE(a.duracao, 10)) as duracao_total,
+                        MAX(a.domain) as domain,
+                        MAX(a.application) as application
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
@@ -224,7 +228,9 @@ def get_atividades(current_user):
                         a.horario,
                         a.ociosidade,
                         1 as eventos_agrupados,
-                        COALESCE(a.duracao, 10) as duracao_total
+                        COALESCE(a.duracao, 10) as duracao_total,
+                        a.domain,
+                        a.application
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
@@ -249,7 +255,9 @@ def get_atividades(current_user):
                     'horario': row[7].isoformat() if row[7] else None,
                     'ociosidade': row[8] or 0,
                     'eventos_agrupados': row[9] if agrupar else 1,
-                    'duracao': row[10] or 10
+                    'duracao': row[10] or 10,
+                    'domain': row[11] if len(row) > 11 else None,
+                    'application': row[12] if len(row) > 12 else None
                 })
 
             # Criar resposta com headers de paginação

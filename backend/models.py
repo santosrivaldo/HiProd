@@ -1,4 +1,3 @@
-
 import uuid
 import bcrypt
 from .database import DatabaseConnection
@@ -144,23 +143,23 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             ''')
-            
+
             # Adicionar colunas de horário de trabalho se não existirem
             columns_to_add = [
-                ('escala_trabalho_id', "INTEGER REFERENCES escalas_trabalho(id)"),
+                ('escala_trabalho_id', "INTEGER REFERENCES escolas_trabalho(id)"),
                 ('horario_inicio_trabalho', "TIME DEFAULT '08:00:00'"),
                 ('horario_fim_trabalho', "TIME DEFAULT '18:00:00'"),
                 ('dias_trabalho', "VARCHAR(20) DEFAULT '1,2,3,4,5'"),
                 ('monitoramento_ativo', "BOOLEAN DEFAULT TRUE")
             ]
-            
+
             for column_name, column_type in columns_to_add:
                 db.cursor.execute(f"""
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_name='usuarios_monitorados' AND column_name='{column_name}';
                 """)
-                
+
                 if not db.cursor.fetchone():
                     print(f"🔧 Adicionando coluna {column_name} à tabela usuarios_monitorados...")
                     db.cursor.execute(f"ALTER TABLE usuarios_monitorados ADD COLUMN {column_name} {column_type};")
@@ -259,9 +258,12 @@ def init_db():
                 produtividade VARCHAR(20) DEFAULT 'neutral',
                 horario TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 duracao INTEGER DEFAULT 0,
-                ip_address INET,
+                ip_address VARCHAR(45),
                 user_agent TEXT,
+                domain VARCHAR(255),
+                application VARCHAR(100),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
             );
             ''')
@@ -314,7 +316,7 @@ def init_db():
                 admin_password = "Brasil@1402"  # Mesma senha do agente
                 hashed_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt())
                 admin_id = uuid.uuid4()
-                
+
                 # Buscar ID do departamento TI
                 db.cursor.execute("SELECT id FROM departamentos WHERE nome = 'TI';")
                 ti_dept_result = db.cursor.fetchone()
@@ -324,7 +326,7 @@ def init_db():
                     INSERT INTO usuarios (id, nome, senha, email, departamento_id)
                     VALUES (%s, %s, %s, %s, %s);
                 ''', (admin_id, 'admin', hashed_password.decode('utf-8'), 'admin@empresa.com', ti_dept_id))
-                
+
                 print("✅ Usuário admin criado (usuario: admin, senha: Brasil@1402)")
             else:
                 print("⏭️ Usuário admin já existe...")
@@ -345,14 +347,14 @@ def init_db():
                     ('Fins de Semana', 'Trabalho em fins de semana', '08:00:00', '17:00:00', '6,7'),
                     ('Plantão 24h', 'Disponível 24 horas', '00:00:00', '23:59:59', '1,2,3,4,5,6,7')
                 ]
-                
+
                 for nome, descricao, inicio, fim, dias in escalas_padrao:
                     db.cursor.execute('''
                         INSERT INTO escalas_trabalho (nome, descricao, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
                         VALUES (%s, %s, %s, %s, %s)
                         ON CONFLICT (nome) DO NOTHING;
                     ''', (nome, descricao, inicio, fim, dias))
-                    
+
                 print("✅ Escalas de trabalho padrão inseridas")
             else:
                 print("⏭️ Escalas já existem, pulando inserção...")
