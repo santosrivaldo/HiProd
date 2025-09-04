@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -45,34 +44,34 @@ const CHART_COLORS = [
 // Função auxiliar para extrair domínio
 const extractDomainFromWindow = (activeWindow) => {
   if (!activeWindow) return null
-  
+
   // Tentar encontrar URLs no título da janela
   const urlMatch = activeWindow.match(/https?:\/\/([^\/\s]+)/)
   if (urlMatch) {
     return urlMatch[1]
   }
-  
+
   // Procurar por padrões conhecidos de domínio
   const domainPatterns = [
     /- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/,
     /\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)/,
     /([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/
   ]
-  
+
   for (const pattern of domainPatterns) {
     const match = activeWindow.match(pattern)
     if (match) {
       return match[1]
     }
   }
-  
+
   return null
 }
 
 // Função auxiliar para extrair aplicação
 const extractApplicationFromWindow = (activeWindow) => {
   if (!activeWindow) return null
-  
+
   // Aplicações conhecidas
   const knownApps = {
     'chrome': 'Google Chrome',
@@ -92,15 +91,15 @@ const extractApplicationFromWindow = (activeWindow) => {
     'whatsapp': 'WhatsApp',
     'telegram': 'Telegram'
   }
-  
+
   const lowerWindow = activeWindow.toLowerCase()
-  
+
   for (const [key, value] of Object.entries(knownApps)) {
     if (lowerWindow.includes(key)) {
       return value
     }
   }
-  
+
   // Tentar extrair o nome da aplicação do início do título
   const appMatch = activeWindow.match(/^([^-–]+)/)
   if (appMatch) {
@@ -109,7 +108,7 @@ const extractApplicationFromWindow = (activeWindow) => {
       return appName
     }
   }
-  
+
   return null
 }
 
@@ -238,7 +237,7 @@ export default function Dashboard() {
         domain = extractDomainFromWindow(activity.active_window) || 'Sistema Local'
       }
       const duration = activity.duracao || activity.duracao_total || 10
-      
+
       if (!domainMap[domain]) {
         domainMap[domain] = { name: domain, value: 0, activities: 0 }
       }
@@ -260,7 +259,7 @@ export default function Dashboard() {
         application = extractApplicationFromWindow(activity.active_window) || 'Aplicação Desconhecida'
       }
       const duration = activity.duracao || activity.duracao_total || 10
-      
+
       if (!applicationMap[application]) {
         applicationMap[application] = { name: application, value: 0, activities: 0 }
       }
@@ -287,9 +286,9 @@ export default function Dashboard() {
 
     filteredActivities.forEach(activity => {
       const hour = new Date(activity.horario).getHours()
-      const duration = activity.duracao || 10
+      const duration = activity.duracao_total || activity.duracao || (activity.eventos_agrupados || 1) * 10
       const produtividade = activity.produtividade || 'neutral'
-      
+
       hourlyMap[hour].total += duration
       if (hourlyMap[hour][produtividade] !== undefined) {
         hourlyMap[hour][produtividade] += duration
@@ -399,7 +398,7 @@ export default function Dashboard() {
     }
   }, [dateRange, selectedUser, selectedDepartment])
 
-  
+
 
   useEffect(() => {
     if (dashboardData && dashboardData.rawActivities && users.length > 0 && departments.length > 0) {

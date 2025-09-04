@@ -251,8 +251,7 @@ def get_atividades(current_user):
                         FROM atividades a
                         LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                         {where_clause}
-                        GROUP BY a.usuario_monitorado_id, a.active_window, a.categoria, a.produtividade,
-                                 DATE_TRUNC('minute', a.horario)
+                        GROUP BY a.usuario_monitorado_id, a.active_window, DATE(a.horario)
                     ) as grouped;
                 """
             else:
@@ -262,7 +261,7 @@ def get_atividades(current_user):
             total_count = db.cursor.fetchone()[0]
 
             if agrupar:
-                # Query com agrupamento
+                # Query com agrupamento melhorado por dia, usuário e janela
                 query = f"""
                     SELECT
                         MIN(a.id) as id,
@@ -270,20 +269,21 @@ def get_atividades(current_user):
                         MAX(um.nome) as usuario_monitorado_nome,
                         MAX(um.cargo) as cargo,
                         a.active_window,
-                        a.categoria,
-                        a.produtividade,
-                        MIN(a.horario) as horario,
+                        MAX(a.categoria) as categoria,
+                        MAX(a.produtividade) as produtividade,
+                        MIN(a.horario) as primeiro_horario,
+                        MAX(a.horario) as ultimo_horario,
                         MIN(a.ociosidade) as ociosidade,
                         COUNT(*) as eventos_agrupados,
                         SUM(COALESCE(a.duracao, 10)) as duracao_total,
                         MAX(a.domain) as domain,
-                        MAX(a.application) as application
+                        MAX(a.application) as application,
+                        DATE(a.horario) as data_atividade
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
-                    GROUP BY a.usuario_monitorado_id, a.active_window, a.categoria, a.produtividade,
-                             DATE_TRUNC('minute', a.horario)
-                    ORDER BY MIN(a.horario) DESC
+                    GROUP BY a.usuario_monitorado_id, a.active_window, DATE(a.horario)
+                    ORDER BY MAX(a.horario) DESC, MIN(a.horario) DESC
                     LIMIT %s OFFSET %s;
                 """
             else:
@@ -316,21 +316,40 @@ def get_atividades(current_user):
 
             result = []
             for row in rows:
-                result.append({
-                    'id': row[0],
-                    'usuario_monitorado_id': row[1],
-                    'usuario_monitorado_nome': row[2],
-                    'cargo': row[3],
-                    'active_window': row[4],
-                    'categoria': row[5] or 'unclassified',
-                    'produtividade': row[6] or 'neutral',
-                    'horario': row[7].isoformat() if row[7] else None,
-                    'ociosidade': row[8] or 0,
-                    'eventos_agrupados': row[9] if agrupar else 1,
-                    'duracao': row[10] or 10,
-                    'domain': row[11] if len(row) > 11 else None,
-                    'application': row[12] if len(row) > 12 else None
-                })
+                if agrupar:
+                    result.append({
+                        'id': row[0],
+                        'usuario_monitorado_id': row[1],
+                        'usuario_monitorado_nome': row[2],
+                        'cargo': row[3],
+                        'active_window': row[4],
+                        'categoria': row[5] or 'unclassified',
+                        'produtividade': row[6] or 'neutral',
+                        'horario': row[7].isoformat() if row[7] else None,  # primeiro_horario
+                        'ultimo_horario': row[8].isoformat() if row[8] else None,
+                        'ociosidade': row[9] or 0,
+                        'eventos_agrupados': row[10],
+                        'duracao': row[11] or 10,
+                        'domain': row[12] if len(row) > 12 else None,
+                        'application': row[13] if len(row) > 13 else None,
+                        'data_atividade': row[14].isoformat() if row[14] else None
+                    })
+                else:
+                    result.append({
+                        'id': row[0],
+                        'usuario_monitorado_id': row[1],
+                        'usuario_monitorado_nome': row[2],
+                        'cargo': row[3],
+                        'active_window': row[4],
+                        'categoria': row[5] or 'unclassified',
+                        'produtividade': row[6] or 'neutral',
+                        'horario': row[7].isoformat() if row[7] else None,
+                        'ociosidade': row[8] or 0,
+                        'eventos_agrupados': 1,
+                        'duracao': row[10] or 10,
+                        'domain': row[11] if len(row) > 11 else None,
+                        'application': row[12] if len(row) > 12 else None
+                    })
 
             # Criar resposta com headers de paginação
             response = jsonify(result)

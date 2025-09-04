@@ -523,17 +523,23 @@ export default function ActivityManagement() {
 
   const handleExportCSV = () => {
     const exportData = filteredActivities.map(activity => ({
-      'Data/Hora': format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss'),
+      'Data/Hora Inicial': format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss'),
+      'Data/Hora Final': agruparAtividades && activity.ultimo_horario 
+        ? format(new Date(activity.ultimo_horario), 'dd/MM/yyyy HH:mm:ss')
+        : format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss'),
       'Usuário Monitorado': activity.usuario_monitorado_nome || 'N/A',
       'Cargo': activity.cargo || 'N/A',
       'Janela Ativa': activity.active_window,
       'Categoria': activity.categoria || 'Não Classificado',
       'Ociosidade': formatTime(activity.ociosidade),
       'Classificação': getActivityType(activity).label,
-      'Eventos Agrupados': agruparAtividades ? (activity.eventos_agrupados || 1) : 1
+      'Eventos Agrupados': agruparAtividades ? (activity.eventos_agrupados || 1) : 1,
+      'Duração Total': formatTime(activity.duracao || activity.duracao_total || 0),
+      'Domínio': activity.domain || 'N/A',
+      'Aplicação': activity.application || 'N/A'
     }))
 
-    exportToCSV(exportData, 'atividades')
+    exportToCSV(exportData, 'atividades_agrupadas')
   }
 
   const handlePrint = () => {
@@ -913,7 +919,14 @@ export default function ActivityManagement() {
                   return (
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss')}
+                        <div className="flex flex-col">
+                          <span>{format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss')}</span>
+                          {agruparAtividades && activity.ultimo_horario && activity.ultimo_horario !== activity.horario && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              até {format(new Date(activity.ultimo_horario), 'HH:mm:ss')}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         {activity.usuario_monitorado_nome || 'N/A'}
@@ -922,8 +935,20 @@ export default function ActivityManagement() {
                         {activity.cargo || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        <div className="max-w-xs truncate" title={activity.active_window}>
-                          {activity.active_window}
+                        <div className="max-w-xs">
+                          <div className="truncate" title={activity.active_window}>
+                            {activity.active_window}
+                          </div>
+                          {agruparAtividades && activity.eventos_agrupados > 1 && (
+                            <div className="flex items-center mt-1 space-x-2">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                📊 {activity.eventos_agrupados} ocorrências
+                              </span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                ⏱️ {formatTime(activity.duracao || activity.duracao_total)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
