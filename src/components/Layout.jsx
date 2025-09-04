@@ -17,7 +17,7 @@ import ActivityManagement from "./ActivityManagement";
 import TagManagement from "./TagManagement";
 import UserManagement from "./UserManagement";
 import Settings from "./Settings";
-import Schedules from "./Schedules"; // Assuming you have a Schedules component
+import WorkScheduleManagement from "./WorkScheduleManagement";
 
 const navigation = [
   { name: "Dashboard", icon: ChartBarIcon, component: "dashboard" },
@@ -49,7 +49,7 @@ export default function Layout({ children }) {
       case "users":
         return <UserManagement />;
       case "schedules":
-        return <Schedules />;
+        return <WorkScheduleManagement />;
       case "settings":
         return <Settings />;
       default:
@@ -209,10 +209,10 @@ export default function Layout({ children }) {
           <div className="py-6">
             <div className="max-w-8xl mx-auto px-4 sm:px-6 md:px-8">
               {currentView === "dashboard" && <Dashboard />}
-              {currentView === "activities" && <ActivityManagement />}
+              {currentView === "management" && <ActivityManagement />}
               {currentView === "tags" && <TagManagement />}
               {currentView === "users" && <UserManagement />}
-              {currentView === "schedules" && <Schedules />}
+              {currentView === "schedules" && <WorkScheduleManagement />}
               {currentView === "settings" && <Settings />}
             </div>
           </div>
