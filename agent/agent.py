@@ -113,40 +113,80 @@ def get_chrome_active_tab_url():
 
 
 def extract_domain_from_title(window_title):
-    """Extrai domínio do título da janela quando possível"""
+    """Extrai domínio do título da janela quando possível com maior precisão"""
     try:
-        # Padrões comuns de domínios em títulos
-        domain_patterns = [
-            r'([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br|co\.uk|de|fr|es|it|ru|cn|jp))',
-            r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,})',
-            r'(?:https?://)?([a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+)',
+        if not window_title:
+            return None
+
+        # Primeiro: procurar por URLs completas no título
+        url_patterns = [
+            r'https?://([a-zA-Z0-9.-]+(?:\.[a-zA-Z]{2,})+)',
+            r'(?:^|\s)([a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?:\s|$)',  # domínios com subdomínio
+            r'localhost:(\d+)',  # localhost com porta
+            r'(\d+\.\d+\.\d+\.\d+):?(\d+)?',  # IPs
         ]
 
-        for pattern in domain_patterns:
+        for pattern in url_patterns:
+            matches = re.findall(pattern, window_title)
+            if matches:
+                if 'localhost' in pattern:
+                    return f"localhost:{matches[0]}" if matches[0] else "localhost"
+                elif r'\d+\.\d+\.\d+\.\d+' in pattern:
+                    # Para IPs, retornar com porta se houver
+                    ip, port = matches[0] if isinstance(matches[0], tuple) else (matches[0], None)
+                    return f"{ip}:{port}" if port else ip
+                else:
+                    domain = matches[0] if isinstance(matches[0], str) else matches[0][0]
+                    # Validar se é um domínio válido
+                    if '.' in domain and len(domain.split('.')) >= 2:
+                        return domain
+
+        # Segundo: procurar por domínios específicos em contexto
+        specific_patterns = [
+            r'([a-zA-Z0-9-]+\.bitrix24\.com\.br)',  # Bitrix24 Brasil
+            r'([a-zA-Z0-9-]+\.replit\.dev)',  # Replit apps
+            r'([a-zA-Z0-9-]+\.vercel\.app)',  # Vercel apps
+            r'([a-zA-Z0-9-]+\.herokuapp\.com)',  # Heroku apps
+            r'([a-zA-Z0-9-]+\.github\.io)',  # GitHub pages
+        ]
+
+        for pattern in specific_patterns:
+            match = re.search(pattern, window_title.lower())
+            if match:
+                return match.group(1)
+
+        # Terceiro: padrões mais gerais (mais restritivos para evitar falsos positivos)
+        general_patterns = [
+            r'(?:^|\s|\(|-)([a-zA-Z0-9-]+\.(?:com\.br|co\.uk|gov\.br))(?:\s|\)|$|/)',  # domínios BR/UK específicos
+            r'(?:^|\s|\(|-)([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br))(?:\s|\)|$|/)',  # TLDs principais
+        ]
+
+        for pattern in general_patterns:
             match = re.search(pattern, window_title.lower())
             if match:
                 domain = match.group(1)
-                # Validar se parece um domínio real
-                if '.' in domain and len(domain.split('.')) >= 2:
+                # Validações adicionais para evitar falsos positivos
+                if (len(domain) >= 4 and 
+                    '.' in domain and 
+                    len(domain.split('.')) >= 2 and
+                    not domain.startswith('.')):
                     return domain
 
-        # Padrões específicos para sites conhecidos
-        known_patterns = {
-            'youtube': 'youtube.com',
-            'google': 'google.com',
-            'facebook': 'facebook.com',
-            'twitter': 'twitter.com',
-            'linkedin': 'linkedin.com',
-            'github': 'github.com',
-            'stackoverflow': 'stackoverflow.com',
-            'reddit': 'reddit.com',
-            'wikipedia': 'wikipedia.org',
-            'amazon': 'amazon.com',
+        # Quarto: apenas se nada foi encontrado, usar padrões conhecidos (mais restritivo)
+        known_sites = {
+            'youtube.com': r'\byoutube\b.*\bcom\b',
+            'facebook.com': r'\bfacebook\b',
+            'twitter.com': r'\btwitter\b',
+            'linkedin.com': r'\blinkedin\b',
+            'github.com': r'\bgithub\b',
+            'stackoverflow.com': r'\bstackoverflow\b',
+            'reddit.com': r'\breddit\b',
+            'wikipedia.org': r'\bwikipedia\b',
         }
 
         title_lower = window_title.lower()
-        for key, domain in known_patterns.items():
-            if key in title_lower:
+        for domain, pattern in known_sites.items():
+            if re.search(pattern, title_lower):
                 return domain
 
     except Exception as e:
@@ -166,26 +206,37 @@ def get_active_window_info():
         domain = None
 
         # Se for navegador, tentar capturar URL real
-        if 'Chrome' in application:
+        if 'Chrome' in application or 'Firefox' in application or 'Edge' in application:
             domain = get_chrome_active_tab_url()
             if domain:
-                print(f"🌐 URL capturada do Chrome: {domain}")
+                print(f"🌐 URL capturada do navegador: {domain}")
             else:
-                # Se não conseguiu capturar URL, extrair do título
+                # Se não conseguiu capturar URL, extrair do título com mais cuidado
                 domain = extract_domain_from_title(window_title)
                 if domain:
                     print(f"🔍 Domínio extraído do título: {domain}")
+                else:
+                    print(f"⚠️ Não foi possível extrair domínio do título: {window_title[:50]}...")
 
-        # Para aplicações não-navegador, usar o nome da aplicação como "domínio"
-        elif application != 'Sistema Local':
-            # Para aplicações desktop, não usar domínio web
+        # Para aplicações desktop conhecidas, não extrair domínio
+        elif application in ['VS Code', 'Visual Studio', 'Notepad', 'Notepad++', 'Sublime Text', 
+                           'Atom', 'Microsoft Word', 'Microsoft Excel', 'PowerPoint', 'Windows Explorer']:
             domain = None
             print(f"📱 Aplicação desktop detectada: {application}")
+        
+        # Para outras aplicações, tentar extrair domínio apenas se parecer ser web-based
         else:
-            # Tentar extrair domínio do título se possível
-            domain = extract_domain_from_title(window_title)
-            if domain:
-                print(f"🔍 Domínio extraído do título: {domain}")
+            # Verificar se o título contém indicações de conteúdo web
+            web_indicators = ['http', 'www.', '.com', '.org', '.net', '.br', 'localhost']
+            has_web_content = any(indicator in window_title.lower() for indicator in web_indicators)
+            
+            if has_web_content:
+                domain = extract_domain_from_title(window_title)
+                if domain:
+                    print(f"🔍 Domínio extraído do título: {domain}")
+            else:
+                domain = None
+                print(f"📱 Aplicação local detectada: {application}")
 
         return {
             'window_title': window_title,
