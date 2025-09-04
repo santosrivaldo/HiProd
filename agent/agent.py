@@ -64,31 +64,34 @@ def get_logged_user():
 def get_chrome_active_tab_url():
     """Tenta capturar a URL da aba ativa do Chrome de forma mais precisa"""
     try:
-        # Método mais simples e confiável: usar PowerShell para obter URL da aba ativa
+        # Método 1: PowerShell com UI Automation
         ps_script = '''
         try {
             Add-Type -AssemblyName UIAutomationClient
             $automation = [System.Windows.Automation.AutomationElement]::RootElement
 
             # Procurar janela ativa do Chrome
-            $activeWindow = $automation.FindFirst([System.Windows.Automation.TreeScope]::Children, 
-                [System.Windows.Automation.AndCondition]::new(@(
-                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, "Chrome_WidgetWin_1"),
-                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, (Get-Process -Name "chrome" | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object -First 1).Id)
-                )))
-
-            if ($activeWindow) {
-                # Buscar barra de endereço
-                $addressBar = $activeWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            $chromeProcesses = Get-Process -Name "chrome" -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle -ne ""}
+            if ($chromeProcesses) {
+                $activeWindow = $automation.FindFirst([System.Windows.Automation.TreeScope]::Children, 
                     [System.Windows.Automation.AndCondition]::new(@(
-                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit),
-                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, "L2")
+                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, "Chrome_WidgetWin_1"),
+                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $chromeProcesses[0].Id)
                     )))
 
-                if ($addressBar) {
-                    $url = $addressBar.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)
-                    if ($url -and $url.StartsWith("http")) {
-                        Write-Output $url
+                if ($activeWindow) {
+                    # Buscar barra de endereço
+                    $addressBar = $activeWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                        [System.Windows.Automation.AndCondition]::new(@(
+                            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit),
+                            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, "L2")
+                        )))
+
+                    if ($addressBar) {
+                        $url = $addressBar.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)
+                        if ($url -and ($url.StartsWith("http") -or $url.StartsWith("localhost"))) {
+                            Write-Output $url
+                        }
                     }
                 }
             }
@@ -98,13 +101,72 @@ def get_chrome_active_tab_url():
         '''
 
         result = subprocess.run(['powershell', '-Command', ps_script], 
-                             capture_output=True, text=True, timeout=2)
+                             capture_output=True, text=True, timeout=3)
 
         if result.returncode == 0 and result.stdout.strip():
             url = result.stdout.strip()
-            if url.startswith('http'):
-                parsed = urlparse(url)
-                return parsed.netloc
+            if url.startswith('http') or url.startswith('localhost'):
+                if url.startswith('localhost'):
+                    return url
+                else:
+                    parsed = urlparse(url)
+                    return parsed.netloc
+
+        # Método 2: Tentar ler histórico recente do Chrome (fallback)
+        try:
+            import sqlite3
+            import os
+            from pathlib import Path
+            
+            # Localizar o arquivo de histórico do Chrome
+            chrome_history_paths = [
+                Path.home() / "AppData" / "Local" / "Google" / "Chrome" / "User Data" / "Default" / "History",
+                Path.home() / "AppData" / "Local" / "Google" / "Chrome" / "User Data" / "Profile 1" / "History",
+            ]
+            
+            for history_path in chrome_history_paths:
+                if history_path.exists():
+                    # Copiar o arquivo para evitar problemas de bloqueio
+                    temp_history = history_path.parent / "temp_history"
+                    import shutil
+                    try:
+                        shutil.copy2(history_path, temp_history)
+                        
+                        conn = sqlite3.connect(temp_history)
+                        cursor = conn.cursor()
+                        
+                        # Buscar a URL mais recente (último minuto)
+                        cursor.execute("""
+                            SELECT url FROM urls 
+                            WHERE last_visit_time > (strftime('%s', 'now') - 60) * 1000000 + 11644473600000000
+                            ORDER BY last_visit_time DESC 
+                            LIMIT 1
+                        """)
+                        
+                        result = cursor.fetchone()
+                        conn.close()
+                        
+                        # Limpar arquivo temporário
+                        if temp_history.exists():
+                            temp_history.unlink()
+                        
+                        if result:
+                            url = result[0]
+                            if url.startswith('http') or url.startswith('localhost'):
+                                if url.startswith('localhost'):
+                                    return url.split('/')[0]  # Retornar só localhost:porta
+                                else:
+                                    parsed = urlparse(url)
+                                    return parsed.netloc
+                        break
+                    except Exception:
+                        # Limpar arquivo temporário em caso de erro
+                        if temp_history.exists():
+                            temp_history.unlink()
+                        continue
+                        
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"⚠️ Erro ao capturar URL do Chrome: {e}")
@@ -118,10 +180,11 @@ def extract_domain_from_title(window_title):
         if not window_title:
             return None
 
+        print(f"🔍 Tentando extrair domínio de: {window_title}")
+
         # Primeiro: procurar por URLs completas no título
         url_patterns = [
-            r'https?://([a-zA-Z0-9.-]+(?:\.[a-zA-Z]{2,})+)',
-            r'(?:^|\s)([a-zA-Z0-9-]+\.[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(?:\s|$)',  # domínios com subdomínio
+            r'https?://([a-zA-Z0-9.-]+(?:\.[a-zA-Z]{2,})*(?::\d+)?)',
             r'localhost:(\d+)',  # localhost com porta
             r'(\d+\.\d+\.\d+\.\d+):?(\d+)?',  # IPs
         ]
@@ -130,16 +193,36 @@ def extract_domain_from_title(window_title):
             matches = re.findall(pattern, window_title)
             if matches:
                 if 'localhost' in pattern:
-                    return f"localhost:{matches[0]}" if matches[0] else "localhost"
+                    result = f"localhost:{matches[0]}" if matches[0] else "localhost"
+                    print(f"✅ Domínio localhost encontrado: {result}")
+                    return result
                 elif r'\d+\.\d+\.\d+\.\d+' in pattern:
                     # Para IPs, retornar com porta se houver
                     ip, port = matches[0] if isinstance(matches[0], tuple) else (matches[0], None)
-                    return f"{ip}:{port}" if port else ip
+                    result = f"{ip}:{port}" if port else ip
+                    print(f"✅ IP encontrado: {result}")
+                    return result
                 else:
                     domain = matches[0] if isinstance(matches[0], str) else matches[0][0]
                     # Validar se é um domínio válido
                     if '.' in domain and len(domain.split('.')) >= 2:
+                        print(f"✅ URL completa encontrada: {domain}")
                         return domain
+
+        # Detecção especial para aplicações conhecidas no título
+        app_domain_mapping = {
+            'activity tracker': 'localhost:5000',
+            'atividade tracker': 'localhost:5000',
+            'hiprod': 'localhost:5000',
+            'lavanderia 60 minutos': 'lavanderia60minutos.com.br',
+            'admin | lavanderia': 'lavanderia60minutos.com.br',
+        }
+
+        title_lower = window_title.lower()
+        for app_name, domain in app_domain_mapping.items():
+            if app_name in title_lower:
+                print(f"✅ Aplicação conhecida detectada: {app_name} -> {domain}")
+                return domain
 
         # Segundo: procurar por domínios específicos em contexto
         specific_patterns = [
@@ -148,46 +231,61 @@ def extract_domain_from_title(window_title):
             r'([a-zA-Z0-9-]+\.vercel\.app)',  # Vercel apps
             r'([a-zA-Z0-9-]+\.herokuapp\.com)',  # Heroku apps
             r'([a-zA-Z0-9-]+\.github\.io)',  # GitHub pages
+            r'([a-zA-Z0-9-]+\.netlify\.app)',  # Netlify apps
+            r'([a-zA-Z0-9-]+\.firebase\.app)',  # Firebase apps
         ]
 
         for pattern in specific_patterns:
             match = re.search(pattern, window_title.lower())
             if match:
-                return match.group(1)
+                result = match.group(1)
+                print(f"✅ Domínio específico encontrado: {result}")
+                return result
 
-        # Terceiro: padrões mais gerais (mais restritivos para evitar falsos positivos)
+        # Terceiro: padrões mais gerais
         general_patterns = [
-            r'(?:^|\s|\(|-)([a-zA-Z0-9-]+\.(?:com\.br|co\.uk|gov\.br))(?:\s|\)|$|/)',  # domínios BR/UK específicos
-            r'(?:^|\s|\(|-)([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br))(?:\s|\)|$|/)',  # TLDs principais
+            r'([a-zA-Z0-9-]+\.(?:com\.br|co\.uk|gov\.br|org\.br))',  # domínios BR/UK específicos
+            r'([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br|de|fr|es|it|ru|cn|jp))',  # TLDs principais
+            r'([a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,})',  # domínios com subdomínio
         ]
 
         for pattern in general_patterns:
-            match = re.search(pattern, window_title.lower())
-            if match:
-                domain = match.group(1)
+            matches = re.findall(pattern, window_title.lower())
+            for match in matches:
+                domain = match
                 # Validações adicionais para evitar falsos positivos
                 if (len(domain) >= 4 and 
                     '.' in domain and 
                     len(domain.split('.')) >= 2 and
-                    not domain.startswith('.')):
+                    not domain.startswith('.') and
+                    not domain.endswith('.') and
+                    ' ' not in domain):
+                    print(f"✅ Domínio geral encontrado: {domain}")
                     return domain
 
-        # Quarto: apenas se nada foi encontrado, usar padrões conhecidos (mais restritivo)
+        # Quarto: sites conhecidos por nome
         known_sites = {
-            'youtube.com': r'\byoutube\b.*\bcom\b',
-            'facebook.com': r'\bfacebook\b',
-            'twitter.com': r'\btwitter\b',
-            'linkedin.com': r'\blinkedin\b',
-            'github.com': r'\bgithub\b',
-            'stackoverflow.com': r'\bstackoverflow\b',
-            'reddit.com': r'\breddit\b',
-            'wikipedia.org': r'\bwikipedia\b',
+            'youtube.com': [r'\byoutube\b', r'\byt\b'],
+            'facebook.com': [r'\bfacebook\b', r'\bfb\b'],
+            'twitter.com': [r'\btwitter\b', r'\bx\.com\b'],
+            'linkedin.com': [r'\blinkedin\b'],
+            'github.com': [r'\bgithub\b'],
+            'stackoverflow.com': [r'\bstackoverflow\b', r'\bstack overflow\b'],
+            'reddit.com': [r'\breddit\b'],
+            'wikipedia.org': [r'\bwikipedia\b'],
+            'google.com': [r'\bgoogle\b.*\bsearch\b', r'\bgoogle\b.*\bpesquisa\b'],
+            'gmail.com': [r'\bgmail\b', r'\be-mail.*google\b'],
+            'chatgpt.com': [r'\bchatgpt\b', r'\bchat gpt\b'],
+            'openai.com': [r'\bopenai\b'],
         }
 
-        title_lower = window_title.lower()
-        for domain, pattern in known_sites.items():
-            if re.search(pattern, title_lower):
-                return domain
+        for domain, patterns in known_sites.items():
+            for pattern in patterns:
+                if re.search(pattern, title_lower):
+                    print(f"✅ Site conhecido detectado: {domain}")
+                    return domain
+
+        print(f"❌ Nenhum domínio extraído de: {window_title}")
 
     except Exception as e:
         print(f"⚠️ Erro ao extrair domínio do título: {e}")
