@@ -16,22 +16,12 @@ def create_connection_pool():
     if Config.DATABASE_URL:
         print(f"🔌 Criando pool de conexões com DATABASE_URL... (min: {Config.MIN_CONNECTIONS}, max: {Config.MAX_CONNECTIONS})")
         try:
-            # Modificar URL para usar connection pooler do Neon se disponível
-            if '.neon.tech' in Config.DATABASE_URL and '-pooler' not in Config.DATABASE_URL:
-                pooled_url = Config.DATABASE_URL.replace('.neon.tech', '-pooler.neon.tech')
-                print("🔄 Usando Neon connection pooler...")
-            else:
-                pooled_url = Config.DATABASE_URL
-
-            return psycopg2.pool.ThreadedConnectionPool(
-                Config.MIN_CONNECTIONS, Config.MAX_CONNECTIONS, pooled_url
-            )
-        except psycopg2.OperationalError as e:
-            print(f"❌ Erro ao criar pool com DATABASE_URL: {e}")
-            print("🔄 Tentando com URL original...")
             return psycopg2.pool.ThreadedConnectionPool(
                 Config.MIN_CONNECTIONS, Config.MAX_CONNECTIONS, Config.DATABASE_URL
             )
+        except psycopg2.OperationalError as e:
+            print(f"❌ Erro ao criar pool com DATABASE_URL: {e}")
+            raise e
     else:
         # Fallback para variáveis individuais
         print(f"🔌 Criando pool com variáveis individuais... (min: {Config.MIN_CONNECTIONS}, max: {Config.MAX_CONNECTIONS})")
