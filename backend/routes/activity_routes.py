@@ -9,68 +9,102 @@ import re
 activity_bp = Blueprint('activity', __name__)
 
 def extract_domain_from_window(active_window):
-    """Extrair domínio do título da janela ativa"""
+    """Extrair domínio do título da janela ativa com melhor precisão"""
     if not active_window:
         return None
     
-    # Tentar encontrar URLs no título da janela
+    # Tentar encontrar URLs completas no título da janela
     url_match = re.search(r'https?://([^/\s]+)', active_window)
     if url_match:
-        return url_match.group(1)
+        domain = url_match.group(1)
+        # Limpar porta se presente
+        domain = re.sub(r':\d+$', '', domain)
+        return domain
     
-    # Procurar por padrões conhecidos de domínio
+    # Procurar por padrões conhecidos de domínio (mais específicos)
     domain_patterns = [
-        r'- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,})',
-        r'\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,})\)',
-        r'([a-zA-Z0-9-]+\.[a-zA-Z]{2,})'
+        r'- ([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)',  # domínio após hífen
+        r'\(([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)\)',  # domínio entre parênteses
+        r'([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br|co\.uk|de|fr|es|it|ru|cn|jp)(?:\.br)?)',  # domínios conhecidos
     ]
     
     for pattern in domain_patterns:
         match = re.search(pattern, active_window)
         if match:
-            return match.group(1)
+            domain = match.group(1)
+            # Validar se é um domínio real
+            if '.' in domain and len(domain.split('.')) >= 2:
+                # Remover porta se presente
+                domain = re.sub(r':\d+$', '', domain)
+                return domain
     
     return None
 
 def extract_application_from_window(active_window):
-    """Extrair aplicação do título da janela ativa"""
+    """Extrair aplicação do título da janela ativa com melhor precisão"""
     if not active_window:
         return None
     
-    # Aplicações conhecidas
+    # Aplicações conhecidas com padrões mais específicos
     known_apps = {
+        'google chrome': 'Google Chrome',
         'chrome': 'Google Chrome',
         'firefox': 'Firefox',
+        'mozilla firefox': 'Firefox',
+        'microsoft edge': 'Microsoft Edge',
         'edge': 'Microsoft Edge',
+        'visual studio code': 'VS Code',
+        'vscode': 'VS Code',
         'code': 'VS Code',
         'visual studio': 'Visual Studio',
+        'notepad++': 'Notepad++',
         'notepad': 'Notepad',
+        'windows explorer': 'Windows Explorer',
         'explorer': 'Windows Explorer',
+        'microsoft teams': 'Microsoft Teams',
         'teams': 'Microsoft Teams',
+        'microsoft outlook': 'Outlook',
         'outlook': 'Outlook',
+        'microsoft word': 'Microsoft Word',
         'word': 'Microsoft Word',
+        'microsoft excel': 'Microsoft Excel',
         'excel': 'Microsoft Excel',
+        'microsoft powerpoint': 'PowerPoint',
         'powerpoint': 'PowerPoint',
         'slack': 'Slack',
         'discord': 'Discord',
         'whatsapp': 'WhatsApp',
-        'telegram': 'Telegram'
+        'telegram': 'Telegram',
+        'sublime text': 'Sublime Text',
+        'atom': 'Atom',
+        'photoshop': 'Adobe Photoshop',
+        'illustrator': 'Adobe Illustrator'
     }
     
     lower_window = active_window.lower()
     
-    for key, value in known_apps.items():
+    # Verificar aplicações conhecidas (ordem por especificidade)
+    sorted_apps = sorted(known_apps.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for key, value in sorted_apps:
         if key in lower_window:
             return value
     
-    # Tentar extrair o nome da aplicação do início do título
-    app_match = re.match(r'^([^-–]+)', active_window)
+    # Tentar extrair o nome da aplicação do final do título (após último hífen)
+    app_match = re.search(r'[–-]\s*([^–-]+)\s*$', active_window)
     if app_match:
         app_name = app_match.group(1).strip()
-        if 0 < len(app_name) < 50:
+        if 5 <= len(app_name) <= 30 and not any(char.isdigit() for char in app_name):
             return app_name
     
-    return None
+    # Tentar extrair do início do título
+    app_match = re.match(r'^([^-–()]+)', active_window)
+    if app_match:
+        app_name = app_match.group(1).strip()
+        if 3 <= len(app_name) <= 25:
+            return app_name
+    
+    return 'Sistema Local'
 
 @activity_bp.route('/atividade', methods=['POST'])
 @token_required

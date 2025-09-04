@@ -63,101 +63,50 @@ def get_logged_user():
 
 
 def get_chrome_active_tab_url():
-    """Tenta capturar a URL da aba ativa do Chrome usando diferentes métodos"""
+    """Tenta capturar a URL da aba ativa do Chrome de forma mais precisa"""
     try:
-        # Método 1: Tentar usar chrome-remote-interface (se disponível)
-        try:
-            result = subprocess.run([
-                'node', '-e', '''
-                const CDP = require('chrome-remote-interface');
-                CDP(async (client) => {
-                    const {Page, Runtime} = client;
-                    await Page.enable();
-                    const {frameTree} = await Page.getFrameTree();
-                    console.log(frameTree.frame.url);
-                    await client.close();
-                }).catch(err => console.error('Chrome not accessible'));
-                '''
-            ], capture_output=True, text=True, timeout=2)
-            
-            if result.returncode == 0 and result.stdout.strip():
-                url = result.stdout.strip()
-                if url.startswith('http'):
-                    return urlparse(url).netloc
-        except:
-            pass
-
-        # Método 2: Tentar extrair URL do histórico do Chrome (último acesso)
-        try:
-            import sqlite3
-            chrome_history_paths = [
-                os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\History'),
-                os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1\\History'),
-            ]
-            
-            for history_path in chrome_history_paths:
-                if os.path.exists(history_path):
-                    # Copiar para temp para evitar lock
-                    temp_history = history_path + '.temp'
-                    try:
-                        import shutil
-                        shutil.copy2(history_path, temp_history)
-                        
-                        conn = sqlite3.connect(temp_history)
-                        cursor = conn.cursor()
-                        
-                        # Pegar a URL mais recente (últimos 5 minutos)
-                        cursor.execute('''
-                            SELECT url FROM urls 
-                            WHERE last_visit_time > (strftime('%s','now') - 300) * 1000000 + 11644473600000000
-                            ORDER BY last_visit_time DESC 
-                            LIMIT 1
-                        ''')
-                        
-                        result = cursor.fetchone()
-                        conn.close()
-                        os.remove(temp_history)
-                        
-                        if result and result[0]:
-                            return urlparse(result[0]).netloc
-                    except:
-                        if os.path.exists(temp_history):
-                            os.remove(temp_history)
-        except:
-            pass
-
-        # Método 3: Usar PowerShell para extrair URL via UI Automation (Windows 10+)
-        try:
-            ps_script = '''
+        # Método mais simples e confiável: usar PowerShell para obter URL da aba ativa
+        ps_script = '''
+        try {
             Add-Type -AssemblyName UIAutomationClient
             $automation = [System.Windows.Automation.AutomationElement]::RootElement
-            $chromeWindows = $automation.FindAll([System.Windows.Automation.TreeScope]::Children, 
-                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, "*Chrome*"))
             
-            foreach ($window in $chromeWindows) {
-                $addressBar = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, 
-                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, 
-                    [System.Windows.Automation.ControlType]::Edit))
-                if ($addressBar -and $addressBar.Current.Name) {
-                    Write-Output $addressBar.Current.Name
-                    break
+            # Procurar janela ativa do Chrome
+            $activeWindow = $automation.FindFirst([System.Windows.Automation.TreeScope]::Children, 
+                [System.Windows.Automation.AndCondition]::new(@(
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, "Chrome_WidgetWin_1"),
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, (Get-Process -Name "chrome" | Where-Object {$_.MainWindowTitle -ne ""} | Select-Object -First 1).Id)
+                )))
+            
+            if ($activeWindow) {
+                # Buscar barra de endereço
+                $addressBar = $activeWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.AndCondition]::new(@(
+                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit),
+                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, "L2")
+                    )))
+                
+                if ($addressBar) {
+                    $url = $addressBar.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)
+                    if ($url -and $url.StartsWith("http")) {
+                        Write-Output $url
+                    }
                 }
             }
-            '''
-            
-            result = subprocess.run(['powershell', '-Command', ps_script], 
-                                 capture_output=True, text=True, timeout=3)
-            
-            if result.returncode == 0 and result.stdout.strip():
-                url_text = result.stdout.strip()
-                if 'http' in url_text:
-                    # Extrair URL da string
-                    url_match = re.search(r'https?://[^\s]+', url_text)
-                    if url_match:
-                        return urlparse(url_match.group()).netloc
-        except:
-            pass
-
+        } catch {
+            # Silencioso se falhar
+        }
+        '''
+        
+        result = subprocess.run(['powershell', '-Command', ps_script], 
+                             capture_output=True, text=True, timeout=2)
+        
+        if result.returncode == 0 and result.stdout.strip():
+            url = result.stdout.strip()
+            if url.startswith('http'):
+                parsed = urlparse(url)
+                return parsed.netloc
+                
     except Exception as e:
         print(f"⚠️ Erro ao capturar URL do Chrome: {e}")
     
@@ -213,16 +162,28 @@ def get_active_window_info():
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
         
-        # Tentar capturar URL/domínio do Chrome
+        # Identificar aplicação primeiro
+        application = get_application_name(window_title)
         domain = None
         
-        # Se for uma janela do Chrome, tentar capturar URL
-        if 'chrome' in window_title.lower():
+        # Se for navegador, tentar capturar URL real
+        if 'Chrome' in application:
             domain = get_chrome_active_tab_url()
-            print(f"🌐 Domínio capturado do Chrome: {domain}")
+            if domain:
+                print(f"🌐 URL capturada do Chrome: {domain}")
+            else:
+                # Se não conseguiu capturar URL, extrair do título
+                domain = extract_domain_from_title(window_title)
+                if domain:
+                    print(f"🔍 Domínio extraído do título: {domain}")
         
-        # Se não conseguiu capturar domínio, tentar extrair do título
-        if not domain:
+        # Para aplicações não-navegador, usar o nome da aplicação como "domínio"
+        elif application != 'Sistema Local':
+            # Para aplicações desktop, não usar domínio web
+            domain = None
+            print(f"📱 Aplicação desktop detectada: {application}")
+        else:
+            # Tentar extrair domínio do título se possível
             domain = extract_domain_from_title(window_title)
             if domain:
                 print(f"🔍 Domínio extraído do título: {domain}")
@@ -230,7 +191,7 @@ def get_active_window_info():
         return {
             'window_title': window_title,
             'domain': domain,
-            'application': get_application_name(window_title)
+            'application': application
         }
         
     except Exception as e:
@@ -238,29 +199,73 @@ def get_active_window_info():
         return {
             'window_title': 'Erro ao capturar janela',
             'domain': None,
-            'application': 'unknown'
+            'application': 'Sistema Local'
         }
 
 
 def get_application_name(window_title):
-    """Identifica a aplicação baseada no título da janela"""
+    """Identifica a aplicação baseada no título da janela e processo"""
+    try:
+        # Obter o processo da janela ativa
+        import win32process
+        window = win32gui.GetForegroundWindow()
+        _, process_id = win32process.GetWindowThreadProcessId(window)
+        
+        try:
+            process = psutil.Process(process_id)
+            process_name = process.name().lower()
+            
+            # Mapear nomes de processo para aplicações
+            process_mapping = {
+                'chrome.exe': 'Google Chrome',
+                'firefox.exe': 'Firefox',
+                'msedge.exe': 'Microsoft Edge',
+                'code.exe': 'VS Code',
+                'notepad.exe': 'Notepad',
+                'excel.exe': 'Microsoft Excel',
+                'winword.exe': 'Microsoft Word',
+                'powerpnt.exe': 'PowerPoint',
+                'outlook.exe': 'Outlook',
+                'teams.exe': 'Microsoft Teams',
+                'slack.exe': 'Slack',
+                'discord.exe': 'Discord',
+                'whatsapp.exe': 'WhatsApp',
+                'telegram.exe': 'Telegram',
+                'explorer.exe': 'Windows Explorer',
+                'notepad++.exe': 'Notepad++',
+                'sublime_text.exe': 'Sublime Text',
+                'atom.exe': 'Atom'
+            }
+            
+            if process_name in process_mapping:
+                return process_mapping[process_name]
+                
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+            
+    except ImportError:
+        pass  # win32process não disponível
+    except Exception:
+        pass
+    
+    # Fallback: usar título da janela
     title_lower = window_title.lower()
     
     app_patterns = {
-        'chrome': ['chrome', 'google chrome'],
-        'firefox': ['firefox', 'mozilla firefox'],
-        'edge': ['edge', 'microsoft edge'],
-        'vscode': ['visual studio code', 'vscode'],
-        'notepad': ['notepad', 'bloco de notas'],
-        'excel': ['excel', 'microsoft excel'],
-        'word': ['word', 'microsoft word'],
-        'powerpoint': ['powerpoint', 'microsoft powerpoint'],
-        'outlook': ['outlook', 'microsoft outlook'],
-        'teams': ['teams', 'microsoft teams'],
-        'slack': ['slack'],
-        'discord': ['discord'],
-        'whatsapp': ['whatsapp'],
-        'telegram': ['telegram'],
+        'Google Chrome': ['chrome', 'google chrome'],
+        'Firefox': ['firefox', 'mozilla firefox'],
+        'Microsoft Edge': ['edge', 'microsoft edge'],
+        'VS Code': ['visual studio code', 'vscode'],
+        'Notepad': ['notepad', 'bloco de notas'],
+        'Microsoft Excel': ['excel', 'microsoft excel'],
+        'Microsoft Word': ['word', 'microsoft word'],
+        'PowerPoint': ['powerpoint', 'microsoft powerpoint'],
+        'Outlook': ['outlook', 'microsoft outlook'],
+        'Microsoft Teams': ['teams', 'microsoft teams'],
+        'Slack': ['slack'],
+        'Discord': ['discord'],
+        'WhatsApp': ['whatsapp'],
+        'Telegram': ['telegram'],
     }
     
     for app, patterns in app_patterns.items():
@@ -268,7 +273,7 @@ def get_application_name(window_title):
             if pattern in title_lower:
                 return app
     
-    return 'other'
+    return 'Sistema Local'
 
 
 def get_usuario_monitorado_id(usuario_nome):
@@ -454,9 +459,22 @@ def main():
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0
 
-        # Verificar mudança de janela/domínio
-        if (current_window_info['window_title'] != last_window_info['window_title'] or 
-            current_window_info['domain'] != last_window_info['domain']):
+        # Verificar mudança significativa de janela/domínio/aplicação
+        window_changed = (
+            current_window_info['window_title'] != last_window_info['window_title'] or 
+            current_window_info['domain'] != last_window_info['domain'] or
+            current_window_info['application'] != last_window_info['application']
+        )
+        
+        if window_changed:
+            # Log da mudança para debug
+            if current_window_info['window_title'] != last_window_info['window_title']:
+                print(f"🔄 Mudança de janela: {last_window_info['window_title'][:50]}... -> {current_window_info['window_title'][:50]}...")
+            if current_window_info['domain'] != last_window_info['domain']:
+                print(f"🌐 Mudança de domínio: {last_window_info['domain']} -> {current_window_info['domain']}")
+            if current_window_info['application'] != last_window_info['application']:
+                print(f"📱 Mudança de aplicação: {last_window_info['application']} -> {current_window_info['application']}")
+                
             ociosidade = 0
             last_window_info = current_window_info
         else:
