@@ -117,6 +117,21 @@ def init_db():
             # 4. Criar demais tabelas
             print("📋 Criando tabelas auxiliares...")
 
+            # Tabela de escalas de trabalho
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS escalas_trabalho (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL UNIQUE,
+                descricao TEXT,
+                horario_inicio_trabalho TIME DEFAULT '08:00:00',
+                horario_fim_trabalho TIME DEFAULT '18:00:00',
+                dias_trabalho VARCHAR(20) DEFAULT '1,2,3,4,5',
+                ativo BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            ''')
+
             # Tabela de usuários monitorados
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS usuarios_monitorados (
@@ -132,7 +147,8 @@ def init_db():
             
             # Adicionar colunas de horário de trabalho se não existirem
             columns_to_add = [
-                ('horario_inicio_trabalho', "TIME DEFAULT '09:00:00'"),
+                ('escala_trabalho_id', "INTEGER REFERENCES escalas_trabalho(id)"),
+                ('horario_inicio_trabalho', "TIME DEFAULT '08:00:00'"),
                 ('horario_fim_trabalho', "TIME DEFAULT '18:00:00'"),
                 ('dias_trabalho', "VARCHAR(20) DEFAULT '1,2,3,4,5'"),
                 ('monitoramento_ativo', "BOOLEAN DEFAULT TRUE")
@@ -312,6 +328,33 @@ def init_db():
                 print("✅ Usuário admin criado (usuario: admin, senha: Brasil@1402)")
             else:
                 print("⏭️ Usuário admin já existe...")
+
+            # Inserir escalas de trabalho padrão
+            print("📋 Inserindo escalas de trabalho padrão...")
+            db.cursor.execute("SELECT COUNT(*) FROM escalas_trabalho;")
+            escalas_count_result = db.cursor.fetchone()
+            escalas_count = escalas_count_result[0] if escalas_count_result else 0
+
+            if escalas_count == 0:
+                escalas_padrao = [
+                    ('Comercial', 'Horário comercial padrão', '08:00:00', '18:00:00', '1,2,3,4,5'),
+                    ('Meio Período Manhã', 'Meio período manhã', '08:00:00', '12:00:00', '1,2,3,4,5'), 
+                    ('Meio Período Tarde', 'Meio período tarde', '14:00:00', '18:00:00', '1,2,3,4,5'),
+                    ('Noturno', 'Turno noturno', '22:00:00', '06:00:00', '1,2,3,4,5'),
+                    ('Fins de Semana', 'Trabalho em fins de semana', '08:00:00', '17:00:00', '6,7'),
+                    ('Plantão 24h', 'Disponível 24 horas', '00:00:00', '23:59:59', '1,2,3,4,5,6,7')
+                ]
+                
+                for nome, descricao, inicio, fim, dias in escalas_padrao:
+                    db.cursor.execute('''
+                        INSERT INTO escalas_trabalho (nome, descricao, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (nome) DO NOTHING;
+                    ''', (nome, descricao, inicio, fim, dias))
+                    
+                print("✅ Escalas de trabalho padrão inseridas")
+            else:
+                print("⏭️ Escalas já existem, pulando inserção...")
 
             # Inserir tags padrão
             print("📋 Inserindo tags padrão...")

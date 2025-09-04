@@ -60,10 +60,12 @@ def get_monitored_users(current_user):
                 # Primeiro, tentar encontrar o usuário
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
-                           um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
-                           d.nome as departamento_nome, d.cor as departamento_cor
+                           um.escala_trabalho_id, um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
+                           d.nome as departamento_nome, d.cor as departamento_cor,
+                           et.nome as escala_nome, et.horario_inicio_trabalho as escala_inicio, et.horario_fim_trabalho as escala_fim, et.dias_trabalho as escala_dias
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
+                    LEFT JOIN escalas_trabalho et ON um.escala_trabalho_id = et.id
                     WHERE um.nome = %s AND um.ativo = TRUE;
                 ''', (nome_usuario,))
 
@@ -72,11 +74,26 @@ def get_monitored_users(current_user):
                 if usuario_existente:
                     # Usuário existe, retornar seus dados
                     departamento_info = None
-                    if len(usuario_existente) > 11 and usuario_existente[11]:
+                    if len(usuario_existente) > 12 and usuario_existente[12]:
                         departamento_info = {
-                            'nome': usuario_existente[11],
-                            'cor': usuario_existente[12] if len(usuario_existente) > 12 else None
+                            'nome': usuario_existente[12],
+                            'cor': usuario_existente[13] if len(usuario_existente) > 13 else None
                         }
+
+                    # Informações da escala (se tiver uma escala atribuída)
+                    escala_info = None
+                    if len(usuario_existente) > 14 and usuario_existente[14]:  # tem escala
+                        escala_info = {
+                            'nome': usuario_existente[14],
+                            'horario_inicio_trabalho': str(usuario_existente[15]) if usuario_existente[15] else '08:00:00',
+                            'horario_fim_trabalho': str(usuario_existente[16]) if usuario_existente[16] else '18:00:00',
+                            'dias_trabalho': usuario_existente[17] if usuario_existente[17] else '1,2,3,4,5'
+                        }
+
+                    # Se tem escala, usar horários da escala; senão usar horários próprios
+                    horario_inicio = str(usuario_existente[15]) if escala_info and usuario_existente[15] else (str(usuario_existente[8]) if len(usuario_existente) > 8 and usuario_existente[8] else '08:00:00')
+                    horario_fim = str(usuario_existente[16]) if escala_info and usuario_existente[16] else (str(usuario_existente[9]) if len(usuario_existente) > 9 and usuario_existente[9] else '18:00:00')
+                    dias_trabalho = usuario_existente[17] if escala_info and usuario_existente[17] else (usuario_existente[10] if len(usuario_existente) > 10 and usuario_existente[10] else '1,2,3,4,5')
 
                     result = {
                         'id': usuario_existente[0],
@@ -86,11 +103,13 @@ def get_monitored_users(current_user):
                         'ativo': usuario_existente[4] if len(usuario_existente) > 4 else True,
                         'created_at': usuario_existente[5].isoformat() if usuario_existente[5] else None,
                         'updated_at': usuario_existente[6].isoformat() if len(usuario_existente) > 6 and usuario_existente[6] else None,
-                        'horario_inicio_trabalho': str(usuario_existente[7]) if len(usuario_existente) > 7 and usuario_existente[7] else '09:00:00',
-                        'horario_fim_trabalho': str(usuario_existente[8]) if len(usuario_existente) > 8 and usuario_existente[8] else '18:00:00',
-                        'dias_trabalho': usuario_existente[9] if len(usuario_existente) > 9 and usuario_existente[9] else '1,2,3,4,5',
-                        'monitoramento_ativo': usuario_existente[10] if len(usuario_existente) > 10 and usuario_existente[10] is not None else True,
+                        'escala_trabalho_id': usuario_existente[7] if len(usuario_existente) > 7 else None,
+                        'horario_inicio_trabalho': horario_inicio,
+                        'horario_fim_trabalho': horario_fim,
+                        'dias_trabalho': dias_trabalho,
+                        'monitoramento_ativo': usuario_existente[11] if len(usuario_existente) > 11 and usuario_existente[11] is not None else True,
                         'departamento': departamento_info,
+                        'escala': escala_info,
                         'created': False
                     }
                     print(f"✅ Usuário monitorado encontrado: {nome_usuario} (ID: {usuario_existente[0]})")
@@ -115,11 +134,13 @@ def get_monitored_users(current_user):
                         'ativo': novo_usuario[4] if len(novo_usuario) > 4 else True,
                         'created_at': novo_usuario[5].isoformat() if novo_usuario[5] else None,
                         'updated_at': novo_usuario[6].isoformat() if len(novo_usuario) > 6 and novo_usuario[6] else None,
-                        'horario_inicio_trabalho': '09:00:00',
+                        'escala_trabalho_id': None,
+                        'horario_inicio_trabalho': '08:00:00',
                         'horario_fim_trabalho': '18:00:00',
                         'dias_trabalho': '1,2,3,4,5',
                         'monitoramento_ativo': True,
                         'departamento': None,
+                        'escala': None,
                         'created': True
                     }
                     return jsonify(result)
@@ -282,6 +303,21 @@ def update_monitored_user(current_user, user_id):
             if 'ativo' in data:
                 update_fields.append('ativo = %s')
                 update_values.append(data['ativo'])
+            if 'escala_trabalho_id' in data:
+                escala_id = data.get('escala_trabalho_id')
+                if escala_id is not None:
+                    try:
+                        escala_id = int(escala_id)
+                        # Verificar se a escala existe e está ativa
+                        db.cursor.execute("SELECT id FROM escalas_trabalho WHERE id = %s AND ativo = TRUE;", (escala_id,))
+                        if not db.cursor.fetchone():
+                            return jsonify({'message': 'Escala não encontrada ou inativa!'}), 404
+                    except ValueError:
+                        return jsonify({'message': 'ID de escala inválido!'}), 400
+                else:
+                    escala_id = None  # Permitir definir escala como NULL
+                update_fields.append('escala_trabalho_id = %s')
+                update_values.append(escala_id)
             if 'horario_inicio_trabalho' in data:
                 update_fields.append('horario_inicio_trabalho = %s')
                 update_values.append(data['horario_inicio_trabalho'])

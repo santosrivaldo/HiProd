@@ -12,6 +12,7 @@ from backend.routes.user_routes import user_bp
 from backend.routes.department_routes import department_bp
 from backend.routes.tag_routes import tag_bp
 from backend.routes.category_routes import category_bp
+from backend.routes.escala_routes import escala_bp
 from backend.routes.legacy_routes import legacy_bp
 
 app = Flask(__name__)
@@ -28,6 +29,7 @@ app.register_blueprint(user_bp)
 app.register_blueprint(department_bp)
 app.register_blueprint(tag_bp)
 app.register_blueprint(category_bp)
+app.register_blueprint(escala_bp)
 app.register_blueprint(legacy_bp)
 
 if __name__ == '__main__':
