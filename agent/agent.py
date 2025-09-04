@@ -442,12 +442,27 @@ def main():
         current_window_info = get_active_window_info()
         current_usuario_nome = get_logged_user()
 
-        # Verificar se o nome do usuário mudou
+        # Detectar mudança de usuário
         if current_usuario_nome != last_usuario_nome:
-            print(f"🔄 Usuário do sistema mudou de '{last_usuario_nome}' para '{current_usuario_nome}'")
+            print(f"👤 Mudança de usuário: {last_usuario_nome} -> {current_usuario_nome}")
             last_usuario_nome = current_usuario_nome
             usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0  # Reset contador
+
+            # Se não conseguiu obter o ID do usuário, pular este ciclo
+            if not usuario_monitorado_id or usuario_monitorado_id == 0:
+                print(f"⚠️ Não foi possível obter ID válido para usuário {current_usuario_nome}, aguardando próximo ciclo...")
+                time.sleep(10)
+                continue
+
+        # Verificar se temos um ID válido antes de continuar
+        if not usuario_monitorado_id or usuario_monitorado_id == 0:
+            print(f"⚠️ ID de usuário inválido ({usuario_monitorado_id}), tentando reobter...")
+            usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
+            if not usuario_monitorado_id or usuario_monitorado_id == 0:
+                print("❌ Falha ao obter ID válido, aguardando 30 segundos...")
+                time.sleep(30)
+                continue
 
         # Verificar periodicamente se o usuário ainda existe (a cada 10 ciclos = ~100 segundos)
         verificacao_contador += 1
