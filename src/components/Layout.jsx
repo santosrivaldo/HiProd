@@ -3,19 +3,21 @@ import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import {
   ChartBarIcon,
-  Cog6ToothIcon,
   ClipboardDocumentListIcon,
+  Cog6ToothIcon,
   MoonIcon,
   SunIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
   XMarkIcon,
+  ClockIcon,
 } from "@heroicons/react/24/outline";
 import Dashboard from "./Dashboard";
 import ActivityManagement from "./ActivityManagement";
 import TagManagement from "./TagManagement";
 import UserManagement from "./UserManagement";
 import Settings from "./Settings";
+import Schedules from "./Schedules"; // Assuming you have a Schedules component
 
 const navigation = [
   { name: "Dashboard", icon: ChartBarIcon, component: "dashboard" },
@@ -26,6 +28,7 @@ const navigation = [
   },
   { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags" },
   { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users" },
+  { name: "Escalas", icon: ClockIcon, component: "schedules" },
   { name: "Configurações", icon: Cog6ToothIcon, component: "settings" },
 ];
 
@@ -45,6 +48,8 @@ export default function Layout({ children }) {
         return <TagManagement />;
       case "users":
         return <UserManagement />;
+      case "schedules":
+        return <Schedules />;
       case "settings":
         return <Settings />;
       default:
@@ -207,6 +212,7 @@ export default function Layout({ children }) {
               {currentView === "activities" && <ActivityManagement />}
               {currentView === "tags" && <TagManagement />}
               {currentView === "users" && <UserManagement />}
+              {currentView === "schedules" && <Schedules />}
               {currentView === "settings" && <Settings />}
             </div>
           </div>

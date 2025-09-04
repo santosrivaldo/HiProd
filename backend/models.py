@@ -337,7 +337,8 @@ def init_db():
 
             if escalas_count == 0:
                 escalas_padrao = [
-                    ('Comercial', 'Horário comercial padrão', '08:00:00', '18:00:00', '1,2,3,4,5'),
+                    ('Comercial Padrão', 'Horário comercial de 8h às 18h com 1h de almoço (9h/dia)', '08:00:00', '18:00:00', '1,2,3,4,5'),
+                    ('Comercial Sem Almoço', 'Horário comercial de 8h às 17h sem almoço (9h/dia)', '08:00:00', '17:00:00', '1,2,3,4,5'),
                     ('Meio Período Manhã', 'Meio período manhã', '08:00:00', '12:00:00', '1,2,3,4,5'), 
                     ('Meio Período Tarde', 'Meio período tarde', '14:00:00', '18:00:00', '1,2,3,4,5'),
                     ('Noturno', 'Turno noturno', '22:00:00', '06:00:00', '1,2,3,4,5'),

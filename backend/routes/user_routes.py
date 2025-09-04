@@ -1,4 +1,3 @@
-
 import uuid
 import psycopg2
 from flask import Blueprint, request, jsonify
@@ -117,11 +116,16 @@ def get_monitored_users(current_user):
                 else:
                     # Usuário não existe, criar novo automaticamente
                     print(f"🔧 Criando novo usuário monitorado: {nome_usuario}")
+                    # Buscar escala padrão
+                    db.cursor.execute("SELECT id FROM escalas_trabalho WHERE nome = 'Comercial Padrão' AND ativo = TRUE LIMIT 1;")
+                    escala_padrao = db.cursor.fetchone()
+                    escala_padrao_id = escala_padrao[0] if escala_padrao else None
+
                     db.cursor.execute('''
-                        INSERT INTO usuarios_monitorados (nome, cargo)
-                        VALUES (%s, 'Usuário')
+                        INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-                    ''', (nome_usuario,))
+                    ''', (nome, departamento_id, cargo, escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
 
                     novo_usuario = db.cursor.fetchone()
                     print(f"✅ Usuário monitorado criado: {nome_usuario} (ID: {novo_usuario[0]})")
@@ -237,11 +241,16 @@ def create_monitored_user(current_user):
             else:
                 dept_id = None
 
+            # Buscar escala padrão
+            db.cursor.execute("SELECT id FROM escalas_trabalho WHERE nome = 'Comercial Padrão' AND ativo = TRUE LIMIT 1;")
+            escala_padrao = db.cursor.fetchone()
+            escala_padrao_id = escala_padrao[0] if escala_padrao else None
+
             db.cursor.execute('''
-                INSERT INTO usuarios_monitorados (nome, cargo, departamento_id)
-                VALUES (%s, %s, %s)
-                RETURNING id, nome, cargo, departamento_id, ativo, created_at, updated_at;
-            ''', (nome, cargo, dept_id))
+                INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
+            ''', (nome, departamento_id, cargo, escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
 
             usuario = db.cursor.fetchone()
             return jsonify({
@@ -293,7 +302,7 @@ def update_monitored_user(current_user, user_id):
                         # Verificar se o departamento existe e está ativo
                         db.cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
                         if not db.cursor.fetchone():
-                            return jsonify({'message': 'Departamento não encontrado ou inativo!'}), 404
+                            return jsonify({'message': 'Departamento não encontrado ou inativo!'}), 400
                     except ValueError:
                         return jsonify({'message': 'ID de departamento inválido!'}), 400
                 else:

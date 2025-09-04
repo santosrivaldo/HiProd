@@ -6,6 +6,13 @@ import Dashboard from './components/Dashboard'
 import Layout from './components/Layout'
 import { useAuth } from './contexts/AuthContext'
 import LoadingSpinner from './components/LoadingSpinner'
+import UserManagement from './components/UserManagement'
+import TagManagement from './components/TagManagement'
+import ActivityManagement from './components/ActivityManagement'
+import WorkScheduleManagement from './components/WorkScheduleManagement'
+import Settings from './components/Settings'
+import { Routes, Route } from 'react-router-dom'
+
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth()
@@ -14,7 +21,16 @@ function AppContent() {
     return <LoadingSpinner size="xl" text="Carregando..." fullScreen />
   }
 
-  return isAuthenticated ? <Layout /> : <Login />
+  return (
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/users" element={<UserManagement />} />
+      <Route path="/tags" element={<TagManagement />} />
+      <Route path="/activities" element={<ActivityManagement />} />
+      <Route path="/schedules" element={<WorkScheduleManagement />} />
+      <Route path="/settings" element={<Settings />} />
+    </Routes>
+  )
 }
 
 function App() {
