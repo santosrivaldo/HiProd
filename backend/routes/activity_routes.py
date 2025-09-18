@@ -1,10 +1,11 @@
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from datetime import datetime, timezone, timedelta
 from ..auth import token_required
 from ..database import DatabaseConnection
-from ..utils import classify_activity_with_tags
+from ..utils import classify_activity_with_tags, get_brasilia_now, format_datetime_brasilia
 import re
+import base64
 
 activity_bp = Blueprint('activity', __name__)
 
@@ -176,21 +177,37 @@ def add_activity(current_user):
 
             user_agent = request.headers.get('User-Agent', '')
 
-            # Configurar timezone de São Paulo
-            sao_paulo_tz = timezone(timedelta(hours=-3))
-            horario_atual = datetime.now(sao_paulo_tz)
+            # Usar timezone de Brasília
+            horario_atual = get_brasilia_now()
+            
+            # Processar screenshot se fornecido
+            screenshot_data = None
+            screenshot_size = None
+            screenshot_format = 'JPEG'
+            screenshot = data.get('screenshot')
+            
+            if screenshot:
+                try:
+                    # Decodificar base64 para bytes
+                    screenshot_bytes = base64.b64decode(screenshot)
+                    screenshot_data = screenshot_bytes
+                    screenshot_size = len(screenshot_bytes)
+                    print(f"📸 Screenshot processado: {screenshot_size} bytes")
+                except Exception as e:
+                    print(f"⚠️ Erro ao processar screenshot: {e}")
+                    screenshot = None
 
             # Salvar atividade temporariamente
             db.cursor.execute('''
                 INSERT INTO atividades
                 (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade,
-                 horario, duracao, ip_address, user_agent, domain, application)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 horario, duracao, ip_address, user_agent, domain, application, screenshot, screenshot_data, screenshot_size, screenshot_format)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
             ''', (
                 usuario_monitorado_id, ociosidade, active_window, titulo_janela,
                 'pending', 'neutral', horario_atual,
-                duracao, ip_address, user_agent, domain, application
+                duracao, ip_address, user_agent, domain, application, screenshot, screenshot_data, screenshot_size, screenshot_format
             ))
 
             activity_id = db.cursor.fetchone()[0]
@@ -199,7 +216,7 @@ def add_activity(current_user):
             db.conn.commit()
 
             try:
-                categoria, produtividade = classify_activity_with_tags(active_window, ociosidade, user_department_id, activity_id)
+                categoria, produtividade = classify_activity_with_tags(active_window, ociosidade, user_department_id, activity_id, domain)
                 print(f"🏷️ Classificação concluída: {categoria} ({produtividade})")
             except Exception as classify_error:
                 print(f"❌ Erro na classificação: {classify_error}")
@@ -225,7 +242,7 @@ def add_activity(current_user):
                 'produtividade': produtividade,
                 'usuario_monitorado': usuario_monitorado[1],
                 'usuario_monitorado_id': usuario_monitorado_id,
-                'horario': horario_atual.isoformat()
+                'horario': format_datetime_brasilia(horario_atual)
             }
 
             print(f"✅ Atividade salva: ID {activity_id}")
@@ -312,7 +329,9 @@ def get_atividades(current_user):
                         SUM(COALESCE(a.duracao, 10)) as duracao_total,
                         MAX(a.domain) as domain,
                         MAX(a.application) as application,
-                        DATE(a.horario) as data_atividade
+                        DATE(a.horario) as data_atividade,
+                        MAX(CASE WHEN a.screenshot IS NOT NULL THEN true ELSE false END) as has_screenshot,
+                        MAX(a.screenshot_size) as screenshot_size
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
@@ -336,7 +355,9 @@ def get_atividades(current_user):
                         1 as eventos_agrupados,
                         COALESCE(a.duracao, 10) as duracao_total,
                         a.domain,
-                        a.application
+                        a.application,
+                        CASE WHEN a.screenshot IS NOT NULL THEN true ELSE false END as has_screenshot,
+                        a.screenshot_size
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
@@ -366,7 +387,9 @@ def get_atividades(current_user):
                         'duracao': row[11] or 10,
                         'domain': row[12] if len(row) > 12 else None,
                         'application': row[13] if len(row) > 13 else None,
-                        'data_atividade': row[14].isoformat() if row[14] else None
+                        'data_atividade': row[14].isoformat() if row[14] else None,
+                        'has_screenshot': row[15] if len(row) > 15 else False,
+                        'screenshot_size': row[16] if len(row) > 16 else None
                     })
                 else:
                     result.append({
@@ -570,3 +593,78 @@ def get_statistics(current_user):
     except Exception as e:
         print(f"Erro ao obter estatísticas: {e}")
         return jsonify({}), 200
+
+@activity_bp.route('/screenshot/<int:activity_id>', methods=['GET'])
+@token_required
+def get_screenshot(current_user, activity_id):
+    """Retorna o screenshot de uma atividade específica"""
+    try:
+        with DatabaseConnection() as db:
+            # Buscar screenshot da atividade
+            db.cursor.execute('''
+                SELECT screenshot_data, screenshot_format, screenshot_size
+                FROM atividades 
+                WHERE id = %s AND screenshot_data IS NOT NULL
+            ''', (activity_id,))
+            
+            result = db.cursor.fetchone()
+            
+            if not result:
+                return jsonify({'error': 'Screenshot não encontrado'}), 404
+            
+            screenshot_data, screenshot_format, screenshot_size = result
+            
+            # Retornar imagem
+            return Response(
+                screenshot_data,
+                mimetype=f'image/{screenshot_format.lower()}',
+                headers={
+                    'Content-Length': str(screenshot_size),
+                    'Cache-Control': 'public, max-age=3600'
+                }
+            )
+            
+    except Exception as e:
+        print(f"Erro ao obter screenshot: {e}")
+        return jsonify({'error': 'Erro interno do servidor'}), 500
+
+@activity_bp.route('/screenshots/batch', methods=['POST'])
+@token_required
+def get_screenshots_batch(current_user):
+    """Retorna múltiplos screenshots em base64"""
+    try:
+        data = request.get_json()
+        activity_ids = data.get('activity_ids', [])
+        
+        if not activity_ids:
+            return jsonify({'error': 'IDs de atividades não fornecidos'}), 400
+        
+        with DatabaseConnection() as db:
+            # Buscar screenshots das atividades
+            placeholders = ','.join(['%s'] * len(activity_ids))
+            db.cursor.execute(f'''
+                SELECT id, screenshot, screenshot_format, screenshot_size
+                FROM atividades 
+                WHERE id IN ({placeholders}) AND screenshot IS NOT NULL
+            ''', activity_ids)
+            
+            results = db.cursor.fetchall()
+            
+            screenshots = []
+            for result in results:
+                activity_id, screenshot_b64, screenshot_format, screenshot_size = result
+                screenshots.append({
+                    'activity_id': activity_id,
+                    'screenshot': screenshot_b64,
+                    'format': screenshot_format,
+                    'size': screenshot_size
+                })
+            
+            return jsonify({
+                'screenshots': screenshots,
+                'count': len(screenshots)
+            })
+            
+    except Exception as e:
+        print(f"Erro ao obter screenshots em lote: {e}")
+        return jsonify({'error': 'Erro interno do servidor'}), 500

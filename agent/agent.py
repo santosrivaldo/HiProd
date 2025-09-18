@@ -9,6 +9,9 @@ import json
 import subprocess
 import re
 from urllib.parse import urlparse
+import base64
+from PIL import ImageGrab
+import io
 try:
     import pygetwindow as gw
     import pyperclip
@@ -16,7 +19,7 @@ except ImportError:
     gw = None
     pyperclip = None
 
-API_BASE_URL = 'https://30639375-c8ee-4839-b62a-4cdd5cf7f23e-00-29im557edjni.worf.replit.dev:8000'
+API_BASE_URL = 'http://localhost:8000'
 LOGIN_URL = f"{API_BASE_URL}/login"
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
@@ -175,18 +178,18 @@ def get_chrome_active_tab_url():
 
 
 def extract_domain_from_title(window_title):
-    """Extrai domínio do título da janela quando possível com maior precisão"""
+    """Extrai domínio do título da janela com maior precisão e menos falsos positivos"""
     try:
         if not window_title:
             return None
 
         print(f"🔍 Tentando extrair domínio de: {window_title}")
 
-        # Primeiro: procurar por URLs completas no título
+        # Primeiro: procurar por URLs completas no título (mais específico)
         url_patterns = [
-            r'https?://([a-zA-Z0-9.-]+(?:\.[a-zA-Z]{2,})*(?::\d+)?)',
-            r'localhost:(\d+)',  # localhost com porta
-            r'(\d+\.\d+\.\d+\.\d+):?(\d+)?',  # IPs
+            r'https?://([a-zA-Z0-9.-]+(?:\.[a-zA-Z]{2,})*(?::\d+)?)',  # URLs completas
+            r'localhost:(\d+)',  # localhost com porta específica
+            r'(\d+\.\d+\.\d+\.\d+):?(\d+)?',  # IPs específicos
         ]
 
         for pattern in url_patterns:
@@ -204,18 +207,21 @@ def extract_domain_from_title(window_title):
                     return result
                 else:
                     domain = matches[0] if isinstance(matches[0], str) else matches[0][0]
-                    # Validar se é um domínio válido
-                    if '.' in domain and len(domain.split('.')) >= 2:
+                    # Validação mais rigorosa para domínios
+                    if ('.' in domain and 
+                        len(domain.split('.')) >= 2 and 
+                        len(domain) >= 4 and
+                        not domain.startswith('.') and
+                        not domain.endswith('.') and
+                        ' ' not in domain):
                         print(f"✅ URL completa encontrada: {domain}")
                         return domain
 
-        # Detecção especial para aplicações conhecidas no título
+        # Detecção especial para aplicações conhecidas (mais restritiva)
         app_domain_mapping = {
             'activity tracker': 'localhost:5000',
             'atividade tracker': 'localhost:5000',
             'hiprod': 'localhost:5000',
-            'lavanderia 60 minutos': 'lavanderia60minutos.com.br',
-            'admin | lavanderia': 'lavanderia60minutos.com.br',
         }
 
         title_lower = window_title.lower()
@@ -224,13 +230,10 @@ def extract_domain_from_title(window_title):
                 print(f"✅ Aplicação conhecida detectada: {app_name} -> {domain}")
                 return domain
 
-        # Segundo: procurar por domínios específicos em contexto
+        # Apenas domínios muito específicos e claros
         specific_patterns = [
-            r'([a-zA-Z0-9-]+\.bitrix24\.com\.br)',  # Bitrix24 Brasil
-            r'([a-zA-Z0-9-]+\.replit\.dev)',  # Replit apps
-            r'([a-zA-Z0-9-]+\.vercel\.app)',  # Vercel apps
-            r'([a-zA-Z0-9-]+\.herokuapp\.com)',  # Heroku apps
             r'([a-zA-Z0-9-]+\.github\.io)',  # GitHub pages
+            r'([a-zA-Z0-9-]+\.vercel\.app)',  # Vercel apps
             r'([a-zA-Z0-9-]+\.netlify\.app)',  # Netlify apps
             r'([a-zA-Z0-9-]+\.firebase\.app)',  # Firebase apps
         ]
@@ -242,41 +245,13 @@ def extract_domain_from_title(window_title):
                 print(f"✅ Domínio específico encontrado: {result}")
                 return result
 
-        # Terceiro: padrões mais gerais
-        general_patterns = [
-            r'([a-zA-Z0-9-]+\.(?:com\.br|co\.uk|gov\.br|org\.br))',  # domínios BR/UK específicos
-            r'([a-zA-Z0-9-]+\.(?:com|org|net|edu|gov|br|de|fr|es|it|ru|cn|jp))',  # TLDs principais
-            r'([a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,})',  # domínios com subdomínio
-        ]
-
-        for pattern in general_patterns:
-            matches = re.findall(pattern, window_title.lower())
-            for match in matches:
-                domain = match
-                # Validações adicionais para evitar falsos positivos
-                if (len(domain) >= 4 and 
-                    '.' in domain and 
-                    len(domain.split('.')) >= 2 and
-                    not domain.startswith('.') and
-                    not domain.endswith('.') and
-                    ' ' not in domain):
-                    print(f"✅ Domínio geral encontrado: {domain}")
-                    return domain
-
-        # Quarto: sites conhecidos por nome
+        # Sites conhecidos apenas com padrões muito específicos
         known_sites = {
-            'youtube.com': [r'\byoutube\b', r'\byt\b'],
-            'facebook.com': [r'\bfacebook\b', r'\bfb\b'],
-            'twitter.com': [r'\btwitter\b', r'\bx\.com\b'],
-            'linkedin.com': [r'\blinkedin\b'],
-            'github.com': [r'\bgithub\b'],
-            'stackoverflow.com': [r'\bstackoverflow\b', r'\bstack overflow\b'],
-            'reddit.com': [r'\breddit\b'],
-            'wikipedia.org': [r'\bwikipedia\b'],
-            'google.com': [r'\bgoogle\b.*\bsearch\b', r'\bgoogle\b.*\bpesquisa\b'],
-            'gmail.com': [r'\bgmail\b', r'\be-mail.*google\b'],
-            'chatgpt.com': [r'\bchatgpt\b', r'\bchat gpt\b'],
-            'openai.com': [r'\bopenai\b'],
+            'youtube.com': [r'\byoutube\.com\b'],
+            'github.com': [r'\bgithub\.com\b'],
+            'stackoverflow.com': [r'\bstackoverflow\.com\b'],
+            'google.com': [r'\bgoogle\.com\b'],
+            'gmail.com': [r'\bgmail\.com\b'],
         }
 
         for domain, patterns in known_sites.items():
@@ -285,7 +260,7 @@ def extract_domain_from_title(window_title):
                     print(f"✅ Site conhecido detectado: {domain}")
                     return domain
 
-        print(f"❌ Nenhum domínio extraído de: {window_title}")
+        print(f"❌ Nenhum domínio válido extraído de: {window_title}")
 
     except Exception as e:
         print(f"⚠️ Erro ao extrair domínio do título: {e}")
@@ -293,48 +268,81 @@ def extract_domain_from_title(window_title):
     return None
 
 
+# Função removida - não filtrar atividades irrelevantes
+
+def capture_screenshot():
+    """Captura screenshot da tela atual"""
+    try:
+        # Capturar screenshot
+        screenshot = ImageGrab.grab()
+        
+        # Redimensionar para economizar espaço (max 800x600)
+        screenshot.thumbnail((800, 600), Image.Resampling.LANCZOS)
+        
+        # Converter para base64
+        buffer = io.BytesIO()
+        screenshot.save(buffer, format='JPEG', quality=70, optimize=True)
+        buffer.seek(0)
+        
+        # Codificar em base64
+        screenshot_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        print(f"📸 Screenshot capturado: {len(screenshot_b64)} bytes")
+        return screenshot_b64
+        
+    except Exception as e:
+        print(f"❌ Erro ao capturar screenshot: {e}")
+        return None
+
 def get_active_window_info():
-    """Captura informações da janela ativa incluindo domínio quando possível"""
+    """Captura informações da janela ativa com separação correta de domínio e aplicação"""
     try:
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
 
-        # Identificar aplicação primeiro
+        # Identificar aplicação baseada no processo (mais confiável)
         application = get_application_name(window_title)
         domain = None
 
-        # Se for navegador, tentar capturar URL real
-        if 'Chrome' in application or 'Firefox' in application or 'Edge' in application:
+        # SEPARAÇÃO CLARA: Domínio apenas para navegadores web
+        if application in ['Google Chrome', 'Firefox', 'Microsoft Edge']:
+            # Tentar capturar URL real do navegador
             domain = get_chrome_active_tab_url()
             if domain:
-                print(f"🌐 URL capturada do navegador: {domain}")
+                print(f"🌐 Domínio capturado do navegador: {domain}")
             else:
-                # Se não conseguiu capturar URL, extrair do título com mais cuidado
+                # Fallback: extrair domínio do título apenas se for claramente uma URL
                 domain = extract_domain_from_title(window_title)
                 if domain:
                     print(f"🔍 Domínio extraído do título: {domain}")
                 else:
-                    print(f"⚠️ Não foi possível extrair domínio do título: {window_title[:50]}...")
+                    print(f"⚠️ Navegador sem domínio detectável: {window_title[:50]}...")
 
-        # Para aplicações desktop conhecidas, não extrair domínio
+        # Para aplicações desktop, SEMPRE domain = None
         elif application in ['VS Code', 'Visual Studio', 'Notepad', 'Notepad++', 'Sublime Text', 
-                           'Atom', 'Microsoft Word', 'Microsoft Excel', 'PowerPoint', 'Windows Explorer']:
+                           'Atom', 'Microsoft Word', 'Microsoft Excel', 'PowerPoint', 'Windows Explorer',
+                           'Outlook', 'Microsoft Teams', 'Slack', 'Discord', 'WhatsApp', 'Telegram']:
             domain = None
-            print(f"📱 Aplicação desktop detectada: {application}")
+            print(f"📱 Aplicação desktop: {application} (sem domínio)")
         
-        # Para outras aplicações, tentar extrair domínio apenas se parecer ser web-based
+        # Para outras aplicações, verificar se é realmente web-based
         else:
-            # Verificar se o título contém indicações de conteúdo web
-            web_indicators = ['http', 'www.', '.com', '.org', '.net', '.br', 'localhost']
-            has_web_content = any(indicator in window_title.lower() for indicator in web_indicators)
+            # Apenas extrair domínio se for claramente uma aplicação web
+            web_indicators = ['http://', 'https://', 'www.', '.com', '.org', '.net', '.br', 'localhost:']
+            has_clear_web_content = any(indicator in window_title.lower() for indicator in web_indicators)
             
-            if has_web_content:
+            if has_clear_web_content:
                 domain = extract_domain_from_title(window_title)
                 if domain:
-                    print(f"🔍 Domínio extraído do título: {domain}")
+                    print(f"🔍 Aplicação web detectada: {application} -> {domain}")
+                else:
+                    domain = None
+                    print(f"📱 Aplicação local: {application}")
             else:
                 domain = None
-                print(f"📱 Aplicação local detectada: {application}")
+                print(f"📱 Aplicação local: {application}")
+
+        # Não filtrar atividades - enviar todas
 
         return {
             'window_title': window_title,
@@ -577,7 +585,7 @@ def main():
     ociosidade = 0
     registros = []
 
-    tz = pytz.timezone('America/Sao_Paulo')
+    tz = pytz.timezone('America/Sao_Paulo')  # Brasília timezone
 
     print("🚀 Agente iniciado com captura de domínio!")
     print("📋 Métodos disponíveis:")
@@ -644,10 +652,15 @@ def main():
             ociosidade += 10
 
         if ociosidade % 10 == 0:
+            # Enviar todas as atividades (sem filtro)
+            
             # Verificar se temos um ID válido antes de criar o registro
             if usuario_monitorado_id is None:
                 print("⚠️ ID do usuário monitorado é None, tentando recriar...")
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
+
+            # Capturar screenshot a cada 10 segundos
+            screenshot_b64 = capture_screenshot()
 
             if usuario_monitorado_id is not None:
                 registro = {
@@ -656,9 +669,11 @@ def main():
                     'active_window': current_window_info['window_title'],
                     'domain': current_window_info['domain'],
                     'application': current_window_info['application'],
+                    'screenshot': screenshot_b64,
                     'horario': datetime.now(tz).isoformat()
                 }
                 registros.append(registro)
+                print(f"📝 Registro adicionado: {current_window_info['application']} - {current_window_info['domain'] or 'N/A'}")
             else:
                 print("❌ Não foi possível obter ID do usuário monitorado, pulando registro...")
 

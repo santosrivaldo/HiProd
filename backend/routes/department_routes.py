@@ -3,6 +3,7 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..utils import format_datetime_brasilia
 
 department_bp = Blueprint('department', __name__)
 
@@ -23,10 +24,7 @@ def get_departments(current_user):
                     # Verificar se created_at é datetime ou string
                     created_at_value = None
                     if len(dept) > 5 and dept[5]:
-                        if hasattr(dept[5], 'isoformat'):
-                            created_at_value = dept[5].isoformat()
-                        else:
-                            created_at_value = str(dept[5])
+                        created_at_value = format_datetime_brasilia(dept[5])
 
                     result.append({
                         'id': dept[0],

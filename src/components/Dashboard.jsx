@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format, subDays, startOfDay, endOfDay } from 'date-fns'
+import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
+import { PhotoIcon } from '@heroicons/react/24/outline'
 import {
   PieChart,
   Pie,
@@ -122,6 +124,20 @@ export default function Dashboard() {
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
   const [viewMode, setViewMode] = useState('overview') // overview, domains, applications, timeline
+  const [selectedScreenshot, setSelectedScreenshot] = useState(null)
+  const [showScreenshotModal, setShowScreenshotModal] = useState(false)
+
+  const handleViewScreenshot = async (activityId) => {
+    try {
+      const response = await api.get(`/atividade/screenshot/${activityId}`)
+      if (response.data) {
+        setSelectedScreenshot(response.data)
+        setShowScreenshotModal(true)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar screenshot:', error)
+    }
+  }
 
   const loadDashboardData = useCallback(async () => {
     if (loading) return
@@ -174,7 +190,7 @@ export default function Dashboard() {
 
     let filteredActivities = activities.filter(activity => {
       if (!activity?.horario) return false
-      const activityDate = new Date(activity.horario)
+      const activityDate = parseBrasiliaDate(activity.horario)
       return activityDate >= startDate && activityDate <= endDate
     })
 
@@ -285,7 +301,7 @@ export default function Dashboard() {
     }
 
     filteredActivities.forEach(activity => {
-      const hour = new Date(activity.horario).getHours()
+      const hour = parseBrasiliaDate(activity.horario).getHours()
       const duration = activity.duracao_total || activity.duracao || (activity.eventos_agrupados || 1) * 10
       const produtividade = activity.produtividade || 'neutral'
 
@@ -313,7 +329,7 @@ export default function Dashboard() {
 
     const dailyData = {}
     filteredActivities.forEach(activity => {
-      const day = format(new Date(activity.horario), 'yyyy-MM-dd')
+      const day = format(parseBrasiliaDate(activity.horario), 'yyyy-MM-dd')
       if (!dailyData[day]) {
         dailyData[day] = {
           date: day,
@@ -376,7 +392,7 @@ export default function Dashboard() {
     const userStats = Object.values(userStatsMap)
 
     const recentActivities = filteredActivities
-      .sort((a, b) => new Date(b.horario) - new Date(a.horario))
+      .sort((a, b) => parseBrasiliaDate(b.horario) - parseBrasiliaDate(a.horario))
       .slice(0, 10)
       .map(activity => ({
         ...activity,
@@ -959,7 +975,7 @@ export default function Dashboard() {
                     {activity.active_window}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-300">
-                    {activity.usuario_monitorado_nome} • {format(new Date(activity.horario), 'dd/MM/yyyy HH:mm')}
+                    {activity.usuario_monitorado_nome} • {formatBrasiliaDate(activity.horario, 'datetime')}
                   </p>
                   {activity.domain && (
                     <p className="text-xs text-blue-600 dark:text-blue-400">
@@ -973,6 +989,16 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div className="flex items-center space-x-2">
+                  {activity.has_screenshot && (
+                    <button
+                      onClick={() => handleViewScreenshot(activity.id)}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                      title="Ver Screenshot"
+                    >
+                      <PhotoIcon className="w-4 h-4 mr-1" />
+                      Screenshot
+                    </button>
+                  )}
                   <span
                     className={`px-2 py-1 text-xs rounded-full ${
                       activity.produtividade === 'productive'
@@ -997,6 +1023,58 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Screenshot Modal */}
+      {showScreenshotModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Screenshot da Atividade
+                </h3>
+                <button
+                  onClick={() => setShowScreenshotModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <span className="sr-only">Fechar</span>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto">
+                {selectedScreenshot ? (
+                  <img
+                    src={`data:image/jpeg;base64,${selectedScreenshot}`}
+                    alt="Screenshot da atividade"
+                    className="w-full h-auto rounded-lg shadow-lg"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-64 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <div className="text-center">
+                      <PhotoIcon className="mx-auto h-12 w-12 text-gray-400" />
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        Screenshot não disponível
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowScreenshotModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

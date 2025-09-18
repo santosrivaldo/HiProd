@@ -1,5 +1,6 @@
 
 import { format } from 'date-fns'
+import { formatBrasiliaDate } from './timezoneUtils'
 
 export const exportToCSV = (data, filename, headers = null) => {
   if (!data || data.length === 0) {
@@ -33,7 +34,7 @@ export const exportToCSV = (data, filename, headers = null) => {
   const link = document.createElement('a')
   const url = URL.createObjectURL(blob)
   link.setAttribute('href', url)
-  link.setAttribute('download', `${filename}_${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`)
+  link.setAttribute('download', `${filename}_${formatBrasiliaDate(new Date(), 'datetime').replace(/[\/\s:]/g, '-')}.csv`)
   link.style.visibility = 'hidden'
   document.body.appendChild(link)
   link.click()
@@ -107,7 +108,7 @@ export const printData = (title, data, columns) => {
     <body>
       <h1>${title}</h1>
       <div class="print-info">
-        Relatório gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}
+        Relatório gerado em: ${formatBrasiliaDate(new Date(), 'datetime')}
       </div>
       <table>
         <thead>

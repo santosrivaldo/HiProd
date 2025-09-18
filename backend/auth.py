@@ -2,17 +2,20 @@
 import jwt
 import bcrypt
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from functools import wraps
 from flask import request, jsonify
 from .config import Config
 from .database import DatabaseConnection
 
+# Timezone de Brasília (UTC-3)
+BRASILIA_TZ = timezone(timedelta(hours=-3))
+
 def generate_token(user_id):
     """Gerar token JWT"""
     payload = {
         'user_id': str(user_id),
-        'exp': datetime.now(timezone.utc) + Config.JWT_ACCESS_TOKEN_EXPIRES
+        'exp': datetime.now(BRASILIA_TZ) + Config.JWT_ACCESS_TOKEN_EXPIRES
     }
     return jwt.encode(payload, Config.JWT_SECRET_KEY, algorithm='HS256')
 

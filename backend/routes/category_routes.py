@@ -3,6 +3,7 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..utils import format_datetime_brasilia
 
 category_bp = Blueprint('category', __name__)
 
@@ -73,7 +74,7 @@ def get_categories(current_user):
                 'cor': cat[4],
                 'descricao': cat[5],
                 'is_global': cat[6],
-                'created_at': cat[7].isoformat() if cat[7] else None,
+                'created_at': format_datetime_brasilia(cat[7]) if cat[7] else None,
                 'departamento_nome': cat[8] if len(cat) > 8 else None
             } for cat in categorias]
             return jsonify(result)

@@ -3,6 +3,7 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..utils import format_datetime_brasilia
 
 user_bp = Blueprint('user', __name__)
 
@@ -37,7 +38,7 @@ def get_users(current_user):
                         'email': usuario[2],
                         'departamento_id': usuario[3],
                         'ativo': usuario[4],
-                        'created_at': usuario[5].isoformat() if usuario[5] else None,
+                        'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
                         'departamento': departamento_info
                     })
 
@@ -100,8 +101,8 @@ def get_monitored_users(current_user):
                         'departamento_id': usuario_existente[2] if len(usuario_existente) > 2 else None,
                         'cargo': usuario_existente[3] if len(usuario_existente) > 3 else None,
                         'ativo': usuario_existente[4] if len(usuario_existente) > 4 else True,
-                        'created_at': usuario_existente[5].isoformat() if usuario_existente[5] else None,
-                        'updated_at': usuario_existente[6].isoformat() if len(usuario_existente) > 6 and usuario_existente[6] else None,
+                        'created_at': format_datetime_brasilia(usuario_existente[5]) if usuario_existente[5] else None,
+                        'updated_at': format_datetime_brasilia(usuario_existente[6]) if len(usuario_existente) > 6 and usuario_existente[6] else None,
                         'escala_trabalho_id': usuario_existente[7] if len(usuario_existente) > 7 else None,
                         'horario_inicio_trabalho': horario_inicio,
                         'horario_fim_trabalho': horario_fim,
@@ -136,8 +137,8 @@ def get_monitored_users(current_user):
                         'departamento_id': novo_usuario[2] if len(novo_usuario) > 2 else None,
                         'cargo': novo_usuario[3] if len(novo_usuario) > 3 else None,
                         'ativo': novo_usuario[4] if len(novo_usuario) > 4 else True,
-                        'created_at': novo_usuario[5].isoformat() if novo_usuario[5] else None,
-                        'updated_at': novo_usuario[6].isoformat() if len(novo_usuario) > 6 and novo_usuario[6] else None,
+                        'created_at': format_datetime_brasilia(novo_usuario[5]) if novo_usuario[5] else None,
+                        'updated_at': format_datetime_brasilia(novo_usuario[6]) if len(novo_usuario) > 6 and novo_usuario[6] else None,
                         'escala_trabalho_id': None,
                         'horario_inicio_trabalho': '08:00:00',
                         'horario_fim_trabalho': '18:00:00',
@@ -198,8 +199,8 @@ def get_monitored_users(current_user):
                                 'departamento_id': usuario[2] if len(usuario) > 2 else None,
                                 'cargo': usuario[3] if len(usuario) > 3 else None,
                                 'ativo': usuario[4] if len(usuario) > 4 else True,
-                                'created_at': usuario[5].isoformat() if usuario[5] else None,
-                                'updated_at': usuario[6].isoformat() if len(usuario) > 6 and usuario[6] else None,
+                                'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
+                                'updated_at': format_datetime_brasilia(usuario[6]) if len(usuario) > 6 and usuario[6] else None,
                                 'horario_inicio_trabalho': str(usuario[7]) if len(usuario) > 7 and usuario[7] else '09:00:00',
                                 'horario_fim_trabalho': str(usuario[8]) if len(usuario) > 8 and usuario[8] else '18:00:00',
                                 'dias_trabalho': usuario[9] if len(usuario) > 9 and usuario[9] else '1,2,3,4,5',
@@ -260,8 +261,8 @@ def create_monitored_user(current_user):
                 'cargo': usuario[2],
                 'departamento_id': usuario[3],
                 'ativo': usuario[4],
-                'created_at': usuario[5].isoformat() if usuario[5] else None,
-                'updated_at': usuario[6].isoformat() if usuario[6] else None
+                'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
+                'updated_at': format_datetime_brasilia(usuario[6]) if usuario[6] else None
             }), 201
 
     except psycopg2.IntegrityError:

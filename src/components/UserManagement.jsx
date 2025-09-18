@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
+import { formatBrasiliaDate } from '../utils/timezoneUtils'
 
 const UserManagement = () => {
   const { user } = useAuth()
@@ -293,7 +294,7 @@ const UserManagement = () => {
 
                 {usuario.created_at && (
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Criado em: {format(new Date(usuario.created_at), 'dd/MM/yyyy HH:mm')}
+                    Criado em: {formatBrasiliaDate(usuario.created_at, 'datetime')}
                   </div>
                 )}
               </li>
@@ -367,7 +368,7 @@ const UserManagement = () => {
 
                 {usuario.created_at && (
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Criado em: {format(new Date(usuario.created_at), 'dd/MM/yyyy HH:mm')}
+                    Criado em: {formatBrasiliaDate(usuario.created_at, 'datetime')}
                   </div>
                 )}
               </li>

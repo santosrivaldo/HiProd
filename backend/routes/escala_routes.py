@@ -2,6 +2,7 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..utils import format_datetime_brasilia
 
 escala_bp = Blueprint('escala', __name__)
 
@@ -31,8 +32,8 @@ def get_escalas(current_user):
                         'horario_fim_trabalho': str(escala[4]) if escala[4] else '18:00:00',
                         'dias_trabalho': escala[5] if escala[5] else '1,2,3,4,5',
                         'ativo': escala[6] if escala[6] is not None else True,
-                        'created_at': escala[7].isoformat() if escala[7] else None,
-                        'updated_at': escala[8].isoformat() if escala[8] else None
+                        'created_at': format_datetime_brasilia(escala[7]) if escala[7] else None,
+                        'updated_at': format_datetime_brasilia(escala[8]) if escala[8] else None
                     })
 
             return jsonify(result)
@@ -73,8 +74,8 @@ def create_escala(current_user):
                 'horario_fim_trabalho': str(escala[4]) if escala[4] else '18:00:00',
                 'dias_trabalho': escala[5] if escala[5] else '1,2,3,4,5',
                 'ativo': escala[6] if escala[6] is not None else True,
-                'created_at': escala[7].isoformat() if escala[7] else None,
-                'updated_at': escala[8].isoformat() if escala[8] else None
+                'created_at': format_datetime_brasilia(escala[7]) if escala[7] else None,
+                'updated_at': format_datetime_brasilia(escala[8]) if escala[8] else None
             }), 201
 
     except psycopg2.IntegrityError:

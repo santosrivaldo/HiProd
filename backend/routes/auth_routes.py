@@ -6,54 +6,14 @@ from flask import Blueprint, request, jsonify
 from ..auth import generate_token, token_required
 from ..database import DatabaseConnection
 from ..config import Config
+from ..utils import format_datetime_brasilia
 
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    data = request.json
-
-    if not data or 'nome' not in data or 'senha' not in data:
-        return jsonify({'message': 'Nome de usuário e senha são obrigatórios!'}), 400
-
-    nome = data['nome'].strip()
-    senha = data['senha']
-
-    if len(nome) < 3:
-        return jsonify({'message': 'Nome de usuário deve ter pelo menos 3 caracteres!'}), 400
-
-    if len(senha) < 6:
-        return jsonify({'message': 'Senha deve ter pelo menos 6 caracteres!'}), 400
-
-    try:
-        with DatabaseConnection() as db:
-            # Verificar se o usuário já existe
-            db.cursor.execute("SELECT * FROM usuarios WHERE nome = %s;", (nome,))
-            if db.cursor.fetchone():
-                return jsonify({'message': 'Usuário já existe!'}), 409
-
-            # Hash da senha
-            hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt())
-
-            # Criar novo usuário
-            new_user_id = uuid.uuid4()
-            db.cursor.execute(
-                "INSERT INTO usuarios (id, nome, senha) VALUES (%s, %s, %s);",
-                (new_user_id, nome, hashed_password.decode('utf-8'))
-            )
-
-            # Gerar token
-            token = generate_token(new_user_id)
-
-            return jsonify({
-                'message': 'Usuário criado com sucesso!',
-                'usuario_id': str(new_user_id),
-                'usuario': nome,
-                'token': token
-            }), 201
-    except Exception as e:
-        print(f"Erro ao registrar usuário: {e}")
-        return jsonify({'message': 'Erro interno do servidor!'}), 500
+    # Registro desabilitado - apenas usuários cadastrados podem acessar
+    return jsonify({'message': 'Registro de novos usuários está desabilitado. Contate o administrador.'}), 403
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -141,7 +101,7 @@ def get_profile(current_user):
     return jsonify({
         'usuario_id': str(current_user[0]),
         'usuario': current_user[1],
-        'created_at': current_user[6].isoformat() if len(current_user) > 6 and current_user[6] else None
+        'created_at': format_datetime_brasilia(current_user[6]) if len(current_user) > 6 and current_user[6] else None
     }), 200
 
 @auth_bp.route('/verify-token', methods=['POST', 'OPTIONS'])

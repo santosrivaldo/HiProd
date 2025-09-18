@@ -3,6 +3,7 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..utils import format_datetime_brasilia
 
 tag_bp = Blueprint('tag', __name__)
 
@@ -59,8 +60,8 @@ def get_tags(current_user):
                     'produtividade': tag[4],
                     'departamento_id': tag[5],
                     'ativo': tag[6],
-                    'created_at': tag[7].isoformat() if tag[7] else None,
-                    'updated_at': tag[8].isoformat() if tag[8] else None,
+                    'created_at': format_datetime_brasilia(tag[7]) if tag[7] else None,
+                    'updated_at': format_datetime_brasilia(tag[8]) if tag[8] else None,
                     'tier': tag[9] if len(tag) > 9 and tag[9] is not None else 3,
                     'departamento_nome': tag[10] if len(tag) > 10 else None,
                     'palavras_chave': [{'palavra': p[0], 'peso': p[1]} for p in palavras_chave]

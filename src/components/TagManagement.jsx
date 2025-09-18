@@ -212,9 +212,11 @@ const TagManagement = () => {
         (tag) =>
           tag.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (tag.palavras_chave &&
-            tag.palavras_chave.some((palavra) =>
-              palavra.toLowerCase().includes(searchTerm.toLowerCase()),
-            )),
+            tag.palavras_chave.some((palavra) => {
+              // Verificar se palavra é string ou objeto
+              const palavraText = typeof palavra === 'string' ? palavra : palavra.palavra;
+              return palavraText && palavraText.toLowerCase().includes(searchTerm.toLowerCase());
+            })),
       );
     }
 

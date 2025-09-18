@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
+import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
+import { EyeIcon, PhotoIcon } from '@heroicons/react/24/outline'
 import { 
   MagnifyingGlassIcon, 
   FunnelIcon, 
@@ -46,6 +48,8 @@ export default function ActivityManagement() {
   const [suggestedTags, setSuggestedTags] = useState([])
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [existingTags, setExistingTags] = useState([])
+  const [selectedScreenshot, setSelectedScreenshot] = useState(null)
+  const [showScreenshotModal, setShowScreenshotModal] = useState(false)
   
   const [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
 
@@ -294,7 +298,7 @@ export default function ActivityManagement() {
       })
 
       // Análise temporal
-      const hour = new Date(activity.horario).getHours()
+      const hour = parseBrasiliaDate(activity.horario).getHours()
       const timeSlot = getTimeSlot(hour)
       patterns.timePatterns[timeSlot] = (patterns.timePatterns[timeSlot] || 0) + 1
 
@@ -523,10 +527,10 @@ export default function ActivityManagement() {
 
   const handleExportCSV = () => {
     const exportData = filteredActivities.map(activity => ({
-      'Data/Hora Inicial': format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss'),
+      'Data/Hora Inicial': formatBrasiliaDate(activity.horario, 'datetime'),
       'Data/Hora Final': agruparAtividades && activity.ultimo_horario 
-        ? format(new Date(activity.ultimo_horario), 'dd/MM/yyyy HH:mm:ss')
-        : format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss'),
+        ? formatBrasiliaDate(activity.ultimo_horario, 'datetime')
+        : formatBrasiliaDate(activity.horario, 'datetime'),
       'Usuário Monitorado': activity.usuario_monitorado_nome || 'N/A',
       'Cargo': activity.cargo || 'N/A',
       'Janela Ativa': activity.active_window,
@@ -542,11 +546,24 @@ export default function ActivityManagement() {
     exportToCSV(exportData, 'atividades_agrupadas')
   }
 
+  const handleViewScreenshot = async (activityId) => {
+    try {
+      const response = await api.get(`/atividade/screenshot/${activityId}`)
+      if (response.data) {
+        setSelectedScreenshot(response.data)
+        setShowScreenshotModal(true)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar screenshot:', error)
+      setMessage('Erro ao carregar screenshot')
+    }
+  }
+
   const handlePrint = () => {
     const columns = [
       {
         header: 'Data/Hora',
-        accessor: (row) => format(new Date(row.horario), 'dd/MM/yyyy HH:mm:ss')
+        accessor: (row) => formatBrasiliaDate(row.horario, 'datetime')
       },
       {
         header: 'Usuário Monitorado',
@@ -920,10 +937,10 @@ export default function ActivityManagement() {
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                         <div className="flex flex-col">
-                          <span>{format(new Date(activity.horario), 'dd/MM/yyyy HH:mm:ss')}</span>
+                          <span>{formatBrasiliaDate(activity.horario, 'datetime')}</span>
                           {agruparAtividades && activity.ultimo_horario && activity.ultimo_horario !== activity.horario && (
                             <span className="text-xs text-gray-500 dark:text-gray-400">
-                              até {format(new Date(activity.ultimo_horario), 'HH:mm:ss')}
+                              até {formatBrasiliaDate(activity.ultimo_horario, 'time')}
                             </span>
                           )}
                         </div>
@@ -1008,12 +1025,24 @@ export default function ActivityManagement() {
                         </td>
                       )}
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button 
-                          onClick={() => deleteActivity(activity.id)}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          Excluir
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          {activity.has_screenshot && (
+                            <button
+                              onClick={() => handleViewScreenshot(activity.id)}
+                              className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                              title="Ver Screenshot"
+                            >
+                              <PhotoIcon className="w-4 h-4 mr-1" />
+                              Screenshot
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => deleteActivity(activity.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            Excluir
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -1059,6 +1088,58 @@ export default function ActivityManagement() {
           )}
         </div>
       </div>
+
+      {/* Screenshot Modal */}
+      {showScreenshotModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                  Screenshot da Atividade
+                </h3>
+                <button
+                  onClick={() => setShowScreenshotModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <span className="sr-only">Fechar</span>
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="max-h-96 overflow-y-auto">
+                {selectedScreenshot ? (
+                  <img
+                    src={`data:image/jpeg;base64,${selectedScreenshot}`}
+                    alt="Screenshot da atividade"
+                    className="w-full h-auto rounded-lg shadow-lg"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-64 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                    <div className="text-center">
+                      <PhotoIcon className="mx-auto h-12 w-12 text-gray-400" />
+                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                        Screenshot não disponível
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setShowScreenshotModal(false)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

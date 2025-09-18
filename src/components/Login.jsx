@@ -3,15 +3,13 @@ import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
-  const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
     username: '',
-    password: '',
-    confirmPassword: ''
+    password: ''
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const { login, register } = useAuth()
+  const { login } = useAuth()
 
   const handleChange = (e) => {
     setFormData({
@@ -28,42 +26,23 @@ export default function Login() {
       return
     }
 
-    if (!isLogin && !formData.confirmPassword.trim()) {
-      setError('Por favor, confirme a senha')
-      return
-    }
-
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      setError('As senhas não coincidem')
-      return
-    }
-
     setLoading(true)
     setError('')
 
     try {
-      let result
-      console.log('Tentando fazer login/registro...', { username: formData.username.trim(), isLogin })
+      console.log('Tentando fazer login...', { username: formData.username.trim() })
       
-      if (isLogin) {
-        result = await login(formData.username.trim(), formData.password)
-      } else {
-        result = await register(formData.username.trim(), formData.password, formData.confirmPassword)
-      }
+      const result = await login(formData.username.trim(), formData.password)
       
       console.log('Resultado da operação:', result)
       
       if (!result.success) {
         const errorMessage = result.error || 'Erro desconhecido'
-        console.error('Erro no login/registro:', errorMessage)
+        console.error('Erro no login:', errorMessage)
         
         // Mensagens de erro mais amigáveis
         if (errorMessage.toLowerCase().includes('credenciais inválidas')) {
           setError('Nome de usuário ou senha incorretos')
-        } else if (errorMessage.toLowerCase().includes('usuário já existe')) {
-          setError('Este nome de usuário já está em uso')
-        } else if (errorMessage.toLowerCase().includes('senha deve ter')) {
-          setError('A senha deve ter pelo menos 6 caracteres')
         } else {
           setError(errorMessage)
         }
@@ -80,15 +59,6 @@ export default function Login() {
     }
   }
 
-  const toggleMode = () => {
-    setIsLogin(!isLogin)
-    setError('')
-    setFormData({
-      username: '',
-      password: '',
-      confirmPassword: ''
-    })
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -98,7 +68,7 @@ export default function Login() {
             Activity Tracker
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-            {isLogin ? 'Faça login para acessar o dashboard' : 'Crie sua conta para começar'}
+            Faça login para acessar o dashboard
           </p>
         </div>
         
@@ -136,23 +106,6 @@ export default function Login() {
               />
             </div>
             
-            {!isLogin && (
-              <div>
-                <label htmlFor="confirmPassword" className="sr-only">
-                  Confirmar senha
-                </label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  required
-                  className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                  placeholder="Confirmar senha"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                />
-              </div>
-            )}
           </div>
 
           {error && (
@@ -167,18 +120,14 @@ export default function Login() {
               disabled={loading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (isLogin ? 'Entrando...' : 'Registrando...') : (isLogin ? 'Entrar' : 'Registrar')}
+              {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </div>
           
           <div className="text-center">
-            <button
-              type="button"
-              onClick={toggleMode}
-              className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 dark:hover:text-indigo-300 text-sm"
-            >
-              {isLogin ? 'Não tem uma conta? Registre-se' : 'Já tem uma conta? Faça login'}
-            </button>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Acesso restrito a usuários cadastrados
+            </p>
           </div>
         </form>
       </div>
