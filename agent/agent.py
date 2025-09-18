@@ -10,7 +10,7 @@ import subprocess
 import re
 from urllib.parse import urlparse
 import base64
-from PIL import ImageGrab
+from PIL import ImageGrab, Image
 import io
 try:
     import pygetwindow as gw
@@ -273,6 +273,8 @@ def extract_domain_from_title(window_title):
 def capture_screenshot():
     """Captura screenshot da tela atual"""
     try:
+        from PIL import Image, ImageGrab
+        
         # Capturar screenshot
         screenshot = ImageGrab.grab()
         

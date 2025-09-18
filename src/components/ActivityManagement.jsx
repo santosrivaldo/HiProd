@@ -4,6 +4,8 @@ import api from '../services/api'
 import { format } from 'date-fns'
 import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
 import { EyeIcon, PhotoIcon } from '@heroicons/react/24/outline'
+import ScreenshotViewer from './ScreenshotViewer'
+import useScreenshots from '../hooks/useScreenshots'
 import { 
   MagnifyingGlassIcon, 
   FunnelIcon, 
@@ -48,8 +50,11 @@ export default function ActivityManagement() {
   const [suggestedTags, setSuggestedTags] = useState([])
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [existingTags, setExistingTags] = useState([])
-  const [selectedScreenshot, setSelectedScreenshot] = useState(null)
+  const [selectedScreenshotId, setSelectedScreenshotId] = useState(null)
   const [showScreenshotModal, setShowScreenshotModal] = useState(false)
+  
+  // Hook para gerenciar screenshots
+  const { loadScreenshot, getScreenshot } = useScreenshots()
   
   const [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
 
@@ -548,10 +553,19 @@ export default function ActivityManagement() {
 
   const handleViewScreenshot = async (activityId) => {
     try {
-      const response = await api.get(`/atividade/screenshot/${activityId}`)
+      const response = await api.get(`/atividade/screenshot/${activityId}`, {
+        responseType: 'blob'
+      })
+      
       if (response.data) {
-        setSelectedScreenshot(response.data)
-        setShowScreenshotModal(true)
+        // Converter blob para base64
+        const reader = new FileReader()
+        reader.onload = () => {
+          const base64 = reader.result.split(',')[1] // Remove o prefixo data:image/jpeg;base64,
+          setSelectedScreenshot(base64)
+          setShowScreenshotModal(true)
+        }
+        reader.readAsDataURL(response.data)
       }
     } catch (error) {
       console.error('Erro ao carregar screenshot:', error)

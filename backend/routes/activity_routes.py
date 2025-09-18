@@ -256,6 +256,7 @@ def add_activity(current_user):
         }), 500
 
 @activity_bp.route('/atividades', methods=['GET'])
+@activity_bp.route('/atividade', methods=['GET'])
 @token_required
 def get_atividades(current_user):
     """Buscar todas as atividades com filtros opcionais"""
@@ -330,7 +331,7 @@ def get_atividades(current_user):
                         MAX(a.domain) as domain,
                         MAX(a.application) as application,
                         DATE(a.horario) as data_atividade,
-                        MAX(CASE WHEN a.screenshot IS NOT NULL THEN true ELSE false END) as has_screenshot,
+                        MAX(CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END)::boolean as has_screenshot,
                         MAX(a.screenshot_size) as screenshot_size
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
@@ -356,7 +357,7 @@ def get_atividades(current_user):
                         COALESCE(a.duracao, 10) as duracao_total,
                         a.domain,
                         a.application,
-                        CASE WHEN a.screenshot IS NOT NULL THEN true ELSE false END as has_screenshot,
+                        CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
                         a.screenshot_size
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
@@ -602,9 +603,9 @@ def get_screenshot(current_user, activity_id):
         with DatabaseConnection() as db:
             # Buscar screenshot da atividade
             db.cursor.execute('''
-                SELECT screenshot_data, screenshot_format, screenshot_size
+                SELECT screenshot_data, screenshot_format, screenshot_size, screenshot
                 FROM atividades 
-                WHERE id = %s AND screenshot_data IS NOT NULL
+                WHERE id = %s AND (screenshot_data IS NOT NULL OR screenshot IS NOT NULL)
             ''', (activity_id,))
             
             result = db.cursor.fetchone()
@@ -612,17 +613,32 @@ def get_screenshot(current_user, activity_id):
             if not result:
                 return jsonify({'error': 'Screenshot não encontrado'}), 404
             
-            screenshot_data, screenshot_format, screenshot_size = result
+            screenshot_data, screenshot_format, screenshot_size, screenshot_b64 = result
             
-            # Retornar imagem
-            return Response(
-                screenshot_data,
-                mimetype=f'image/{screenshot_format.lower()}',
-                headers={
-                    'Content-Length': str(screenshot_size),
-                    'Cache-Control': 'public, max-age=3600'
-                }
-            )
+            # Se temos dados binários, usar eles
+            if screenshot_data:
+                return Response(
+                    screenshot_data,
+                    mimetype=f'image/{screenshot_format.lower() if screenshot_format else "jpeg"}',
+                    headers={
+                        'Content-Length': str(screenshot_size) if screenshot_size else '0',
+                        'Cache-Control': 'public, max-age=3600'
+                    }
+                )
+            # Se não, usar base64
+            elif screenshot_b64:
+                import base64
+                screenshot_bytes = base64.b64decode(screenshot_b64)
+                return Response(
+                    screenshot_bytes,
+                    mimetype='image/jpeg',
+                    headers={
+                        'Content-Length': str(len(screenshot_bytes)),
+                        'Cache-Control': 'public, max-age=3600'
+                    }
+                )
+            else:
+                return jsonify({'error': 'Screenshot não encontrado'}), 404
             
     except Exception as e:
         print(f"Erro ao obter screenshot: {e}")
