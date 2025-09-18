@@ -553,23 +553,11 @@ export default function ActivityManagement() {
 
   const handleViewScreenshot = async (activityId) => {
     try {
-      const response = await api.get(`/atividade/screenshot/${activityId}`, {
-        responseType: 'blob'
-      })
-      
-      if (response.data) {
-        // Converter blob para base64
-        const reader = new FileReader()
-        reader.onload = () => {
-          const base64 = reader.result.split(',')[1] // Remove o prefixo data:image/jpeg;base64,
-          setSelectedScreenshot(base64)
-          setShowScreenshotModal(true)
-        }
-        reader.readAsDataURL(response.data)
-      }
+      setSelectedScreenshotId(activityId)
+      setShowScreenshotModal(true)
     } catch (error) {
-      console.error('Erro ao carregar screenshot:', error)
-      setMessage('Erro ao carregar screenshot')
+      console.error('Erro ao abrir screenshot:', error)
+      setMessage('Erro ao abrir screenshot')
     }
   }
 
@@ -1103,57 +1091,16 @@ export default function ActivityManagement() {
         </div>
       </div>
 
-      {/* Screenshot Modal */}
-      {showScreenshotModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                  Screenshot da Atividade
-                </h3>
-                <button
-                  onClick={() => setShowScreenshotModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <span className="sr-only">Fechar</span>
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="max-h-96 overflow-y-auto">
-                {selectedScreenshot ? (
-                  <img
-                    src={`data:image/jpeg;base64,${selectedScreenshot}`}
-                    alt="Screenshot da atividade"
-                    className="w-full h-auto rounded-lg shadow-lg"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-64 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <div className="text-center">
-                      <PhotoIcon className="mx-auto h-12 w-12 text-gray-400" />
-                      <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                        Screenshot não disponível
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={() => setShowScreenshotModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Screenshot Viewer */}
+      <ScreenshotViewer
+        isOpen={showScreenshotModal}
+        onClose={() => {
+          setShowScreenshotModal(false)
+          setSelectedScreenshotId(null)
+        }}
+        activityId={selectedScreenshotId}
+        activityTitle={selectedScreenshotId ? `Screenshot da Atividade ${selectedScreenshotId}` : 'Screenshot da Atividade'}
+      />
     </div>
   )
 }
