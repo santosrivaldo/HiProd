@@ -51,7 +51,7 @@ services:
       VITE_API_URL: http://localhost:8010
     command: sh -c "npm ci || npm install && npm run dev -- --host 0.0.0.0 --port 5000"
     ports:
-      - "5000:5000"
+      - "5005:5000"
     volumes:
       - .:/app
 
