@@ -33,7 +33,8 @@ services:
       # DATABASE_URL: postgresql://postgres:postgres@db:5432/hiprod
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
     ports:
-      - "8001:8000"
+      - "8010:8010"
+      - "8012:5000"
     volumes:
       - .:/app
 
