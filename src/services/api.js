@@ -3,8 +3,8 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: window.location.hostname === 'localhost' 
-    ? 'http://localhost:8000' 
-    : `${window.location.protocol}//${window.location.hostname}:8000`,
+    ? 'http://localhost:8010' 
+    : `${window.location.protocol}//${window.location.hostname}:8010`,
   headers: {
     'Content-Type': 'application/json',
   },
