@@ -14,7 +14,7 @@ const hmrConfig = IS_PROXY
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: 'hiprod.grupohi.com.br',
+    host: '0.0.0.0',
     port: 5000,
     strictPort: true,
     allowedHosts: [PUBLIC_HOST, 'hiprod.grupohi.com.br', '.replit.dev', 'localhost'],

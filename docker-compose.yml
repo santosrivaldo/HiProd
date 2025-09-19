@@ -47,9 +47,12 @@ services:
     depends_on:
       - api
     environment:
-      # Vite will bind to 0.0.0.0 and port 5000
+      # API configuration for proxy
       VITE_API_URL: https://hiprod.grupohi.com.br:8010
-    command: sh -c "npm ci || npm install && npm run dev -- --host hiprod.grupohi.com.br --port 5000"
+      VITE_API_BASE_PATH: /api
+      VITE_BEHIND_PROXY: 1
+      VITE_PUBLIC_HOST: hiprod.grupohi.com.br
+    command: sh -c "npm ci || npm install && npm run dev -- --host 0.0.0.0 --port 5000"
     ports:
       - "5005:5000"
     volumes:
