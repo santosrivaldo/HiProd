@@ -566,11 +566,70 @@ def enviar_atividade(registro):
             return False
         else:
             print(f"❌ Erro ao enviar atividade: {resp.status_code} {resp.text}")
+            _save_offline(registro)
             return False
     except Exception as e:
         print(f"❌ Erro ao enviar atividade: {e}")
+        _save_offline(registro)
         return False
     return True
+
+
+# =========================
+#  Fila Offline Persistente
+# =========================
+_OFFLINE_QUEUE_FILE = os.path.join(os.path.dirname(__file__), 'offline_queue.jsonl')
+
+def _save_offline(registro: dict) -> None:
+    try:
+        # Garante campo de criação
+        if 'created_at' not in registro:
+            registro['created_at'] = datetime.now(pytz.timezone('America/Sao_Paulo')).isoformat()
+        with open(_OFFLINE_QUEUE_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(registro, ensure_ascii=False) + "\n")
+        print("🗂️ Atividade salva offline (fila)")
+    except Exception as e:
+        print(f"❌ Falha ao salvar offline: {e}")
+
+def _flush_offline_queue(max_items: int = 200) -> None:
+    try:
+        if not os.path.exists(_OFFLINE_QUEUE_FILE):
+            return
+        # Ler todos
+        with open(_OFFLINE_QUEUE_FILE, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        if not lines:
+            return
+        print(f"🔁 Tentando reenviar {len(lines)} atividades offline...")
+        remaining = []
+        sent = 0
+        for idx, line in enumerate(lines):
+            if idx >= max_items:
+                remaining.extend(lines[idx:])
+                break
+            try:
+                data = json.loads(line)
+            except Exception:
+                # linha corrompida, descartar
+                continue
+            ok = enviar_atividade(data)
+            if ok:
+                sent += 1
+            else:
+                remaining.append(line)
+        # Reescrever arquivo com os não enviados
+        if remaining:
+            with open(_OFFLINE_QUEUE_FILE, 'w', encoding='utf-8') as f:
+                f.writelines(remaining)
+        else:
+            # Remove arquivo se vazio
+            try:
+                os.remove(_OFFLINE_QUEUE_FILE)
+            except OSError:
+                pass
+        print(f"✅ Reenvio offline concluído: enviados {sent}, pendentes {len(remaining)}")
+    except Exception as e:
+        print(f"❌ Erro no flush da fila offline: {e}")
 
 
 def main():
@@ -680,15 +739,17 @@ def main():
                 print("❌ Não foi possível obter ID do usuário monitorado, pulando registro...")
 
         if len(registros) >= 6:
-            # Verificar se estamos em horário de trabalho antes de enviar
-            if esta_em_horario_trabalho(current_usuario_nome, tz):
-                for r in registros:
-                    enviar_atividade(r)
-                registros.clear()
-            else:
-                # Fora do horário de trabalho, limpar registros sem enviar
-                print(f"⏰ Fora do horário de trabalho, descartando {len(registros)} registros")
-                registros.clear()
+            # Sempre persistir tentativas e nunca descartar
+            print(f"📤 Preparando envio de {len(registros)} registros")
+            for r in registros:
+                ok = enviar_atividade(r)
+                if not ok:
+                    # Já salvo na fila offline dentro de enviar_atividade
+                    pass
+            registros.clear()
+
+        # A cada ciclo, tentar reenviar fila offline
+        _flush_offline_queue(max_items=100)
 
         time.sleep(10)
 

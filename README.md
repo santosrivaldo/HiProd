@@ -107,6 +107,28 @@ npm run dev
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
 
+## 🐳 Docker (API + Postgres)
+
+Suba a API e o banco com Docker Compose. O processo:
+- Sobe o Postgres (db)
+- A API aguarda o banco ficar saudável
+- Executa a inicialização/migração (init_db)
+- Inicia a API em 0.0.0.0:8000
+
+```bash
+docker compose up --build
+```
+
+Variáveis usadas (com defaults):
+- DB_HOST=db
+- DB_PORT=5432
+- DB_USER=postgres
+- DB_PASSWORD=postgres
+- DB_NAME=hiprod
+- JWT_SECRET_KEY=change-me
+
+A API ficará disponível em http://localhost:8000 e o banco em localhost:5432.
+
 ## 👤 Login Inicial
 
 Após a primeira execução, será criado um usuário administrador padrão:

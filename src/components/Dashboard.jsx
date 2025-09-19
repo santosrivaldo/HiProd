@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format, subDays, startOfDay, endOfDay } from 'date-fns'
 import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
 import { PhotoIcon } from '@heroicons/react/24/outline'
-import ScreenshotViewer from './ScreenshotViewer'
 import {
   PieChart,
   Pie,
@@ -125,16 +125,10 @@ export default function Dashboard() {
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
   const [viewMode, setViewMode] = useState('overview') // overview, domains, applications, timeline
-  const [selectedScreenshotId, setSelectedScreenshotId] = useState(null)
-  const [showScreenshotModal, setShowScreenshotModal] = useState(false)
+  const navigate = useNavigate()
 
-  const handleViewScreenshot = async (activityId) => {
-    try {
-      setSelectedScreenshotId(activityId)
-      setShowScreenshotModal(true)
-    } catch (error) {
-      console.error('Erro ao abrir screenshot:', error)
-    }
+  const handleViewScreenshot = (activityId) => {
+    navigate(`/screenshots/${activityId}`)
   }
 
   const loadDashboardData = useCallback(async () => {
@@ -1022,16 +1016,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Screenshot Viewer */}
-      <ScreenshotViewer
-        isOpen={showScreenshotModal}
-        onClose={() => {
-          setShowScreenshotModal(false)
-          setSelectedScreenshotId(null)
-        }}
-        activityId={selectedScreenshotId}
-        activityTitle={selectedScreenshotId ? `Screenshot da Atividade ${selectedScreenshotId}` : 'Screenshot da Atividade'}
-      />
     </div>
   )
 }

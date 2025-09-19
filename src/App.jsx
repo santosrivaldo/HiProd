@@ -11,6 +11,7 @@ import TagManagement from './components/TagManagement'
 import ActivityManagement from './components/ActivityManagement'
 import WorkScheduleManagement from './components/WorkScheduleManagement'
 import Settings from './components/Settings'
+import ScreenshotPage from './pages/ScreenshotPage'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 
@@ -34,6 +35,7 @@ function AppContent() {
         <Route path="/activities" element={<ActivityManagement />} />
         <Route path="/schedules" element={<WorkScheduleManagement />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/screenshots/:activityId" element={<ScreenshotPage />} />
       </Routes>
     </Layout>
   )

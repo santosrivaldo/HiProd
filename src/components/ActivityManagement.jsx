@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
 import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
 import { EyeIcon, PhotoIcon } from '@heroicons/react/24/outline'
-import ScreenshotViewer from './ScreenshotViewer'
-import useScreenshots from '../hooks/useScreenshots'
 import { 
   MagnifyingGlassIcon, 
   FunnelIcon, 
@@ -50,11 +49,7 @@ export default function ActivityManagement() {
   const [suggestedTags, setSuggestedTags] = useState([])
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [existingTags, setExistingTags] = useState([])
-  const [selectedScreenshotId, setSelectedScreenshotId] = useState(null)
-  const [showScreenshotModal, setShowScreenshotModal] = useState(false)
-  
-  // Hook para gerenciar screenshots
-  const { loadScreenshot, getScreenshot } = useScreenshots()
+  const navigate = useNavigate()
   
   const [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
 
@@ -551,14 +546,8 @@ export default function ActivityManagement() {
     exportToCSV(exportData, 'atividades_agrupadas')
   }
 
-  const handleViewScreenshot = async (activityId) => {
-    try {
-      setSelectedScreenshotId(activityId)
-      setShowScreenshotModal(true)
-    } catch (error) {
-      console.error('Erro ao abrir screenshot:', error)
-      setMessage('Erro ao abrir screenshot')
-    }
+  const handleViewScreenshot = (activityId) => {
+    navigate(`/screenshots/${activityId}`)
   }
 
   const handlePrint = () => {
@@ -1091,16 +1080,6 @@ export default function ActivityManagement() {
         </div>
       </div>
 
-      {/* Screenshot Viewer */}
-      <ScreenshotViewer
-        isOpen={showScreenshotModal}
-        onClose={() => {
-          setShowScreenshotModal(false)
-          setSelectedScreenshotId(null)
-        }}
-        activityId={selectedScreenshotId}
-        activityTitle={selectedScreenshotId ? `Screenshot da Atividade ${selectedScreenshotId}` : 'Screenshot da Atividade'}
-      />
     </div>
   )
 }
