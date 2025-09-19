@@ -18,7 +18,7 @@ function resolveBaseURL() {
   // Local development defaults
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     // Prefer backend on 8000 locally
-    return 'http://localhost:8000'
+    return 'http://localhost:8010'
   }
 
   // In production behind proxy: try same-origin (no port), optionally with base path
