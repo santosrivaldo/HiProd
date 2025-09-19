@@ -34,44 +34,44 @@ app.register_blueprint(legacy_bp)
 
 if __name__ == '__main__':
     try:
-        # Verificar se o arquivo .env existe
+        # Aviso apenas (não falhar) se .env não existe
         if not os.path.exists('.env'):
-            print("❌ Arquivo .env não encontrado!")
-            print("Copie o arquivo .env.example para .env e configure suas credenciais.")
-            exit(1)
+            print("⚠️ .env não encontrado; usando variáveis de ambiente atuais.")
 
-        # Verificar variáveis de ambiente essenciais
-        if not Config.DATABASE_URL and not all([Config.DB_HOST, Config.DB_USER, Config.DB_PASSWORD]):
-            print("❌ Configurações do banco de dados não encontradas!")
-            print("Configure DATABASE_URL ou DB_HOST, DB_USER, DB_PASSWORD no arquivo .env")
-            exit(1)
+        # Garantir que temos string de conexão
+        if not Config.DATABASE_URL:
+            print("❌ Configuração de banco ausente. Defina DATABASE_URL ou as variáveis DB_HOST/DB_USER/DB_PASSWORD/DB_NAME/DB_PORT.")
+            sys.exit(1)
 
-        # Verificar se deve excluir todas as tabelas
+        # Reset opcional
         if len(sys.argv) > 1 and sys.argv[1] == '--reset':
             print("🔄 Modo reset ativado - Excluindo e recriando banco...")
             drop_all_tables()
             init_db()
             print("✅ Banco de dados resetado com sucesso!")
         else:
-            init_db()  # Inicializa o banco de dados
+            init_db()
             print("✅ Banco de dados inicializado com sucesso!")
 
         # Inicializar pool de conexões
         init_connection_pool()
 
-        print(f"🚀 Servidor rodando em http://0.0.0.0:8010")
+        host = os.getenv('FLASK_HOST', '0.0.0.0')
+        port = int(os.getenv('FLASK_PORT', '8000'))
+        debug = os.getenv('FLASK_DEBUG', '0') == '1'
+
+        print(f"🚀 Servidor rodando em http://{host}:{port}")
         print(f"🔌 Pool de conexões ativo com {Config.MIN_CONNECTIONS}-{Config.MAX_CONNECTIONS} conexões")
 
-        app.run(host='0.0.0.0', port=8000, debug=True)
+        app.run(host=host, port=port, debug=debug)
 
     except psycopg2.OperationalError as e:
         print(f"❌ Erro de conexão com o banco PostgreSQL: {e}")
-        print("\n📋 Checklist de verificação:")
-        print("1. Verifique se o arquivo .env existe e está configurado")
-        print("2. Confirme se as credenciais (usuário/senha) estão corretas")
-        print("3. Verifique se o host e porta estão acessíveis")
-        print("4. Confirme se o banco de dados existe")
-        exit(1)
+        print("\n📋 Checklist:")
+        print("1. Variáveis de ambiente do banco (ou DATABASE_URL) estão corretas?")
+        print("2. Serviço do Postgres acessível (em Docker, host 'db')?")
+        print("3. Banco existe e credenciais válidas?")
+        sys.exit(1)
     except Exception as e:
         print(f"❌ Erro inesperado: {e}")
-        exit(1)
+        sys.exit(1)
