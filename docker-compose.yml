@@ -48,7 +48,7 @@ services:
       - api
     environment:
       # Vite will bind to 0.0.0.0 and port 5000
-      VITE_API_URL: http://localhost:8010
+      VITE_API_URL: http://hiprod-api:8010
     command: sh -c "npm ci || npm install && npm run dev -- --host 0.0.0.0 --port 5000"
     ports:
       - "5005:5000"
