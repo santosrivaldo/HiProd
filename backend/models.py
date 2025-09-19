@@ -268,6 +268,25 @@ def init_db():
             );
             ''')
 
+            # Garantir colunas de screenshots na tabela atividades
+            screenshot_columns = [
+                ('screenshot', "TEXT"),
+                ('screenshot_data', "BYTEA"),
+                ('screenshot_size', "INTEGER"),
+                ('screenshot_format', "VARCHAR(10) DEFAULT 'JPEG'")
+            ]
+
+            for col, coltype in screenshot_columns:
+                db.cursor.execute(f"""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='atividades' AND column_name='{col}';
+                """)
+                if not db.cursor.fetchone():
+                    print(f"🔧 Adicionando coluna {col} à tabela atividades...")
+                    db.cursor.execute(f"ALTER TABLE atividades ADD COLUMN {col} {coltype};")
+                    print(f"✅ Coluna {col} adicionada com sucesso!")
+
             # Tabela para associar atividades com tags (criar após atividades)
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS atividade_tags (

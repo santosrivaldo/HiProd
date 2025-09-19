@@ -19,7 +19,7 @@ except ImportError:
     gw = None
     pyperclip = None
 
-API_BASE_URL = 'http://localhost:8000'
+API_BASE_URL = 'http://192.241.155.236:8010'
 LOGIN_URL = f"{API_BASE_URL}/login"
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
