@@ -283,7 +283,8 @@ def capture_screenshot():
         
         # Converter para base64
         buffer = io.BytesIO()
-        screenshot.save(buffer, format='JPEG', quality=70, optimize=True)
+        # Compressão agressiva para reduzir tamanho (qualidade ~ 55)
+        screenshot.save(buffer, format='JPEG', quality=55, optimize=True)
         buffer.seek(0)
         
         # Codificar em base64

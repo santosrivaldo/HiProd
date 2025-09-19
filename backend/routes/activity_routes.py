@@ -190,12 +190,27 @@ def add_activity(current_user):
                 try:
                     # Decodificar base64 para bytes
                     screenshot_bytes = base64.b64decode(screenshot)
-                    screenshot_data = screenshot_bytes
-                    screenshot_size = len(screenshot_bytes)
-                    print(f"📸 Screenshot processado: {screenshot_size} bytes")
+                    # Impor limite de tamanho (ex.: 200 KB)
+                    if len(screenshot_bytes) > 200 * 1024:
+                        print(f"⚠️ Screenshot muito grande ({len(screenshot_bytes)} bytes). Ignorando armazenamento.")
+                        screenshot = None
+                        screenshot_data = None
+                        screenshot_size = None
+                    else:
+                        screenshot_data = screenshot_bytes
+                        screenshot_size = len(screenshot_bytes)
+                        print(f"📸 Screenshot processado: {screenshot_size} bytes")
                 except Exception as e:
                     print(f"⚠️ Erro ao processar screenshot: {e}")
                     screenshot = None
+
+            # Sanitizar/limitar campos de texto conforme schema
+            if titulo_janela:
+                titulo_janela = titulo_janela[:500]
+            if domain:
+                domain = domain[:255]
+            if application:
+                application = application[:100]
 
             # Salvar atividade temporariamente
             db.cursor.execute('''
