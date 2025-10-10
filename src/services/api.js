@@ -23,8 +23,10 @@ function resolveBaseURL() {
   console.log('ENV_API_BASE_PATH:', ENV_API_BASE_PATH)
   console.log('window.location:', window.location.href)
   
+  // Destructure window.location once
+  const { hostname, protocol, origin } = window.location
+  
   // Force correct URL for production domain (behind Nginx proxy)
-  const { hostname, protocol } = window.location
   if (hostname === 'hiprod.grupohi.com.br') {
     console.log('✅ Using same-origin for Nginx proxy')
     return `${protocol}//${hostname}`
@@ -40,9 +42,6 @@ function resolveBaseURL() {
     console.log('✅ Using ENV_API_URL, final baseUrl:', baseUrl)
     return baseUrl
   }
-
-  // Fallbacks
-  const { protocol, origin } = window.location
 
   // Local development defaults
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
