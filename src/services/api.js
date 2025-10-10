@@ -29,7 +29,7 @@ function resolveBaseURL() {
   // Force correct URL for production domain (port 8010)
   if (hostname === 'hiprod.grupohi.com.br') {
     console.log('✅ Using production DNS with port 8010')
-    return `${protocol}//${hostname}:8010`
+    return `http://${hostname}:8010`
   }
   
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
