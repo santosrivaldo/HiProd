@@ -26,10 +26,10 @@ function resolveBaseURL() {
   // Destructure window.location once
   const { hostname, protocol, origin } = window.location
   
-  // Force correct URL for production domain (behind Nginx proxy)
+  // Force correct URL for production domain (port 8010)
   if (hostname === 'hiprod.grupohi.com.br') {
-    console.log('✅ Using same-origin for Nginx proxy')
-    return `${protocol}//${hostname}`
+    console.log('✅ Using production DNS with port 8010')
+    return `${protocol}//${hostname}:8010`
   }
   
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
