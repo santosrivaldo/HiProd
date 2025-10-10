@@ -21,9 +21,9 @@
         <p><strong>API URL detectada:</strong> <span id="api-url"></span></p>
     </div>
     
-    <button onclick="testDirectIP()">Testar IP Direto (192.241.155.236:8010)</button>
+    <button onclick="testSameOrigin()">Testar Same-Origin (/api)</button>
     <button onclick="testLocalhost()">Testar Localhost (8010)</button>
-    <button onclick="testDNS()">Testar DNS (hiprod.grupohi.com.br:8010)</button>
+    <button onclick="testDirectPort()">Testar Porta Direta (8010)</button>
     
     <div id="results"></div>
     
@@ -37,7 +37,7 @@
             const hostname = window.location.hostname;
             
             if (hostname.includes('grupohi.com.br')) {
-                return 'http://192.241.155.236:8010';
+                return `${window.location.protocol}//${hostname}/api`;
             }
             
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -75,16 +75,17 @@
             }
         }
         
-        function testDirectIP() {
-            testConnection('http://192.241.155.236:8010', 'IP Direto');
+        function testSameOrigin() {
+            const url = `${window.location.protocol}//${window.location.hostname}/api`;
+            testConnection(url, 'Same-Origin');
         }
         
         function testLocalhost() {
             testConnection('http://localhost:8010', 'Localhost');
         }
         
-        function testDNS() {
-            testConnection('http://hiprod.grupohi.com.br:8010', 'DNS');
+        function testDirectPort() {
+            testConnection('http://localhost:8010', 'Porta Direta');
         }
         
         // Teste automático na detecção

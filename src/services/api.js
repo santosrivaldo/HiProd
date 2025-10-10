@@ -23,10 +23,10 @@ function resolveBaseURL() {
   
   const hostname = window.location.hostname
   
-  // PRODUCTION: Always use IP directly
+  // PRODUCTION: Use same origin with /api path (Nginx routes internally)
   if (hostname.includes('grupohi.com.br')) {
-    console.log('🎯 PRODUCTION: Using direct IP')
-    return 'http://192.241.155.236:8010'
+    console.log('🌐 PRODUCTION: Using same-origin /api (internal routing)')
+    return `${window.location.protocol}//${hostname}/api`
   }
   
   // DEVELOPMENT: Use localhost
