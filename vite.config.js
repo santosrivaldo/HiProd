@@ -17,7 +17,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5000,
     strictPort: true,
-    allowedHosts: [PUBLIC_HOST, 'hiprod.grupohi.com.br', '.replit.dev', 'localhost'],
+    allowedHosts: [PUBLIC_HOST, 'hiprod.grupohi.com.br', '192.241.155.236', '.replit.dev', 'localhost'],
     hmr: hmrConfig
   }
 })
