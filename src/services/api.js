@@ -27,7 +27,7 @@ function resolveBaseURL() {
   const { hostname } = window.location
   if (hostname === 'hiprod.grupohi.com.br') {
     console.log('✅ Forcing correct URL for production IP')
-    return 'http://192.241.155.236'
+    return 'http://192.241.155.236:8010'
   }
   
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)

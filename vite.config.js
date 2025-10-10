@@ -8,7 +8,7 @@ const PUBLIC_HOST = process.env.VITE_PUBLIC_HOST || '192.241.155.236'
 
 // Configurar HMR somente quando estiver atrás de proxy HTTPS
 const hmrConfig = IS_PROXY
-  ? { protocol: 'wss', host: PUBLIC_HOST, clientPort: 443 }
+  ? { protocol: 'ws', host: PUBLIC_HOST, clientPort: 80 }
   : undefined
 
 export default defineConfig({
