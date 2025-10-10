@@ -26,10 +26,10 @@ function resolveBaseURL() {
   // Destructure window.location once
   const { hostname, protocol, origin } = window.location
   
-  // Force correct URL for production domain (with /api path)
+  // Force correct URL for production IP (HTTP only)
   if (hostname === 'hiprod.grupohi.com.br') {
-    console.log('✅ Using production DNS with /api path')
-    return `${protocol}//${hostname}/api`
+    console.log('✅ Using production IP via HTTP')
+    return 'http://192.241.155.236:8010'
   }
   
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
