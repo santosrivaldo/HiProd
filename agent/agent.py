@@ -8,10 +8,22 @@ import os
 import json
 import subprocess
 import re
+import sys
+import logging
 from urllib.parse import urlparse
 import base64
 from PIL import ImageGrab, Image
 import io
+
+# Detectar se está rodando como executável
+IS_EXECUTABLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+def safe_print(*args, **kwargs):
+    """Print seguro - completamente silencioso quando executável"""
+    if not IS_EXECUTABLE:
+        # Apenas quando rodando como script Python
+        print(*args, **kwargs)
+    # Quando executável: completamente silencioso (modo fantasma)
 try:
     import pygetwindow as gw
     import pyperclip
@@ -24,11 +36,385 @@ LOGIN_URL = f"{API_BASE_URL}/login"
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
 
-# Credenciais do agente (colocar no .env ou hardcode para teste)
-AGENT_USER = os.getenv("AGENT_USER", "admin")
-AGENT_PASS = os.getenv("AGENT_PASS", "Brasil@1402")
+# Credenciais do agente (HARDCODED - SEM .ENV)
+AGENT_USER = "connect"
+AGENT_PASS = "L@undry60"
+
+# Configurações de monitoramento (HARDCODED)
+SCREENSHOT_ENABLED = True
+SCREENSHOT_QUALITY = 55
+MONITOR_INTERVAL = 10  # segundos
+IDLE_THRESHOLD = 600   # segundos (10 minutos)
+REQUEST_TIMEOUT = 30   # segundos
+MAX_RETRIES = 3
+
+# ========================================
+# BASE DE DADOS DE APLICATIVOS EXPANDIDA
+# ========================================
+
+# Mapeamento de aplicativos por processo/janela (SEM PRODUTIVIDADE)
+APPLICATION_DATABASE = {
+    # Navegadores
+    'chrome.exe': {
+        'name': 'Google Chrome',
+        'category': 'navegador',
+        'keywords': ['chrome', 'google chrome', 'chromium']
+    },
+    'firefox.exe': {
+        'name': 'Mozilla Firefox',
+        'category': 'navegador', 
+        'keywords': ['firefox', 'mozilla']
+    },
+    'msedge.exe': {
+        'name': 'Microsoft Edge',
+        'category': 'navegador',
+        'keywords': ['edge', 'microsoft edge']
+    },
+    'opera.exe': {
+        'name': 'Opera',
+        'category': 'navegador',
+        'keywords': ['opera']
+    },
+    'brave.exe': {
+        'name': 'Brave Browser',
+        'category': 'navegador',
+        'keywords': ['brave']
+    },
+    
+    # Desenvolvimento
+    'code.exe': {
+        'name': 'Visual Studio Code',
+        'category': 'desenvolvimento',
+        'keywords': ['visual studio code', 'vs code', 'vscode']
+    },
+    'devenv.exe': {
+        'name': 'Visual Studio',
+        'category': 'desenvolvimento',
+        'keywords': ['visual studio', 'vs2019', 'vs2022']
+    },
+    'pycharm64.exe': {
+        'name': 'PyCharm',
+        'category': 'desenvolvimento',
+        'keywords': ['pycharm', 'jetbrains']
+    },
+    'idea64.exe': {
+        'name': 'IntelliJ IDEA',
+        'category': 'desenvolvimento',
+        'keywords': ['intellij', 'idea']
+    },
+    'sublime_text.exe': {
+        'name': 'Sublime Text',
+        'category': 'desenvolvimento',
+        'keywords': ['sublime text', 'sublime']
+    },
+    'notepad++.exe': {
+        'name': 'Notepad++',
+        'category': 'desenvolvimento',
+        'keywords': ['notepad++', 'npp']
+    },
+    'atom.exe': {
+        'name': 'Atom',
+        'category': 'desenvolvimento',
+        'keywords': ['atom']
+    },
+    
+    # Office/Produtividade
+    'winword.exe': {
+        'name': 'Microsoft Word',
+        'category': 'escritorio',
+        'keywords': ['word', 'microsoft word', 'documento']
+    },
+    'excel.exe': {
+        'name': 'Microsoft Excel',
+        'category': 'escritorio',
+        'keywords': ['excel', 'microsoft excel', 'planilha']
+    },
+    'powerpnt.exe': {
+        'name': 'Microsoft PowerPoint',
+        'category': 'escritorio',
+        'keywords': ['powerpoint', 'microsoft powerpoint', 'apresentacao']
+    },
+    'outlook.exe': {
+        'name': 'Microsoft Outlook',
+        'category': 'comunicacao',
+        'keywords': ['outlook', 'microsoft outlook', 'email']
+    },
+    'onenote.exe': {
+        'name': 'Microsoft OneNote',
+        'category': 'escritorio',
+        'keywords': ['onenote', 'microsoft onenote']
+    },
+    
+    # Comunicação/Colaboração
+    'teams.exe': {
+        'name': 'Microsoft Teams',
+        'category': 'comunicacao',
+        'keywords': ['teams', 'microsoft teams']
+    },
+    'slack.exe': {
+        'name': 'Slack',
+        'category': 'comunicacao',
+        'keywords': ['slack']
+    },
+    'discord.exe': {
+        'name': 'Discord',
+        'category': 'comunicacao',
+        'keywords': ['discord']
+    },
+    'whatsapp.exe': {
+        'name': 'WhatsApp Desktop',
+        'category': 'comunicacao',
+        'keywords': ['whatsapp']
+    },
+    'telegram.exe': {
+        'name': 'Telegram Desktop',
+        'category': 'comunicacao',
+        'keywords': ['telegram']
+    },
+    'zoom.exe': {
+        'name': 'Zoom',
+        'category': 'comunicacao',
+        'keywords': ['zoom']
+    },
+    'skype.exe': {
+        'name': 'Skype',
+        'category': 'comunicacao',
+        'keywords': ['skype']
+    },
+    
+    # Design/Criação
+    'photoshop.exe': {
+        'name': 'Adobe Photoshop',
+        'category': 'design',
+        'keywords': ['photoshop', 'adobe photoshop']
+    },
+    'illustrator.exe': {
+        'name': 'Adobe Illustrator',
+        'category': 'design',
+        'keywords': ['illustrator', 'adobe illustrator']
+    },
+    'indesign.exe': {
+        'name': 'Adobe InDesign',
+        'category': 'design',
+        'keywords': ['indesign', 'adobe indesign']
+    },
+    'figma.exe': {
+        'name': 'Figma',
+        'category': 'design',
+        'keywords': ['figma']
+    },
+    'canva.exe': {
+        'name': 'Canva',
+        'category': 'design',
+        'keywords': ['canva']
+    },
+    
+    # Sistema/Utilitários
+    'explorer.exe': {
+        'name': 'Windows Explorer',
+        'category': 'sistema',
+        'keywords': ['explorer', 'windows explorer', 'arquivos']
+    },
+    'notepad.exe': {
+        'name': 'Notepad',
+        'category': 'sistema',
+        'keywords': ['notepad', 'bloco de notas']
+    },
+    'calc.exe': {
+        'name': 'Calculadora',
+        'category': 'sistema',
+        'keywords': ['calculadora', 'calculator']
+    },
+    'cmd.exe': {
+        'name': 'Prompt de Comando',
+        'category': 'desenvolvimento',
+        'keywords': ['cmd', 'prompt', 'terminal']
+    },
+    'powershell.exe': {
+        'name': 'PowerShell',
+        'category': 'desenvolvimento',
+        'keywords': ['powershell', 'terminal']
+    },
+    
+    # Entretenimento
+    'spotify.exe': {
+        'name': 'Spotify',
+        'category': 'entretenimento',
+        'keywords': ['spotify', 'musica']
+    },
+    'vlc.exe': {
+        'name': 'VLC Media Player',
+        'category': 'entretenimento',
+        'keywords': ['vlc', 'media player']
+    },
+    'steam.exe': {
+        'name': 'Steam',
+        'category': 'entretenimento',
+        'keywords': ['steam', 'jogos', 'games']
+    },
+    
+    # Banco de Dados/Análise
+    'ssms.exe': {
+        'name': 'SQL Server Management Studio',
+        'category': 'desenvolvimento',
+        'keywords': ['sql server', 'ssms', 'database']
+    },
+    'mysql-workbench.exe': {
+        'name': 'MySQL Workbench',
+        'category': 'desenvolvimento',
+        'keywords': ['mysql', 'workbench', 'database']
+    },
+    'pgadmin4.exe': {
+        'name': 'pgAdmin',
+        'category': 'desenvolvimento',
+        'keywords': ['pgadmin', 'postgresql', 'database']
+    },
+    
+    # Virtualização/Containers
+    'docker desktop.exe': {
+        'name': 'Docker Desktop',
+        'category': 'desenvolvimento',
+        'keywords': ['docker', 'container']
+    },
+    'vmware.exe': {
+        'name': 'VMware',
+        'category': 'desenvolvimento',
+        'keywords': ['vmware', 'virtual machine']
+    },
+    'virtualbox.exe': {
+        'name': 'VirtualBox',
+        'category': 'desenvolvimento',
+        'keywords': ['virtualbox', 'virtual machine']
+    }
+}
+
+# Mapeamento de domínios para categorização (SEM PRODUTIVIDADE)
+DOMAIN_DATABASE = {
+    # Trabalho/Desenvolvimento
+    'github.com': {'category': 'desenvolvimento'},
+    'gitlab.com': {'category': 'desenvolvimento'},
+    'bitbucket.org': {'category': 'desenvolvimento'},
+    'stackoverflow.com': {'category': 'desenvolvimento'},
+    'docs.microsoft.com': {'category': 'documentacao'},
+    'developer.mozilla.org': {'category': 'documentacao'},
+    'w3schools.com': {'category': 'documentacao'},
+    'medium.com': {'category': 'documentacao'},
+    'dev.to': {'category': 'desenvolvimento'},
+    
+    # Google Workspace
+    'docs.google.com': {'category': 'escritorio'},
+    'sheets.google.com': {'category': 'escritorio'},
+    'slides.google.com': {'category': 'escritorio'},
+    'drive.google.com': {'category': 'escritorio'},
+    'gmail.com': {'category': 'comunicacao'},
+    'calendar.google.com': {'category': 'escritorio'},
+    
+    # Microsoft 365
+    'office.com': {'category': 'escritorio'},
+    'outlook.office.com': {'category': 'comunicacao'},
+    'teams.microsoft.com': {'category': 'comunicacao'},
+    'onedrive.com': {'category': 'escritorio'},
+    'sharepoint.com': {'category': 'escritorio'},
+    
+    # Ferramentas de Desenvolvimento
+    'aws.amazon.com': {'category': 'desenvolvimento'},
+    'console.aws.amazon.com': {'category': 'desenvolvimento'},
+    'azure.microsoft.com': {'category': 'desenvolvimento'},
+    'cloud.google.com': {'category': 'desenvolvimento'},
+    'heroku.com': {'category': 'desenvolvimento'},
+    'vercel.com': {'category': 'desenvolvimento'},
+    'netlify.com': {'category': 'desenvolvimento'},
+    
+    # Comunicação Profissional
+    'slack.com': {'category': 'comunicacao'},
+    'discord.com': {'category': 'comunicacao'},
+    'web.whatsapp.com': {'category': 'comunicacao'},
+    'telegram.org': {'category': 'comunicacao'},
+    
+    # Entretenimento/Não Produtivo
+    'youtube.com': {'category': 'entretenimento'},
+    'netflix.com': {'category': 'entretenimento'},
+    'twitch.tv': {'category': 'entretenimento'},
+    'instagram.com': {'category': 'social'},
+    'facebook.com': {'category': 'social'},
+    'twitter.com': {'category': 'social'},
+    'x.com': {'category': 'social'},
+    'tiktok.com': {'category': 'social'},
+    'linkedin.com': {'category': 'social'},
+    
+    # E-commerce/Compras
+    'amazon.com': {'category': 'compras'},
+    'mercadolivre.com.br': {'category': 'compras'},
+    'americanas.com.br': {'category': 'compras'},
+    'magazineluiza.com.br': {'category': 'compras'},
+    'shopee.com.br': {'category': 'compras'},
+    
+    # Notícias/Informação
+    'g1.globo.com': {'category': 'noticias'},
+    'uol.com.br': {'category': 'noticias'},
+    'folha.uol.com.br': {'category': 'noticias'},
+    'estadao.com.br': {'category': 'noticias'},
+    'bbc.com': {'category': 'noticias'},
+    'cnn.com': {'category': 'noticias'},
+    
+    # Ferramentas Online
+    'canva.com': {'category': 'design'},
+    'figma.com': {'category': 'design'},
+    'trello.com': {'category': 'produtividade'},
+    'notion.so': {'category': 'produtividade'},
+    'asana.com': {'category': 'produtividade'},
+    'monday.com': {'category': 'produtividade'},
+    'jira.atlassian.com': {'category': 'desenvolvimento'},
+    'confluence.atlassian.com': {'category': 'documentacao'},
+    
+    # Bancos/Financeiro
+    'bb.com.br': {'category': 'financeiro'},
+    'itau.com.br': {'category': 'financeiro'},
+    'bradesco.com.br': {'category': 'financeiro'},
+    'santander.com.br': {'category': 'financeiro'},
+    'caixa.gov.br': {'category': 'financeiro'},
+    'nubank.com.br': {'category': 'financeiro'},
+    
+    # Educação/Aprendizado
+    'coursera.org': {'category': 'educacao'},
+    'udemy.com': {'category': 'educacao'},
+    'edx.org': {'category': 'educacao'},
+    'khanacademy.org': {'category': 'educacao'},
+    'duolingo.com': {'category': 'educacao'},
+    
+    # Sistema/Localhost
+    'localhost': {'category': 'desenvolvimento'},
+    '127.0.0.1': {'category': 'desenvolvimento'},
+    '192.168.': {'category': 'desenvolvimento'},  # Rede local
+    '10.0.': {'category': 'desenvolvimento'},     # Rede local
+}
 
 JWT_TOKEN = None
+
+# Configurar logging baseado no modo de execução
+if IS_EXECUTABLE:
+    # Quando executável, logar apenas em arquivo (sem console)
+    try:
+        log_file = os.path.join(os.path.dirname(sys.executable), 'hiprod-agent.log')
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file, encoding='utf-8', errors='ignore'),
+            ]
+        )
+        # Redirecionar stdout/stderr para evitar janelas
+        sys.stdout = open(os.devnull, 'w', encoding='utf-8', errors='ignore')
+        sys.stderr = open(os.devnull, 'w', encoding='utf-8', errors='ignore')
+    except Exception as e:
+        # Fallback silencioso se logging falhar
+        pass
+else:
+    # Quando script Python, usar console normal
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
 
 
 def get_headers():
@@ -37,6 +423,71 @@ def get_headers():
         "Authorization": f"Bearer {JWT_TOKEN}" if JWT_TOKEN else "",
         "Content-Type": "application/json"
     }
+
+def detect_application_from_process(process_name):
+    """Detectar aplicação pelo nome do processo"""
+    if not process_name:
+        return None
+    
+    process_lower = process_name.lower()
+    
+    # Busca direta na base de dados
+    if process_lower in APPLICATION_DATABASE:
+        return APPLICATION_DATABASE[process_lower]
+    
+    # Busca por palavras-chave
+    for app_key, app_info in APPLICATION_DATABASE.items():
+        for keyword in app_info['keywords']:
+            if keyword.lower() in process_lower:
+                return app_info
+    
+    return None
+
+def detect_application_from_window(window_title):
+    """Detectar aplicação pelo título da janela"""
+    if not window_title:
+        return None
+    
+    window_lower = window_title.lower()
+    
+    # Busca por palavras-chave no título
+    for app_key, app_info in APPLICATION_DATABASE.items():
+        for keyword in app_info['keywords']:
+            if keyword.lower() in window_lower:
+                return app_info
+    
+    return None
+
+def categorize_domain(domain):
+    """Categorizar domínio usando a base de dados"""
+    if not domain:
+        return {'category': 'desconhecido'}
+    
+    domain_lower = domain.lower()
+    
+    # Busca direta
+    if domain_lower in DOMAIN_DATABASE:
+        return DOMAIN_DATABASE[domain_lower]
+    
+    # Busca por subdomínios ou partes do domínio
+    for known_domain, info in DOMAIN_DATABASE.items():
+        if known_domain in domain_lower or domain_lower.endswith(known_domain):
+            return info
+    
+    # Regras heurísticas para domínios desconhecidos
+    if any(word in domain_lower for word in ['localhost', '127.0.0.1', '192.168.', '10.0.']):
+        return {'category': 'desenvolvimento'}
+    
+    if any(word in domain_lower for word in ['github', 'gitlab', 'bitbucket']):
+        return {'category': 'desenvolvimento'}
+    
+    if any(word in domain_lower for word in ['youtube', 'netflix', 'twitch', 'tiktok']):
+        return {'category': 'entretenimento'}
+    
+    if any(word in domain_lower for word in ['facebook', 'instagram', 'twitter']):
+        return {'category': 'social'}
+    
+    return {'category': 'web'}
 
 
 def login():
@@ -50,12 +501,12 @@ def login():
                              })
         if resp.status_code == 200:
             JWT_TOKEN = resp.json().get("token")
-            print(f"✅ Login bem-sucedido. Token obtido.")
+            safe_print(f"[OK] Login bem-sucedido. Token obtido.")
         else:
-            print(f"❌ Erro no login: {resp.status_code} {resp.text}")
+            safe_print(f"[ERROR] Erro no login: {resp.status_code} {resp.text}")
             JWT_TOKEN = None
     except Exception as e:
-        print(f"❌ Falha ao conectar no login: {e}")
+        safe_print(f"[ERROR] Falha ao conectar no login: {e}")
         JWT_TOKEN = None
 
 
@@ -102,6 +553,10 @@ def get_chrome_active_tab_url():
             # Silencioso se falhar
         }
         '''
+
+        # Desabilitar PowerShell quando executável para evitar janelas
+        if IS_EXECUTABLE:
+            return None  # Pular captura de URL do Chrome quando executável
 
         result = subprocess.run(['powershell', '-Command', ps_script], 
                              capture_output=True, text=True, timeout=3)
@@ -172,7 +627,7 @@ def get_chrome_active_tab_url():
             pass
 
     except Exception as e:
-        print(f"⚠️ Erro ao capturar URL do Chrome: {e}")
+        safe_print(f"[WARN] Erro ao capturar URL do Chrome: {e}")
 
     return None
 
@@ -183,7 +638,7 @@ def extract_domain_from_title(window_title):
         if not window_title:
             return None
 
-        print(f"🔍 Tentando extrair domínio de: {window_title}")
+        safe_print(f"[SEARCH] Tentando extrair domínio de: {window_title}")
 
         # Primeiro: procurar por URLs completas no título (mais específico)
         url_patterns = [
@@ -197,13 +652,13 @@ def extract_domain_from_title(window_title):
             if matches:
                 if 'localhost' in pattern:
                     result = f"localhost:{matches[0]}" if matches[0] else "localhost"
-                    print(f"✅ Domínio localhost encontrado: {result}")
+                    safe_print(f"[OK] Domínio localhost encontrado: {result}")
                     return result
                 elif r'\d+\.\d+\.\d+\.\d+' in pattern:
                     # Para IPs, retornar com porta se houver
                     ip, port = matches[0] if isinstance(matches[0], tuple) else (matches[0], None)
                     result = f"{ip}:{port}" if port else ip
-                    print(f"✅ IP encontrado: {result}")
+                    safe_print(f"[OK] IP encontrado: {result}")
                     return result
                 else:
                     domain = matches[0] if isinstance(matches[0], str) else matches[0][0]
@@ -214,7 +669,7 @@ def extract_domain_from_title(window_title):
                         not domain.startswith('.') and
                         not domain.endswith('.') and
                         ' ' not in domain):
-                        print(f"✅ URL completa encontrada: {domain}")
+                        safe_print(f"[OK] URL completa encontrada: {domain}")
                         return domain
 
         # Detecção especial para aplicações conhecidas (mais restritiva)
@@ -227,7 +682,7 @@ def extract_domain_from_title(window_title):
         title_lower = window_title.lower()
         for app_name, domain in app_domain_mapping.items():
             if app_name in title_lower:
-                print(f"✅ Aplicação conhecida detectada: {app_name} -> {domain}")
+                safe_print(f"[OK] Aplicação conhecida detectada: {app_name} -> {domain}")
                 return domain
 
         # Apenas domínios muito específicos e claros
@@ -242,7 +697,7 @@ def extract_domain_from_title(window_title):
             match = re.search(pattern, window_title.lower())
             if match:
                 result = match.group(1)
-                print(f"✅ Domínio específico encontrado: {result}")
+                safe_print(f"[OK] Domínio específico encontrado: {result}")
                 return result
 
         # Sites conhecidos apenas com padrões muito específicos
@@ -257,13 +712,13 @@ def extract_domain_from_title(window_title):
         for domain, patterns in known_sites.items():
             for pattern in patterns:
                 if re.search(pattern, title_lower):
-                    print(f"✅ Site conhecido detectado: {domain}")
+                    safe_print(f"[OK] Site conhecido detectado: {domain}")
                     return domain
 
-        print(f"❌ Nenhum domínio válido extraído de: {window_title}")
+        safe_print(f"[ERROR] Nenhum domínio válido extraído de: {window_title}")
 
     except Exception as e:
-        print(f"⚠️ Erro ao extrair domínio do título: {e}")
+        safe_print(f"[WARN] Erro ao extrair domínio do título: {e}")
 
     return None
 
@@ -290,62 +745,91 @@ def capture_screenshot():
         # Codificar em base64
         screenshot_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         
-        print(f"📸 Screenshot capturado: {len(screenshot_b64)} bytes")
+        safe_print(f"[SCREENSHOT] Screenshot capturado: {len(screenshot_b64)} bytes")
         return screenshot_b64
         
     except Exception as e:
-        print(f"❌ Erro ao capturar screenshot: {e}")
+        safe_print(f"[ERROR] Erro ao capturar screenshot: {e}")
+        return None
+
+def get_url_from_window_title():
+    """Extrai URL diretamente do título da janela de forma mais precisa"""
+    try:
+        window = win32gui.GetForegroundWindow()
+        window_title = win32gui.GetWindowText(window)
+        
+        if not window_title:
+            return None
+        
+        # Padrões mais específicos para URLs reais
+        url_patterns = [
+            r'https?://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)',  # URLs completas
+            r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/[^\s]*',               # Domínio com path
+            r'localhost:(\d+)',                                      # localhost com porta
+            r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):?(\d+)?'        # IPs
+        ]
+        
+        for pattern in url_patterns:
+            matches = re.findall(pattern, window_title)
+            if matches:
+                if 'localhost' in pattern:
+                    return f"localhost:{matches[0]}" if matches[0] else "localhost"
+                elif r'\d{1,3}' in pattern:  # IP pattern
+                    ip, port = matches[0] if isinstance(matches[0], tuple) else (matches[0], None)
+                    return f"{ip}:{port}" if port else ip
+                else:
+                    domain = matches[0] if isinstance(matches[0], str) else matches[0][0]
+                    # Validar se é um domínio real
+                    if ('.' in domain and 
+                        len(domain.split('.')) >= 2 and 
+                        not domain.startswith('.') and
+                        not domain.endswith('.')):
+                        return domain.split('/')[0]  # Apenas o domínio, sem path
+        
+        return None
+    except:
         return None
 
 def get_active_window_info():
-    """Captura informações da janela ativa com separação correta de domínio e aplicação"""
+    """Captura informações da janela ativa com foco na precisão do domínio"""
     try:
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
 
-        # Identificar aplicação baseada no processo (mais confiável)
+        # Identificar aplicação usando a base de dados expandida
         application = get_application_name(window_title)
         domain = None
 
-        # SEPARAÇÃO CLARA: Domínio apenas para navegadores web
-        if application in ['Google Chrome', 'Firefox', 'Microsoft Edge']:
-            # Tentar capturar URL real do navegador
-            domain = get_chrome_active_tab_url()
-            if domain:
-                print(f"🌐 Domínio capturado do navegador: {domain}")
-            else:
-                # Fallback: extrair domínio do título apenas se for claramente uma URL
-                domain = extract_domain_from_title(window_title)
-                if domain:
-                    print(f"🔍 Domínio extraído do título: {domain}")
-                else:
-                    print(f"⚠️ Navegador sem domínio detectável: {window_title[:50]}...")
-
-        # Para aplicações desktop, SEMPRE domain = None
-        elif application in ['VS Code', 'Visual Studio', 'Notepad', 'Notepad++', 'Sublime Text', 
-                           'Atom', 'Microsoft Word', 'Microsoft Excel', 'PowerPoint', 'Windows Explorer',
-                           'Outlook', 'Microsoft Teams', 'Slack', 'Discord', 'WhatsApp', 'Telegram']:
-            domain = None
-            print(f"📱 Aplicação desktop: {application} (sem domínio)")
-        
-        # Para outras aplicações, verificar se é realmente web-based
-        else:
-            # Apenas extrair domínio se for claramente uma aplicação web
-            web_indicators = ['http://', 'https://', 'www.', '.com', '.org', '.net', '.br', 'localhost:']
-            has_clear_web_content = any(indicator in window_title.lower() for indicator in web_indicators)
+        # Obter processo para identificação mais precisa
+        try:
+            import win32process
+            _, process_id = win32process.GetWindowThreadProcessId(window)
+            process = psutil.Process(process_id)
+            process_name = process.name().lower()
             
-            if has_clear_web_content:
-                domain = extract_domain_from_title(window_title)
+            # Usar base de dados para identificar navegadores
+            app_info = detect_application_from_process(process_name)
+            
+            # CAPTURA DE DOMÍNIO APENAS PARA NAVEGADORES
+            if app_info and app_info['category'] == 'navegador':
+                # Método 1: Extrair URL do título da janela
+                domain = get_url_from_window_title()
+                
                 if domain:
-                    print(f"🔍 Aplicação web detectada: {application} -> {domain}")
+                    safe_print(f"[DOMAIN] Dominio capturado: {domain}")
                 else:
-                    domain = None
-                    print(f"📱 Aplicação local: {application}")
+                    safe_print(f"[WARN] Navegador sem dominio detectavel")
+            
+            # Para aplicações não-navegador, domain sempre None
             else:
                 domain = None
-                print(f"📱 Aplicação local: {application}")
-
-        # Não filtrar atividades - enviar todas
+                category = app_info['category'] if app_info else 'desconhecido'
+                safe_print(f"[APP] Aplicacao {category}: {application}")
+                
+        except Exception as e:
+            # Fallback se não conseguir obter processo
+            safe_print(f"[WARN] Erro ao obter processo: {e}")
+            domain = None
 
         return {
             'window_title': window_title,
@@ -354,7 +838,7 @@ def get_active_window_info():
         }
 
     except Exception as e:
-        print(f"❌ Erro ao capturar informações da janela: {e}")
+        safe_print(f"[ERROR] Erro ao capturar informacoes da janela: {e}")
         return {
             'window_title': 'Erro ao capturar janela',
             'domain': None,
@@ -446,21 +930,21 @@ def get_usuario_monitorado_id(usuario_nome):
             user_id = data.get('id')
             was_created = data.get('created', False)
             if was_created:
-                print(f"✅ Novo usuário monitorado criado: {usuario_nome} (ID: {user_id})")
+                safe_print(f"[OK] Novo usuário monitorado criado: {usuario_nome} (ID: {user_id})")
             else:
-                print(f"✅ Usuário monitorado encontrado: {usuario_nome} (ID: {user_id})")
+                safe_print(f"[OK] Usuário monitorado encontrado: {usuario_nome} (ID: {user_id})")
             return user_id
         elif resp.status_code == 401:
-            print("⚠️ Token expirado, renovando...")
+            safe_print("[WARN] Token expirado, renovando...")
             login()
             return get_usuario_monitorado_id(usuario_nome)
         else:
-            print(
-                f"❌ Erro ao buscar usuário monitorado: {resp.status_code} {resp.text}"
+            safe_print(
+                f"[ERROR] Erro ao buscar usuário monitorado: {resp.status_code} {resp.text}"
             )
             return None
     except Exception as e:
-        print(f"❌ Erro ao consultar usuário monitorado: {e}")
+        safe_print(f"[ERROR] Erro ao consultar usuário monitorado: {e}")
         return None
 
 
@@ -477,7 +961,7 @@ def verificar_usuario_ativo(usuario_id):
             return False
         return False
     except Exception as e:
-        print(f"❌ Erro ao verificar usuário ativo: {e}")
+        safe_print(f"[ERROR] Erro ao verificar usuário ativo: {e}")
         return False
 
 
@@ -496,10 +980,10 @@ def obter_configuracoes_horario_usuario(usuario_nome):
                 'monitoramento_ativo': data.get('monitoramento_ativo', True)
             }
         else:
-            print(f"❌ Erro ao buscar configurações do usuário: {resp.status_code}")
+            safe_print(f"[ERROR] Erro ao buscar configurações do usuário: {resp.status_code}")
             return None
     except Exception as e:
-        print(f"❌ Erro ao consultar configurações do usuário: {e}")
+        safe_print(f"[ERROR] Erro ao consultar configurações do usuário: {e}")
         return None
 
 
@@ -508,7 +992,7 @@ def esta_em_horario_trabalho(usuario_nome, tz):
     try:
         config = obter_configuracoes_horario_usuario(usuario_nome)
         if not config:
-            print("⚠️ Configurações não encontradas, usando horário padrão (8-18h, seg-sex)")
+            safe_print("[WARN] Configurações não encontradas, usando horário padrão (8-18h, seg-sex)")
             config = {
                 'horario_inicio_trabalho': '08:00:00',
                 'horario_fim_trabalho': '18:00:00',
@@ -518,7 +1002,7 @@ def esta_em_horario_trabalho(usuario_nome, tz):
 
         # Se o monitoramento não está ativo, não enviar atividades
         if not config.get('monitoramento_ativo', True):
-            print(f"⏸️ Monitoramento desativado para o usuário {usuario_nome}")
+            safe_print(f"⏸️ Monitoramento desativado para o usuário {usuario_nome}")
             return False
 
         agora = datetime.now(tz)
@@ -528,7 +1012,7 @@ def esta_em_horario_trabalho(usuario_nome, tz):
         dias_trabalho = [int(d) for d in config['dias_trabalho'].split(',')]
 
         if dia_semana not in dias_trabalho:
-            print(f"⏰ Fora dos dias de trabalho: hoje é {dia_semana}, dias de trabalho: {dias_trabalho}")
+            safe_print(f"⏰ Fora dos dias de trabalho: hoje é {dia_semana}, dias de trabalho: {dias_trabalho}")
             return False
 
         # Verificar se está no horário de trabalho
@@ -537,14 +1021,14 @@ def esta_em_horario_trabalho(usuario_nome, tz):
         hora_atual = agora.time()
 
         if horario_inicio <= hora_atual <= horario_fim:
-            print(f"✅ Dentro do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
+            safe_print(f"[OK] Dentro do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
             return True
         else:
-            print(f"⏰ Fora do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
+            safe_print(f"⏰ Fora do horário de trabalho: {hora_atual} ({horario_inicio}-{horario_fim})")
             return False
 
     except Exception as e:
-        print(f"❌ Erro ao verificar horário de trabalho: {e}")
+        safe_print(f"[ERROR] Erro ao verificar horário de trabalho: {e}")
         # Em caso de erro, permitir o envio para não quebrar o funcionamento
         return True
 
@@ -556,21 +1040,21 @@ def enviar_atividade(registro):
                              headers=get_headers())
         if resp.status_code == 201:
             domain_info = f" | Domínio: {registro.get('domain', 'N/A')}" if registro.get('domain') else ""
-            print(f"✅ Atividade enviada: {registro['active_window']}{domain_info}")
+            safe_print(f"[OK] Atividade enviada: {registro['active_window']}{domain_info}")
         elif resp.status_code == 401:
-            print("⚠️ Token expirado, renovando...")
+            safe_print("[WARN] Token expirado, renovando...")
             login()
             enviar_atividade(registro)
         elif resp.status_code == 404 and "Usuário monitorado não encontrado" in resp.text:
-            print(f"❌ Usuário monitorado ID {registro['usuario_monitorado_id']} não encontrado!")
-            print("🔄 Tentando recriar usuário monitorado...")
+            safe_print(f"[ERROR] Usuário monitorado ID {registro['usuario_monitorado_id']} não encontrado!")
+            safe_print("[INFO] Tentando recriar usuário monitorado...")
             return False
         else:
-            print(f"❌ Erro ao enviar atividade: {resp.status_code} {resp.text}")
+            safe_print(f"[ERROR] Erro ao enviar atividade: {resp.status_code} {resp.text}")
             _save_offline(registro)
             return False
     except Exception as e:
-        print(f"❌ Erro ao enviar atividade: {e}")
+        safe_print(f"[ERROR] Erro ao enviar atividade: {e}")
         _save_offline(registro)
         return False
     return True
@@ -588,9 +1072,9 @@ def _save_offline(registro: dict) -> None:
             registro['created_at'] = datetime.now(pytz.timezone('America/Sao_Paulo')).isoformat()
         with open(_OFFLINE_QUEUE_FILE, 'a', encoding='utf-8') as f:
             f.write(json.dumps(registro, ensure_ascii=False) + "\n")
-        print("🗂️ Atividade salva offline (fila)")
+        safe_print("🗂️ Atividade salva offline (fila)")
     except Exception as e:
-        print(f"❌ Falha ao salvar offline: {e}")
+        safe_print(f"[ERROR] Falha ao salvar offline: {e}")
 
 def _flush_offline_queue(max_items: int = 200) -> None:
     try:
@@ -601,7 +1085,7 @@ def _flush_offline_queue(max_items: int = 200) -> None:
             lines = f.readlines()
         if not lines:
             return
-        print(f"🔁 Tentando reenviar {len(lines)} atividades offline...")
+        safe_print(f"🔁 Tentando reenviar {len(lines)} atividades offline...")
         remaining = []
         sent = 0
         for idx, line in enumerate(lines):
@@ -628,9 +1112,9 @@ def _flush_offline_queue(max_items: int = 200) -> None:
                 os.remove(_OFFLINE_QUEUE_FILE)
             except OSError:
                 pass
-        print(f"✅ Reenvio offline concluído: enviados {sent}, pendentes {len(remaining)}")
+        safe_print(f"[OK] Reenvio offline concluído: enviados {sent}, pendentes {len(remaining)}")
     except Exception as e:
-        print(f"❌ Erro no flush da fila offline: {e}")
+        safe_print(f"[ERROR] Erro no flush da fila offline: {e}")
 
 
 def main():
@@ -649,13 +1133,12 @@ def main():
 
     tz = pytz.timezone('America/Sao_Paulo')  # Brasília timezone
 
-    print("🚀 Agente iniciado com captura de domínio!")
-    print("📋 Métodos disponíveis:")
-    print("   - Chrome DevTools Protocol")
-    print("   - Histórico do Chrome")
-    print("   - UI Automation (PowerShell)")
-    print("   - Extração de domínio do título")
-    print()
+    safe_print("[START] Agente iniciado com captura de dominio!")
+    safe_print("[INFO] Metodos disponiveis:")
+    safe_print("   - Extracao de URL do titulo")
+    safe_print("   - Deteccao por processo")
+    safe_print("   - Base de dados expandida")
+    safe_print("   - Categorizacao automatica")
 
     while True:
         current_window_info = get_active_window_info()
@@ -663,32 +1146,32 @@ def main():
 
         # Detectar mudança de usuário
         if current_usuario_nome != last_usuario_nome:
-            print(f"👤 Mudança de usuário: {last_usuario_nome} -> {current_usuario_nome}")
+            safe_print(f"[USER] Mudanca de usuario: {last_usuario_nome} -> {current_usuario_nome}")
             last_usuario_nome = current_usuario_nome
             usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0  # Reset contador
 
             # Se não conseguiu obter o ID do usuário, pular este ciclo
             if not usuario_monitorado_id or usuario_monitorado_id == 0:
-                print(f"⚠️ Não foi possível obter ID válido para usuário {current_usuario_nome}, aguardando próximo ciclo...")
+                safe_print(f"[WARN] Não foi possível obter ID válido para usuário {current_usuario_nome}, aguardando próximo ciclo...")
                 time.sleep(10)
                 continue
 
         # Verificar se temos um ID válido antes de continuar
         if not usuario_monitorado_id or usuario_monitorado_id == 0:
-            print(f"⚠️ ID de usuário inválido ({usuario_monitorado_id}), tentando reobter...")
+            safe_print(f"[WARN] ID de usuário inválido ({usuario_monitorado_id}), tentando reobter...")
             usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             if not usuario_monitorado_id or usuario_monitorado_id == 0:
-                print("❌ Falha ao obter ID válido, aguardando 30 segundos...")
+                safe_print("[ERROR] Falha ao obter ID válido, aguardando 30 segundos...")
                 time.sleep(30)
                 continue
 
         # Verificar periodicamente se o usuário ainda existe (a cada 10 ciclos = ~100 segundos)
         verificacao_contador += 1
         if verificacao_contador >= 10:
-            print(f"🔍 Verificando se usuário {usuario_monitorado_id} ainda existe...")
+            safe_print(f"[SEARCH] Verificando se usuário {usuario_monitorado_id} ainda existe...")
             if not verificar_usuario_ativo(usuario_monitorado_id):
-                print(f"⚠️ Usuário {usuario_monitorado_id} não encontrado, recriando...")
+                safe_print(f"[WARN] Usuário {usuario_monitorado_id} não encontrado, recriando...")
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0
 
@@ -702,11 +1185,11 @@ def main():
         if window_changed:
             # Log da mudança para debug
             if current_window_info['window_title'] != last_window_info['window_title']:
-                print(f"🔄 Mudança de janela: {last_window_info['window_title'][:50]}... -> {current_window_info['window_title'][:50]}...")
+                safe_print(f"[INFO] Mudança de janela: {last_window_info['window_title'][:50]}... -> {current_window_info['window_title'][:50]}...")
             if current_window_info['domain'] != last_window_info['domain']:
-                print(f"🌐 Mudança de domínio: {last_window_info['domain']} -> {current_window_info['domain']}")
+                safe_print(f"[DOMAIN] Mudança de domínio: {last_window_info['domain']} -> {current_window_info['domain']}")
             if current_window_info['application'] != last_window_info['application']:
-                print(f"📱 Mudança de aplicação: {last_window_info['application']} -> {current_window_info['application']}")
+                safe_print(f"[APP] Mudança de aplicação: {last_window_info['application']} -> {current_window_info['application']}")
 
             ociosidade = 0
             last_window_info = current_window_info
@@ -718,7 +1201,7 @@ def main():
             
             # Verificar se temos um ID válido antes de criar o registro
             if usuario_monitorado_id is None:
-                print("⚠️ ID do usuário monitorado é None, tentando recriar...")
+                safe_print("[WARN] ID do usuário monitorado é None, tentando recriar...")
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
 
             # Capturar screenshot a cada 10 segundos
@@ -735,13 +1218,13 @@ def main():
                     'horario': datetime.now(tz).isoformat()
                 }
                 registros.append(registro)
-                print(f"📝 Registro adicionado: {current_window_info['application']} - {current_window_info['domain'] or 'N/A'}")
+                safe_print(f"[LOG] Registro adicionado: {current_window_info['application']} - {current_window_info['domain'] or 'N/A'}")
             else:
-                print("❌ Não foi possível obter ID do usuário monitorado, pulando registro...")
+                safe_print("[ERROR] Não foi possível obter ID do usuário monitorado, pulando registro...")
 
         if len(registros) >= 6:
             # Sempre persistir tentativas e nunca descartar
-            print(f"📤 Preparando envio de {len(registros)} registros")
+            safe_print(f"[SEND] Preparando envio de {len(registros)} registros")
             for r in registros:
                 ok = enviar_atividade(r)
                 if not ok:

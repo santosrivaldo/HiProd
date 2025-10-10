@@ -140,7 +140,8 @@ class AgentBuilder:
         cmd_parts = [
             f'"{self.pyinstaller_path}"',
             '--onefile',  # Arquivo único
-            '--windowed' if platform.system() == 'Windows' else '--console',
+            '--windowed',  # Sem console (fantasma)
+            '--noconsole',  # Garantir que não abra console
             '--name=HiProd-Agent',
             '--distpath=dist',
             '--workpath=build',
@@ -164,6 +165,13 @@ class AgentBuilder:
         
         for imp in hidden_imports:
             cmd_parts.append(f'--hidden-import={imp}')
+        
+        # Configurações adicionais para executável silencioso
+        cmd_parts.extend([
+            '--disable-windowed-traceback',  # Desabilitar tracebacks em janelas
+            '--bootloader-ignore-signals',   # Ignorar sinais do sistema
+            '--strip',                       # Remover símbolos de debug
+        ])
         
         # Adicionar dados
         cmd_parts.extend([
