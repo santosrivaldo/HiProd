@@ -797,40 +797,162 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Timeline por Hora */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Distribuição por Hora do Dia
-            </h2>
-            {hourlyData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={hourlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="hour" 
-                    tickFormatter={formatHour}
-                    interval={2}
-                  />
-                  <YAxis tickFormatter={formatTime} />
-                  <Tooltip 
-                    labelFormatter={(hour) => `${formatHour(hour)}`}
-                    formatter={(value, name) => [formatTime(value), name]}
-                  />
-                  <Legend />
-                  <Area 
-                    type="monotone" 
-                    dataKey="total" 
-                    stackId="1" 
-                    stroke="#3B82F6" 
-                    fill="#3B82F6" 
-                    fillOpacity={0.6}
-                    name="Total"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+          {/* Insights e Métricas */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Insights de Produtividade
+              </h2>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Análise inteligente
+              </div>
+            </div>
+            
+            {summary.total > 0 ? (
+              <div className="space-y-6">
+                {/* Métricas principais */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">
+                          {Math.round((summary.productive / summary.total) * 100)}%
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                          Taxa de Produtividade
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          {formatTime(summary.productive)} produtivo
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+                        <ClockIcon className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                          Tempo Total Ativo
+                        </p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          {formatTime(summary.total)} registrado
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold text-xs">
+                          {recentActivities.length}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-purple-800 dark:text-purple-200">
+                          Atividades Recentes
+                        </p>
+                        <p className="text-xs text-purple-600 dark:text-purple-400">
+                          Últimas sessões
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Gráfico de atividade por hora simplificado */}
+                {hourlyData.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                      Atividade por Hora do Dia
+                    </h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <AreaChart data={hourlyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                        <XAxis 
+                          dataKey="hour" 
+                          tickFormatter={formatHour}
+                          interval={3}
+                          stroke="#6B7280"
+                          fontSize={11}
+                        />
+                        <YAxis 
+                          tickFormatter={(value) => value > 3600 ? `${Math.round(value/3600)}h` : `${Math.round(value/60)}m`}
+                          stroke="#6B7280"
+                          fontSize={11}
+                        />
+                        <Tooltip 
+                          labelFormatter={(hour) => `${formatHour(hour)}`}
+                          formatter={(value) => [formatTime(value), 'Atividade']}
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '6px',
+                            color: '#F9FAFB',
+                            fontSize: '12px'
+                          }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="total" 
+                          stroke="#3B82F6" 
+                          strokeWidth={2}
+                          fillOpacity={1} 
+                          fill="url(#colorActivity)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                
+                {/* Resumo textual */}
+                <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                    📊 Resumo do Período
+                  </h4>
+                  <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <p>
+                      • <strong>{Math.round((summary.productive / summary.total) * 100)}%</strong> do tempo foi produtivo
+                      ({formatTime(summary.productive)})
+                    </p>
+                    <p>
+                      • <strong>{Math.round((summary.nonproductive / summary.total) * 100)}%</strong> foi não produtivo
+                      ({formatTime(summary.nonproductive)})
+                    </p>
+                    {summary.neutral > 0 && (
+                      <p>
+                        • <strong>{Math.round((summary.neutral / summary.total) * 100)}%</strong> foi neutro
+                        ({formatTime(summary.neutral)})
+                      </p>
+                    )}
+                    <p>
+                      • Total de <strong>{recentActivities.length}</strong> atividades registradas
+                    </p>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
+                <div className="text-center">
+                  <ChartBarIcon className="mx-auto h-16 w-16 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    Nenhum dado disponível
+                  </h3>
+                  <p className="text-sm">
+                    Carregue o dashboard para ver os insights
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -1086,79 +1208,202 @@ export default function Dashboard() {
       )}
 
       {viewMode === 'timeline' && (
-        <div className="grid grid-cols-1 gap-6 mb-6">
-          {/* Timeline Diária Completa */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Timeline Diária de Atividades
-            </h2>
+        <div className="space-y-6 mb-6">
+          {/* Resumo do Período */}
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 rounded-xl shadow-lg text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">
+                  Análise Temporal
+                </h2>
+                <p className="text-blue-100">
+                  Padrões de atividade nos últimos {dateRange} dia{dateRange > 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold">
+                  {timelineData.length}
+                </div>
+                <div className="text-blue-100 text-sm">
+                  dias com atividade
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline Diária Melhorada */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Atividade Diária por Produtividade
+              </h2>
+              <div className="flex items-center space-x-4 text-sm">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Produtivo</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Não Produtivo</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                  <span className="text-gray-600 dark:text-gray-400">Neutro</span>
+                </div>
+              </div>
+            </div>
+            
             {timelineData.length > 0 ? (
               <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={timelineData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM')} />
-                  <YAxis tickFormatter={formatTime} />
-                  <Tooltip formatter={(value) => formatTime(value)} />
+                <BarChart data={timelineData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                  <XAxis 
+                    dataKey="date" 
+                    tickFormatter={(value) => format(new Date(value), 'dd/MM')}
+                    stroke="#6B7280"
+                  />
+                  <YAxis 
+                    tickFormatter={formatTime}
+                    stroke="#6B7280"
+                  />
+                  <Tooltip 
+                    formatter={(value, name) => [formatTime(value), name]}
+                    labelFormatter={(label) => format(new Date(label), 'dd/MM/yyyy')}
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F9FAFB'
+                    }}
+                  />
                   <Legend />
-                  <Bar dataKey="productive" stackId="a" fill={COLORS.productive} name="Produtivo" />
-                  <Bar dataKey="nonproductive" stackId="a" fill={COLORS.nonproductive} name="Não Produtivo" />
-                  <Bar dataKey="neutral" stackId="a" fill={COLORS.neutral} name="Neutro" />
-                  <Bar dataKey="idle" stackId="a" fill={COLORS.idle} name="Ocioso" />
+                  <Bar dataKey="productive" stackId="a" fill={COLORS.productive} name="Produtivo" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="nonproductive" stackId="a" fill={COLORS.nonproductive} name="Não Produtivo" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="neutral" stackId="a" fill={COLORS.neutral} name="Neutro" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="idle" stackId="a" fill={COLORS.idle} name="Ocioso" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
+                <div className="text-center">
+                  <CalendarDaysIcon className="mx-auto h-16 w-16 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    Nenhum dado de timeline
+                  </h3>
+                  <p className="text-sm">
+                    Selecione um período diferente ou verifique os filtros
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Distribuição Horária */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Padrão de Uso por Hora
-            </h2>
+          {/* Padrão Horário Melhorado */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Padrão de Atividade por Hora do Dia
+              </h2>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Horário de pico: {hourlyData.length > 0 ? formatHour(hourlyData.reduce((max, hour) => hour.total > max.total ? hour : max, hourlyData[0])?.hour || 0) : 'N/A'}
+              </div>
+            </div>
+            
             {hourlyData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={hourlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="hour" 
-                    tickFormatter={formatHour}
-                    interval={2}
-                  />
-                  <YAxis tickFormatter={formatTime} />
-                  <Tooltip 
-                    labelFormatter={(hour) => `${formatHour(hour)}`}
-                    formatter={(value, name) => [formatTime(value), name]}
-                  />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="productive" 
-                    stroke={COLORS.productive} 
-                    strokeWidth={2}
-                    name="Produtivo"
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="nonproductive" 
-                    stroke={COLORS.nonproductive} 
-                    strokeWidth={2}
-                    name="Não Produtivo"
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="neutral" 
-                    stroke={COLORS.neutral} 
-                    strokeWidth={2}
-                    name="Neutro"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="space-y-4">
+                {/* Gráfico de linha */}
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={hourlyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                      </linearGradient>
+                      <linearGradient id="colorProductive" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                    <XAxis 
+                      dataKey="hour" 
+                      tickFormatter={formatHour}
+                      interval={2}
+                      stroke="#6B7280"
+                    />
+                    <YAxis 
+                      tickFormatter={formatTime}
+                      stroke="#6B7280"
+                    />
+                    <Tooltip 
+                      labelFormatter={(hour) => `${formatHour(hour)}`}
+                      formatter={(value, name) => [formatTime(value), name]}
+                      contentStyle={{
+                        backgroundColor: '#1F2937',
+                        border: '1px solid #374151',
+                        borderRadius: '8px',
+                        color: '#F9FAFB'
+                      }}
+                    />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="total" 
+                      stroke="#3B82F6" 
+                      fillOpacity={1} 
+                      fill="url(#colorTotal)"
+                      name="Total"
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="productive" 
+                      stroke="#10B981" 
+                      fillOpacity={1} 
+                      fill="url(#colorProductive)"
+                      name="Produtivo"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+                
+                {/* Estatísticas horárias */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {formatHour(hourlyData.reduce((max, hour) => hour.total > max.total ? hour : max, hourlyData[0])?.hour || 0)}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Hora de pico</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {formatTime(Math.max(...hourlyData.map(h => h.productive)))}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Máx. produtivo</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+                      {formatTime(hourlyData.reduce((sum, h) => sum + h.total, 0) / hourlyData.length)}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Média por hora</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {hourlyData.filter(h => h.total > 0).length}h
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Horas ativas</div>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
+                <div className="text-center">
+                  <ClockIcon className="mx-auto h-16 w-16 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    Nenhum padrão horário
+                  </h3>
+                  <p className="text-sm">
+                    Dados insuficientes para análise horária
+                  </p>
+                </div>
               </div>
             )}
           </div>
