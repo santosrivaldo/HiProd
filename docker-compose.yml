@@ -47,10 +47,10 @@ services:
     depends_on:
       - api
     environment:
-      # API configuration for production port 8010 (HTTP)
-      VITE_API_URL: http://hiprod.grupohi.com.br:8010
+      # API configuration for production with /api path
+      VITE_API_URL: https://hiprod.grupohi.com.br/api
       VITE_API_BASE_PATH: ""
-      VITE_BEHIND_PROXY: 0
+      VITE_BEHIND_PROXY: 1
       VITE_PUBLIC_HOST: hiprod.grupohi.com.br
     command: sh -c "npm ci || npm install && npm run dev -- --host 0.0.0.0 --port 5000"
     ports:
