@@ -12,8 +12,8 @@ function cleanApiUrl(url) {
   // Remove any encoded characters and malformed parts
   return url
     .replace(/hiprod-api%20:8010/g, '') // Remove the malformed part
-    .replace(/\/api$/g, '') // Remove trailing /api
-    .replace(/:\d+$/g, '') // Remove any port numbers
+    .replace(/\/api$/g, '') // Remove trailing /api (Nginx will handle routing)
+    .replace(/:\d+$/g, '') // Remove any port numbers (Nginx proxy handles this)
     .replace(/\/+$/, '') // Remove trailing slashes
 }
 
@@ -23,11 +23,11 @@ function resolveBaseURL() {
   console.log('ENV_API_BASE_PATH:', ENV_API_BASE_PATH)
   console.log('window.location:', window.location.href)
   
-  // Force correct URL for production domain
-  const { hostname } = window.location
+  // Force correct URL for production domain (behind Nginx proxy)
+  const { hostname, protocol } = window.location
   if (hostname === 'hiprod.grupohi.com.br') {
-    console.log('✅ Forcing correct URL for production IP')
-    return 'http://192.241.155.236:8010'
+    console.log('✅ Using same-origin for Nginx proxy')
+    return `${protocol}//${hostname}`
   }
   
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
