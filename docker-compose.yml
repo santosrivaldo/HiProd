@@ -48,7 +48,7 @@ services:
       - api
     environment:
       # API configuration for Nginx proxy
-      VITE_API_URL: https://hiprod.grupohi.com.br
+      VITE_API_URL: https://hiprod.grupohi.com.br:8010
       VITE_API_BASE_PATH: ""
       VITE_BEHIND_PROXY: 1
       VITE_PUBLIC_HOST: hiprod.grupohi.com.br
