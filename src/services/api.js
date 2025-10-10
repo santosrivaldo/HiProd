@@ -26,8 +26,8 @@ function resolveBaseURL() {
   // Force correct URL for production domain
   const { hostname } = window.location
   if (hostname === 'hiprod.grupohi.com.br') {
-    console.log('✅ Forcing correct URL for production domain')
-    return 'https://hiprod.grupohi.com.br'
+    console.log('✅ Forcing correct URL for production IP')
+    return 'https://192.241.155.236'
   }
   
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
