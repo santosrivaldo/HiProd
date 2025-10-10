@@ -954,62 +954,134 @@ export default function Dashboard() {
       )}
 
       {viewMode === 'applications' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Top Aplicações */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Top 10 Aplicações por Tempo
-            </h2>
+        <div className="space-y-6 mb-6">
+          {/* Lista de Aplicações */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Aplicações Mais Utilizadas
+              </h2>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {applicationData.length} aplicações encontradas
+              </div>
+            </div>
+            
             {applicationData.length > 0 ? (
+              <div className="space-y-3">
+                {applicationData.map((app, index) => {
+                  const totalAppTime = applicationData.reduce((sum, a) => sum + a.value, 0)
+                  const percentage = (app.value / totalAppTime) * 100
+                  
+                  // Ícones para aplicações conhecidas
+                  const getAppIcon = (appName) => {
+                    const name = appName.toLowerCase()
+                    if (name.includes('chrome')) return '🌐'
+                    if (name.includes('firefox')) return '🦊'
+                    if (name.includes('edge')) return '🔷'
+                    if (name.includes('code') || name.includes('visual studio')) return '💻'
+                    if (name.includes('teams')) return '👥'
+                    if (name.includes('outlook')) return '📧'
+                    if (name.includes('word')) return '📄'
+                    if (name.includes('excel')) return '📊'
+                    if (name.includes('powerpoint')) return '📽️'
+                    if (name.includes('slack')) return '💬'
+                    if (name.includes('discord')) return '🎮'
+                    if (name.includes('whatsapp')) return '💬'
+                    if (name.includes('notepad')) return '📝'
+                    if (name.includes('explorer')) return '📁'
+                    return '⚡'
+                  }
+                  
+                  return (
+                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      <div className="flex items-center space-x-4 flex-1 min-w-0">
+                        <div className="flex-shrink-0 text-2xl">
+                          {getAppIcon(app.name)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {app.name}
+                            </p>
+                            <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+                              #{index + 1}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {app.activities} sessão{app.activities !== 1 ? 'ões' : ''} de uso
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {formatTime(app.value)}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {percentage.toFixed(1)}% do tempo
+                          </p>
+                        </div>
+                        <div className="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                          <div
+                            className="h-2 rounded-full bg-gradient-to-r from-green-400 to-blue-500"
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-gray-500 dark:text-gray-400">
+                <div className="text-center">
+                  <ComputerDesktopIcon className="mx-auto h-12 w-12 mb-2" />
+                  <p className="text-sm">Nenhuma aplicação encontrada</p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Gráfico de Aplicações */}
+          {applicationData.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
+                Comparativo de Uso por Aplicação
+              </h2>
               <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={applicationData} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={formatTime} />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip 
-                    formatter={(value, name) => [formatTime(value), name]}
-                    labelFormatter={(label) => `Aplicação: ${label}`}
+                <BarChart data={applicationData.slice(0, 8)} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                  <XAxis 
+                    type="number" 
+                    tickFormatter={formatTime}
+                    stroke="#6B7280"
                   />
-                  <Bar dataKey="value" fill="#10B981" />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    width={150}
+                    stroke="#6B7280"
+                    fontSize={12}
+                  />
+                  <Tooltip 
+                    formatter={(value, name) => [formatTime(value), 'Tempo de uso']}
+                    labelFormatter={(label) => `${label}`}
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F9FAFB'
+                    }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="#10B981"
+                    radius={[0, 4, 4, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
-              </div>
-            )}
-          </div>
-
-          {/* Aplicações em Pizza */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Distribuição por Aplicações
-            </h2>
-            {applicationData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie
-                    data={applicationData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={120}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {applicationData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatTime(value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
