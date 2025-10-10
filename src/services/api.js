@@ -18,59 +18,26 @@ function cleanApiUrl(url) {
 }
 
 function resolveBaseURL() {
-  console.log('🔍 Debug API URL Resolution:')
-  console.log('ENV_API_URL:', ENV_API_URL)
-  console.log('ENV_API_BASE_PATH:', ENV_API_BASE_PATH)
-  console.log('window.location:', window.location.href)
+  console.log('🔍 API URL Resolution')
+  console.log('Current location:', window.location.href)
   
-  // FORCE IP FOR PRODUCTION - Override everything
-  if (window.location.hostname.includes('grupohi.com.br')) {
-    console.log('🚨 FORCING PRODUCTION IP - OVERRIDE ALL')
+  const hostname = window.location.hostname
+  
+  // PRODUCTION: Always use IP directly
+  if (hostname.includes('grupohi.com.br')) {
+    console.log('🎯 PRODUCTION: Using direct IP')
     return 'http://192.241.155.236:8010'
   }
   
-  // Destructure window.location once
-  const { hostname, protocol, origin } = window.location
-  
-  // Force correct URL for production IP (HTTP only)
-  if (hostname === 'hiprod.grupohi.com.br' || hostname.includes('grupohi.com.br')) {
-    console.log('✅ Using production IP via HTTP')
-    return 'http://192.241.155.236:8010'
-  }
-  
-  // If VITE_API_URL is provided, use it directly (works for proxy/domain)
-  if (ENV_API_URL && typeof ENV_API_URL === 'string' && ENV_API_URL.trim() !== '') {
-    let baseUrl = cleanApiUrl(ENV_API_URL.replace(/\/$/, ''))
-    
-    // Force IP if it contains grupohi.com.br
-    if (baseUrl.includes('grupohi.com.br')) {
-      console.log('✅ Forcing IP instead of domain in ENV_API_URL')
-      return 'http://192.241.155.236:8010'
-    }
-    
-    // Only add base path if it exists and is not empty
-    if (ENV_API_BASE_PATH && ENV_API_BASE_PATH.trim() !== '') {
-      baseUrl += ENV_API_BASE_PATH
-    }
-    console.log('✅ Using ENV_API_URL, final baseUrl:', baseUrl)
-    return baseUrl
-  }
-
-  // Local development defaults
+  // DEVELOPMENT: Use localhost
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Prefer backend on 8010 locally
-    console.log('✅ Using localhost fallback: http://localhost:8010')
+    console.log('🔧 DEVELOPMENT: Using localhost')
     return 'http://localhost:8010'
   }
-
-  // In production behind proxy: try same-origin (no port), optionally with base path
-  // This assumes the reverse proxy routes the API under the same domain
-  let baseUrl = cleanApiUrl(origin.replace(/\/$/, ''))
-  if (ENV_API_BASE_PATH && ENV_API_BASE_PATH.trim() !== '') {
-    baseUrl += ENV_API_BASE_PATH
-  }
-  console.log('✅ Using origin fallback, final baseUrl:', baseUrl)
-  return baseUrl
+  
+  // FALLBACK: Default to localhost
+  console.log('🔄 FALLBACK: Using localhost')
+  return 'http://localhost:8010'
 }
 
 const api = axios.create({

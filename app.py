@@ -1,7 +1,7 @@
 import os
 import sys
 import psycopg2
-from flask import Flask
+from flask import Flask, request, abort
 from flask_cors import CORS
 from backend.config import Config
 from backend.database import init_connection_pool
@@ -17,6 +17,21 @@ from backend.routes.legacy_routes import legacy_bp
 
 app = Flask(__name__)
 CORS(app)
+
+# Middleware para detectar e logar tentativas SSL
+@app.before_request
+def log_requests():
+    # Log detalhado da requisição
+    print(f"📥 {request.method} {request.path} de {request.remote_addr}")
+    print(f"   Headers: {dict(request.headers)}")
+    print(f"   Secure: {request.is_secure}")
+    print(f"   Scheme: {request.scheme}")
+
+# Handler para erros SSL/TLS (conexões malformadas)
+@app.errorhandler(400)
+def handle_ssl_error(error):
+    print(f"🚫 Erro 400 - Possível tentativa SSL de {request.remote_addr}")
+    return {"error": "Este servidor aceita apenas HTTP", "message": "Use http:// em vez de https://"}, 400
 
 # Configuração JWT
 app.config['JWT_SECRET_KEY'] = Config.JWT_SECRET_KEY
