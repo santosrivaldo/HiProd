@@ -420,9 +420,41 @@ export default function Dashboard() {
   }, [dateRange, selectedUser, selectedDepartment, processActivities, dashboardData?.rawActivities])
 
   const formatTime = (seconds) => {
+    if (!seconds || seconds === 0) return '0min'
+    
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}h ${minutes}m`
+    
+    if (hours === 0) {
+      return `${minutes}min`
+    }
+    
+    if (minutes === 0) {
+      return `${hours}h`
+    }
+    
+    return `${hours}h ${minutes}min`
+  }
+
+  const formatPercentage = (value, total) => {
+    if (!total || total === 0) return '0%'
+    return `${((value / total) * 100).toFixed(1)}%`
+  }
+
+  const formatDuration = (seconds) => {
+    if (!seconds || seconds === 0) return '0s'
+    
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}min`
+    } else if (minutes > 0) {
+      return `${minutes}min ${secs}s`
+    } else {
+      return `${secs}s`
+    }
   }
 
   const formatHour = (hour) => {
@@ -587,89 +619,109 @@ export default function Dashboard() {
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-md flex items-center justify-center">
-                  <div className="w-4 h-4 bg-green-500 rounded"></div>
+        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                    <div className="w-5 h-5 bg-green-500 rounded-md"></div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Tempo Produtivo
+                    </p>
+                    <div className="flex items-baseline space-x-2">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {formatTime(summary.productive)}
+                      </p>
+                      <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                        {formatPercentage(summary.productive, summary.total)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Tempo Produtivo
-                  </dt>
-                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
-                    {formatTime(summary.productive)}
-                  </dd>
-                </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-md flex items-center justify-center">
-                  <div className="w-4 h-4 bg-red-500 rounded"></div>
+        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+                    <div className="w-5 h-5 bg-red-500 rounded-md"></div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Não Produtivo
+                    </p>
+                    <div className="flex items-baseline space-x-2">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {formatTime(summary.nonproductive)}
+                      </p>
+                      <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                        {formatPercentage(summary.nonproductive, summary.total)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Tempo Não Produtivo
-                  </dt>
-                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
-                    {formatTime(summary.nonproductive)}
-                  </dd>
-                </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-yellow-100 dark:bg-yellow-900 rounded-md flex items-center justify-center">
-                  <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center">
+                    <div className="w-5 h-5 bg-yellow-500 rounded-md"></div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Tempo Neutro
+                    </p>
+                    <div className="flex items-baseline space-x-2">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {formatTime(summary.neutral)}
+                      </p>
+                      <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                        {formatPercentage(summary.neutral, summary.total)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Tempo Neutro
-                  </dt>
-                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
-                    {formatTime(summary.neutral)}
-                  </dd>
-                </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-md flex items-center justify-center">
-                  <div className="w-4 h-4 bg-gray-500 rounded"></div>
+        <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                    <ClockIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Tempo Total
+                    </p>
+                    <div className="flex items-baseline space-x-2">
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {formatTime(summary.total)}
+                      </p>
+                      <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                        100%
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Tempo Total
-                  </dt>
-                  <dd className="text-lg font-medium text-gray-900 dark:text-white">
-                    {formatTime(summary.total)}
-                  </dd>
-                </dl>
               </div>
             </div>
           </div>
@@ -680,32 +732,67 @@ export default function Dashboard() {
       {viewMode === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Gráfico de Pizza */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Distribuição de Tempo por Produtividade
-            </h2>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Distribuição por Produtividade
+              </h2>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Total: {formatTime(summary.total)}
+              </div>
+            </div>
             {pieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatTime(value)} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="space-y-4">
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      innerRadius={40}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${(percent * 100).toFixed(1)}%`}
+                      labelLine={false}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value, name) => [formatTime(value), name]}
+                      labelFormatter={() => ''}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                
+                {/* Legenda personalizada */}
+                <div className="grid grid-cols-2 gap-3">
+                  {pieData.map((entry, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: entry.color }}
+                      ></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {entry.name}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatTime(entry.value)} ({formatPercentage(entry.value, summary.total)})
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
+                <div className="text-center">
+                  <ChartBarIcon className="mx-auto h-12 w-12 mb-2" />
+                  <p className="text-sm">Nenhum dado disponível</p>
+                </div>
               </div>
             )}
           </div>
@@ -751,62 +838,118 @@ export default function Dashboard() {
       )}
 
       {viewMode === 'domains' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Top Domínios */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Top 10 Domínios por Tempo
-            </h2>
+        <div className="space-y-6 mb-6">
+          {/* Lista de Domínios */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Top Domínios por Tempo de Uso
+              </h2>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {domainData.length} domínios encontrados
+              </div>
+            </div>
+            
             {domainData.length > 0 ? (
+              <div className="space-y-3">
+                {domainData.map((domain, index) => {
+                  const totalDomainTime = domainData.reduce((sum, d) => sum + d.value, 0)
+                  const percentage = (domain.value / totalDomainTime) * 100
+                  
+                  return (
+                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      <div className="flex items-center space-x-4 flex-1 min-w-0">
+                        <div className="flex-shrink-0">
+                          <div 
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                          ></div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2">
+                            <GlobeAltIcon className="w-4 h-4 text-gray-400" />
+                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                              {domain.name}
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {domain.activities} atividade{domain.activities !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {formatTime(domain.value)}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {percentage.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className="w-20 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                          <div
+                            className="h-2 rounded-full"
+                            style={{ 
+                              width: `${Math.min(percentage, 100)}%`,
+                              backgroundColor: CHART_COLORS[index % CHART_COLORS.length]
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[200px] text-gray-500 dark:text-gray-400">
+                <div className="text-center">
+                  <GlobeAltIcon className="mx-auto h-12 w-12 mb-2" />
+                  <p className="text-sm">Nenhum domínio encontrado</p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Gráfico de Domínios */}
+          {domainData.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
+                Distribuição Visual por Domínios
+              </h2>
               <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={domainData} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={formatTime} />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip 
-                    formatter={(value, name) => [formatTime(value), name]}
-                    labelFormatter={(label) => `Domínio: ${label}`}
+                <BarChart data={domainData.slice(0, 8)} layout="horizontal">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                  <XAxis 
+                    type="number" 
+                    tickFormatter={formatTime}
+                    stroke="#6B7280"
                   />
-                  <Bar dataKey="value" fill="#3B82F6" />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    width={150}
+                    stroke="#6B7280"
+                    fontSize={12}
+                  />
+                  <Tooltip 
+                    formatter={(value, name) => [formatTime(value), 'Tempo de uso']}
+                    labelFormatter={(label) => `${label}`}
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#F9FAFB'
+                    }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="#3B82F6"
+                    radius={[0, 4, 4, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
-              </div>
-            )}
-          </div>
-
-          {/* Domínios em Pizza */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Distribuição por Domínios
-            </h2>
-            {domainData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie
-                    data={domainData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={120}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {domainData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatTime(value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-                Nenhum dado disponível
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -951,65 +1094,110 @@ export default function Dashboard() {
       )}
 
       {/* Atividades Recentes */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-        <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-          Atividades Recentes
-        </h2>
-        <div className="space-y-4">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            Atividades Recentes
+          </h2>
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Últimas {recentActivities.length} atividades
+          </div>
+        </div>
+        
+        <div className="space-y-3">
           {recentActivities.length > 0 ? (
             recentActivities.map((activity, index) => (
               <div
                 key={index}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded"
+                className="group flex items-start space-x-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {activity.active_window}
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-300">
-                    {activity.usuario_monitorado_nome} • {formatBrasiliaDate(activity.horario, 'datetime')}
-                  </p>
-                  {activity.domain && (
-                    <p className="text-xs text-blue-600 dark:text-blue-400">
-                      🌐 {activity.domain}
-                    </p>
-                  )}
-                  {activity.application && (
-                    <p className="text-xs text-green-600 dark:text-green-400">
-                      💻 {activity.application}
-                    </p>
-                  )}
+                {/* Avatar/Icon */}
+                <div className="flex-shrink-0 mt-1">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white ${
+                    activity.produtividade === 'productive' ? 'bg-green-500' :
+                    activity.produtividade === 'nonproductive' ? 'bg-red-500' :
+                    'bg-yellow-500'
+                  }`}>
+                    {activity.usuario_monitorado_nome?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  {activity.has_screenshot && (
-                    <button
-                      onClick={() => handleViewScreenshot(activity.id)}
-                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-                      title="Ver Screenshot"
-                    >
-                      <PhotoIcon className="w-4 h-4 mr-1" />
-                      Screenshot
-                    </button>
-                  )}
-                  <span
-                    className={`px-2 py-1 text-xs rounded-full ${
-                      activity.produtividade === 'productive'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : activity.produtividade === 'nonproductive'
-                        ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                    }`}
-                  >
-                    {activity.categoria || activity.produtividade || 'neutral'}
-                  </span>
+                
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 mb-1">
+                        {activity.active_window}
+                      </p>
+                      
+                      <div className="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        <span className="font-medium">{activity.usuario_monitorado_nome}</span>
+                        <span>•</span>
+                        <span>{formatBrasiliaDate(activity.horario, 'datetime')}</span>
+                        {activity.duracao && (
+                          <>
+                            <span>•</span>
+                            <span>{formatDuration(activity.duracao)}</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Tags */}
+                      <div className="flex items-center space-x-2 flex-wrap gap-1">
+                        {activity.domain && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                            <GlobeAltIcon className="w-3 h-3 mr-1" />
+                            {activity.domain}
+                          </span>
+                        )}
+                        {activity.application && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                            <ComputerDesktopIcon className="w-3 h-3 mr-1" />
+                            {activity.application}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex items-center space-x-2 ml-4">
+                      {activity.has_screenshot && (
+                        <button
+                          onClick={() => handleViewScreenshot(activity.id)}
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
+                          title="Ver Screenshot"
+                        >
+                          <PhotoIcon className="w-4 h-4 mr-1" />
+                          <span className="hidden sm:inline">Screenshot</span>
+                        </button>
+                      )}
+                      
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
+                        activity.produtividade === 'productive'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                          : activity.produtividade === 'nonproductive'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                          : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                      }`}>
+                        {activity.categoria || 
+                         (activity.produtividade === 'productive' ? 'Produtivo' :
+                          activity.produtividade === 'nonproductive' ? 'Não Produtivo' : 'Neutro')}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="text-center py-8">
+            <div className="text-center py-12">
               <div className="text-gray-400 dark:text-gray-500">
-                <ChartBarIcon className="mx-auto h-12 w-12 mb-4" />
-                <p className="text-sm">Nenhuma atividade encontrada</p>
+                <ChartBarIcon className="mx-auto h-16 w-16 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  Nenhuma atividade encontrada
+                </h3>
+                <p className="text-sm">
+                  Ajuste os filtros ou período para ver as atividades
+                </p>
               </div>
             </div>
           )}
