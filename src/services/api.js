@@ -23,11 +23,17 @@ function resolveBaseURL() {
   console.log('ENV_API_BASE_PATH:', ENV_API_BASE_PATH)
   console.log('window.location:', window.location.href)
   
+  // FORCE IP FOR PRODUCTION - Override everything
+  if (window.location.hostname.includes('grupohi.com.br')) {
+    console.log('🚨 FORCING PRODUCTION IP - OVERRIDE ALL')
+    return 'http://192.241.155.236:8010'
+  }
+  
   // Destructure window.location once
   const { hostname, protocol, origin } = window.location
   
   // Force correct URL for production IP (HTTP only)
-  if (hostname === 'hiprod.grupohi.com.br') {
+  if (hostname === 'hiprod.grupohi.com.br' || hostname.includes('grupohi.com.br')) {
     console.log('✅ Using production IP via HTTP')
     return 'http://192.241.155.236:8010'
   }
@@ -35,6 +41,13 @@ function resolveBaseURL() {
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
   if (ENV_API_URL && typeof ENV_API_URL === 'string' && ENV_API_URL.trim() !== '') {
     let baseUrl = cleanApiUrl(ENV_API_URL.replace(/\/$/, ''))
+    
+    // Force IP if it contains grupohi.com.br
+    if (baseUrl.includes('grupohi.com.br')) {
+      console.log('✅ Forcing IP instead of domain in ENV_API_URL')
+      return 'http://192.241.155.236:8010'
+    }
+    
     // Only add base path if it exists and is not empty
     if (ENV_API_BASE_PATH && ENV_API_BASE_PATH.trim() !== '') {
       baseUrl += ENV_API_BASE_PATH
