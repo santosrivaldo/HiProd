@@ -8,8 +8,12 @@ const ENV_API_BASE_PATH = import.meta.env?.VITE_API_BASE_PATH || '' // e.g. '/ap
 function resolveBaseURL() {
   // If VITE_API_URL is provided, use it directly (works for proxy/domain)
   if (ENV_API_URL && typeof ENV_API_URL === 'string' && ENV_API_URL.trim() !== '') {
-    // Allow optional base path chaining
-    return ENV_API_URL.replace(/\/$/, '') + ENV_API_BASE_PATH
+    let baseUrl = ENV_API_URL.replace(/\/$/, '')
+    // Only add base path if it exists and is not empty
+    if (ENV_API_BASE_PATH && ENV_API_BASE_PATH.trim() !== '') {
+      baseUrl += ENV_API_BASE_PATH
+    }
+    return baseUrl
   }
 
   // Fallbacks
@@ -17,13 +21,17 @@ function resolveBaseURL() {
 
   // Local development defaults
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Prefer backend on 8000 locally
+    // Prefer backend on 8010 locally
     return 'http://localhost:8010'
   }
 
   // In production behind proxy: try same-origin (no port), optionally with base path
   // This assumes the reverse proxy routes the API under the same domain
-  return origin.replace(/\/$/, '') + ENV_API_BASE_PATH
+  let baseUrl = origin.replace(/\/$/, '')
+  if (ENV_API_BASE_PATH && ENV_API_BASE_PATH.trim() !== '') {
+    baseUrl += ENV_API_BASE_PATH
+  }
+  return baseUrl
 }
 
 const api = axios.create({
