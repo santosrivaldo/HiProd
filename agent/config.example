@@ -1,0 +1,36 @@
+# Configuração do HiProd Agent
+# Copie este arquivo para .env e configure as variáveis
+
+# URL da API (obrigatório)
+API_URL=http://localhost:8010
+
+# Credenciais do usuário monitorado (obrigatório)
+USER_NAME=seu_usuario
+USER_PASSWORD=sua_senha
+
+# Configurações de captura
+SCREENSHOT_ENABLED=true
+SCREENSHOT_QUALITY=55
+SCREENSHOT_MAX_SIZE=800x600
+
+# Configurações de monitoramento
+MONITOR_INTERVAL=10
+IDLE_THRESHOLD=600
+WORKING_HOURS_START=08:00
+WORKING_HOURS_END=18:00
+
+# Configurações de rede
+REQUEST_TIMEOUT=30
+MAX_RETRIES=3
+OFFLINE_QUEUE_MAX_SIZE=1000
+
+# Configurações de log
+LOG_LEVEL=INFO
+LOG_FILE=agent.log
+LOG_MAX_SIZE=10MB
+LOG_BACKUP_COUNT=5
+
+# Configurações avançadas
+COMPRESS_SCREENSHOTS=true
+ENCRYPT_OFFLINE_DATA=false
+AUTO_START_WITH_SYSTEM=false

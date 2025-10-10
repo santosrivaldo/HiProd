@@ -1,0 +1,30 @@
+# Dependências do HiProd Agent
+# Requisições HTTP
+requests>=2.31.0
+
+# Manipulação de imagens e screenshots
+Pillow>=10.0.0
+
+# Informações do sistema
+psutil>=5.9.0
+
+# Timezone e data/hora
+pytz>=2023.3
+
+# Windows GUI (apenas Windows)
+pywin32>=306; sys_platform == "win32"
+
+# Logging e configuração
+python-dotenv>=1.0.0
+
+# JSON Lines para queue offline
+jsonlines>=3.1.0
+
+# Criptografia (se necessário para futuras funcionalidades)
+cryptography>=41.0.0
+
+# Utilitários de sistema
+pathlib2>=2.3.7; python_version < "3.4"
+
+# Build para executável
+pyinstaller>=5.13.0

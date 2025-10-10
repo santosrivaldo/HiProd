@@ -19,6 +19,18 @@ const UserManagement = () => {
     cargo: '',
     departamento_id: ''
   })
+  
+  // Estado para usuários do sistema
+  const [systemFormData, setSystemFormData] = useState({
+    nome: '',
+    email: '',
+    senha: '',
+    departamento_id: ''
+  })
+  const [editingSystemUser, setEditingSystemUser] = useState(null)
+  const [showSystemForm, setShowSystemForm] = useState(false)
+  const [showInactiveUsers, setShowInactiveUsers] = useState(false)
+  const [inactiveUsers, setInactiveUsers] = useState([])
 
   useEffect(() => {
     fetchData()
@@ -44,6 +56,16 @@ const UserManagement = () => {
       setDepartments([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchInactiveUsers = async () => {
+    try {
+      const response = await api.get('/usuarios/inativos')
+      setInactiveUsers(response.data || [])
+    } catch (error) {
+      console.error('Erro ao carregar usuários inativos:', error)
+      setInactiveUsers([])
     }
   }
 
@@ -109,6 +131,115 @@ const UserManagement = () => {
     return dept ? dept.nome : 'Sem Departamento'
   }
 
+  // ========================================
+  // CRUD PARA USUÁRIOS DO SISTEMA
+  // ========================================
+
+  const handleSubmitSystemUser = async (e) => {
+    e.preventDefault()
+
+    try {
+      if (editingSystemUser) {
+        // Atualizar usuário existente
+        await api.put(`/usuarios/${editingSystemUser.usuario_id}`, systemFormData)
+        setMessage('Usuário atualizado com sucesso!')
+      } else {
+        // Criar novo usuário
+        await api.post('/usuarios', systemFormData)
+        setMessage('Usuário criado com sucesso!')
+      }
+
+      // Resetar formulário e recarregar dados
+      setSystemFormData({ nome: '', email: '', senha: '', departamento_id: '' })
+      setEditingSystemUser(null)
+      setShowSystemForm(false)
+      await fetchData()
+
+      // Limpar mensagem após 3 segundos
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Erro ao salvar usuário:', error)
+      setMessage(error.response?.data?.message || 'Erro ao salvar usuário')
+      setTimeout(() => setMessage(''), 5000)
+    }
+  }
+
+  const handleEditSystemUser = (usuario) => {
+    setEditingSystemUser(usuario)
+    setSystemFormData({
+      nome: usuario.usuario,
+      email: usuario.email || '',
+      senha: '', // Não preencher senha por segurança
+      departamento_id: usuario.departamento_id || ''
+    })
+    setShowSystemForm(true)
+  }
+
+  const handleDeleteSystemUser = async (usuario) => {
+    if (!window.confirm(`Tem certeza que deseja desativar o usuário ${usuario.usuario}?`)) {
+      return
+    }
+
+    try {
+      await api.delete(`/usuarios/${usuario.usuario_id}`)
+      setMessage(`Usuário ${usuario.usuario} foi desativado com sucesso!`)
+      await fetchData()
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Erro ao deletar usuário:', error)
+      setMessage(error.response?.data?.message || 'Erro ao deletar usuário')
+      setTimeout(() => setMessage(''), 5000)
+    }
+  }
+
+  const handleReactivateSystemUser = async (usuario) => {
+    try {
+      await api.patch(`/usuarios/${usuario.usuario_id}/reativar`)
+      setMessage(`Usuário ${usuario.usuario} foi reativado com sucesso!`)
+      await fetchData()
+      await fetchInactiveUsers()
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Erro ao reativar usuário:', error)
+      setMessage(error.response?.data?.message || 'Erro ao reativar usuário')
+      setTimeout(() => setMessage(''), 5000)
+    }
+  }
+
+  const handleResetPassword = async (usuario) => {
+    const novaSenha = window.prompt(`Digite a nova senha para ${usuario.usuario}:`)
+    if (!novaSenha) return
+
+    if (novaSenha.length < 6) {
+      setMessage('Senha deve ter pelo menos 6 caracteres!')
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    try {
+      await api.patch(`/usuarios/${usuario.usuario_id}/reset-senha`, { nova_senha: novaSenha })
+      setMessage(`Senha do usuário ${usuario.usuario} foi resetada com sucesso!`)
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Erro ao resetar senha:', error)
+      setMessage(error.response?.data?.message || 'Erro ao resetar senha')
+      setTimeout(() => setMessage(''), 5000)
+    }
+  }
+
+  const handleCancelSystemForm = () => {
+    setShowSystemForm(false)
+    setEditingSystemUser(null)
+    setSystemFormData({ nome: '', email: '', senha: '', departamento_id: '' })
+  }
+
+  const toggleInactiveUsers = async () => {
+    if (!showInactiveUsers) {
+      await fetchInactiveUsers()
+    }
+    setShowInactiveUsers(!showInactiveUsers)
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -123,14 +254,34 @@ const UserManagement = () => {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Gerenciamento de Usuários
         </h1>
-        {activeTab === 'monitorados' && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            {showForm ? 'Cancelar' : 'Novo Usuário Monitorado'}
-          </button>
-        )}
+        <div className="flex space-x-3">
+          {activeTab === 'monitorados' && (
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              {showForm ? 'Cancelar' : 'Novo Usuário Monitorado'}
+            </button>
+          )}
+          
+          {activeTab === 'sistema' && (
+            <>
+              <button
+                onClick={() => setShowSystemForm(!showSystemForm)}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                {showSystemForm ? 'Cancelar' : 'Novo Usuário'}
+              </button>
+              
+              <button
+                onClick={toggleInactiveUsers}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+              >
+                {showInactiveUsers ? 'Ocultar Inativos' : 'Ver Inativos'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {message && (
@@ -311,6 +462,102 @@ const UserManagement = () => {
         </div>
       )}
 
+      {/* Formulário de Usuários do Sistema */}
+      {activeTab === 'sistema' && showSystemForm && (
+        <div className="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">
+              {editingSystemUser ? 'Editar Usuário do Sistema' : 'Novo Usuário do Sistema'}
+            </h3>
+            <div className="mt-6">
+              <form onSubmit={handleSubmitSystemUser} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label htmlFor="system-nome" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Nome de Usuário *
+                    </label>
+                    <input
+                      type="text"
+                      id="system-nome"
+                      required
+                      value={systemFormData.nome}
+                      onChange={(e) => setSystemFormData({ ...systemFormData, nome: e.target.value })}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Digite o nome de usuário"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="system-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      id="system-email"
+                      value={systemFormData.email}
+                      onChange={(e) => setSystemFormData({ ...systemFormData, email: e.target.value })}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Digite o email (opcional)"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="system-senha" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {editingSystemUser ? 'Nova Senha (deixe vazio para manter)' : 'Senha *'}
+                    </label>
+                    <input
+                      type="password"
+                      id="system-senha"
+                      required={!editingSystemUser}
+                      value={systemFormData.senha}
+                      onChange={(e) => setSystemFormData({ ...systemFormData, senha: e.target.value })}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="Digite a senha (mín. 6 caracteres)"
+                      minLength={6}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="system-departamento" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Departamento
+                    </label>
+                    <select
+                      id="system-departamento"
+                      value={systemFormData.departamento_id}
+                      onChange={(e) => setSystemFormData({ ...systemFormData, departamento_id: e.target.value })}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="">Selecione um departamento</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleCancelSystemForm}
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    {editingSystemUser ? 'Atualizar' : 'Criar'} Usuário
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lista de Usuários do Sistema */}
       {activeTab === 'sistema' && (
         <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
@@ -330,39 +577,64 @@ const UserManagement = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
-                        <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                          <span className="text-white font-medium text-sm">
+                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">
                             {usuario.usuario.charAt(0).toUpperCase()}
                           </span>
                         </div>
                       </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {usuario.usuario}
-                        </p>
+                      <div className="ml-4 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {usuario.usuario}
+                          </p>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            Admin
+                          </span>
+                        </div>
                         {usuario.email && (
                           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                            {usuario.email}
+                            📧 {usuario.email}
                           </p>
                         )}
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {usuario.departamento ? usuario.departamento.nome : 'Sem departamento'}
-                        </p>
+                        <div className="flex items-center space-x-4 mt-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            🏢 {usuario.departamento ? usuario.departamento.nome : 'Sem departamento'}
+                          </p>
+                          {usuario.created_at && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              📅 Criado em {usuario.created_at}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <select
-                      value={usuario.departamento_id || ''}
-                      onChange={(e) => handleUpdateUsuarioDepartment(usuario.usuario_id, e.target.value)}
-                      className="text-xs border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    <button
+                      onClick={() => handleEditSystemUser(usuario)}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      title="Editar usuário"
                     >
-                      <option value="">Sem departamento</option>
-                      {departments.map(dept => (
-                        <option key={dept.id} value={dept.id}>{dept.nome}</option>
-                      ))}
-                    </select>
+                      ✏️ Editar
+                    </button>
+                    
+                    <button
+                      onClick={() => handleResetPassword(usuario)}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-yellow-700 bg-yellow-100 hover:bg-yellow-200 dark:bg-yellow-900 dark:text-yellow-200 dark:hover:bg-yellow-800 transition-colors"
+                      title="Resetar senha"
+                    >
+                      🔑 Reset
+                    </button>
+                    
+                    <button
+                      onClick={() => handleDeleteSystemUser(usuario)}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800 transition-colors"
+                      title="Desativar usuário"
+                    >
+                      🗑️ Desativar
+                    </button>
                   </div>
                 </div>
 
@@ -377,8 +649,99 @@ const UserManagement = () => {
 
           {usuarios.length === 0 && (
             <div className="text-center py-12">
+              <div className="text-gray-400 dark:text-gray-500">
+                <div className="mx-auto h-16 w-16 mb-4 text-6xl">
+                  👥
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  Nenhum usuário do sistema
+                </h3>
+                <p className="text-sm mb-4">
+                  Crie o primeiro usuário administrativo para começar
+                </p>
+                <button
+                  onClick={() => setShowSystemForm(true)}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                >
+                  Criar Primeiro Usuário
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Lista de Usuários Inativos */}
+      {activeTab === 'sistema' && showInactiveUsers && (
+        <div className="bg-white dark:bg-gray-800 shadow overflow-hidden sm:rounded-md">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white">
+              Usuários Inativos
+            </h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Usuários desativados do sistema
+            </p>
+          </div>
+
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            {inactiveUsers.map((usuario) => (
+              <li key={usuario.usuario_id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 opacity-75">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <div className="w-12 h-12 bg-gray-400 rounded-full flex items-center justify-center">
+                          <span className="text-white font-bold text-lg">
+                            {usuario.usuario.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-4 flex-1">
+                        <div className="flex items-center space-x-2">
+                          <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                            {usuario.usuario}
+                          </p>
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                            Inativo
+                          </span>
+                        </div>
+                        {usuario.email && (
+                          <p className="text-sm text-gray-400 dark:text-gray-500 truncate">
+                            📧 {usuario.email}
+                          </p>
+                        )}
+                        <div className="flex items-center space-x-4 mt-1">
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            🏢 {usuario.departamento ? usuario.departamento.nome : 'Sem departamento'}
+                          </p>
+                          {usuario.updated_at && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              🗑️ Desativado em {usuario.updated_at}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleReactivateSystemUser(usuario)}
+                      className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800 transition-colors"
+                      title="Reativar usuário"
+                    >
+                      🔄 Reativar
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {inactiveUsers.length === 0 && (
+            <div className="text-center py-8">
               <p className="text-gray-500 dark:text-gray-400">
-                Nenhum usuário do sistema encontrado.
+                Nenhum usuário inativo encontrado.
               </p>
             </div>
           )}

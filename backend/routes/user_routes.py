@@ -1,5 +1,6 @@
 import uuid
 import psycopg2
+import bcrypt
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
@@ -388,4 +389,396 @@ def update_user_department(current_user, usuario_id):
 
     except Exception as e:
         print(f"Erro ao atualizar departamento do usuário: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+# ========================================
+# CRUD COMPLETO PARA USUÁRIOS DO SISTEMA
+# ========================================
+
+@user_bp.route('/usuarios', methods=['POST'])
+@token_required
+def create_system_user(current_user):
+    """Criar novo usuário do sistema"""
+    data = request.json
+
+    if not data:
+        return jsonify({'message': 'Dados não fornecidos!'}), 400
+
+    # Validações obrigatórias
+    required_fields = ['nome', 'senha']
+    for field in required_fields:
+        if field not in data or not data[field].strip():
+            return jsonify({'message': f'Campo {field} é obrigatório!'}), 400
+
+    nome = data['nome'].strip()
+    senha = data['senha'].strip()
+    email = data.get('email', '').strip() or None
+    departamento_id = data.get('departamento_id')
+
+    # Validações
+    if len(nome) < 3:
+        return jsonify({'message': 'Nome deve ter pelo menos 3 caracteres!'}), 400
+    
+    if len(senha) < 6:
+        return jsonify({'message': 'Senha deve ter pelo menos 6 caracteres!'}), 400
+
+    try:
+        with DatabaseConnection() as db:
+            # Verificar se usuário já existe
+            db.cursor.execute('SELECT id FROM usuarios WHERE nome = %s;', (nome,))
+            if db.cursor.fetchone():
+                return jsonify({'message': 'Usuário já existe!'}), 409
+
+            # Verificar departamento se fornecido
+            if departamento_id:
+                try:
+                    dept_id = int(departamento_id)
+                    db.cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
+                    if not db.cursor.fetchone():
+                        return jsonify({'message': 'Departamento não encontrado!'}), 400
+                except ValueError:
+                    return jsonify({'message': 'ID de departamento inválido!'}), 400
+            else:
+                dept_id = None
+
+            # Hash da senha
+            senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+            # Inserir usuário
+            db.cursor.execute('''
+                INSERT INTO usuarios (nome, senha, email, departamento_id, ativo)
+                VALUES (%s, %s, %s, %s, TRUE)
+                RETURNING id, nome, email, departamento_id, ativo, created_at;
+            ''', (nome, senha_hash, email, dept_id))
+
+            usuario = db.cursor.fetchone()
+
+            # Buscar dados do departamento se existir
+            departamento_info = None
+            if dept_id:
+                db.cursor.execute('SELECT nome, cor FROM departamentos WHERE id = %s;', (dept_id,))
+                dept_data = db.cursor.fetchone()
+                if dept_data:
+                    departamento_info = {'nome': dept_data[0], 'cor': dept_data[1]}
+
+            return jsonify({
+                'message': 'Usuário criado com sucesso!',
+                'usuario': {
+                    'usuario_id': str(usuario[0]),
+                    'usuario': usuario[1],
+                    'email': usuario[2],
+                    'departamento_id': usuario[3],
+                    'ativo': usuario[4],
+                    'created_at': format_datetime_brasilia(usuario[5]),
+                    'departamento': departamento_info
+                }
+            }), 201
+
+    except psycopg2.IntegrityError as e:
+        if 'unique' in str(e).lower():
+            return jsonify({'message': 'Usuário já existe!'}), 409
+        return jsonify({'message': 'Erro de integridade dos dados!'}), 400
+    except Exception as e:
+        print(f"Erro ao criar usuário: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@user_bp.route('/usuarios/<uuid:usuario_id>', methods=['PUT'])
+@token_required
+def update_system_user(current_user, usuario_id):
+    """Atualizar usuário do sistema"""
+    data = request.json
+
+    if not data:
+        return jsonify({'message': 'Dados não fornecidos!'}), 400
+
+    try:
+        with DatabaseConnection() as db:
+            # Verificar se o usuário existe
+            db.cursor.execute('SELECT id, nome FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
+            existing_user = db.cursor.fetchone()
+            if not existing_user:
+                return jsonify({'message': 'Usuário não encontrado!'}), 404
+
+            update_fields = []
+            update_values = []
+
+            # Nome
+            if 'nome' in data:
+                nome = data['nome'].strip()
+                if len(nome) < 3:
+                    return jsonify({'message': 'Nome deve ter pelo menos 3 caracteres!'}), 400
+                
+                # Verificar se nome já existe (exceto o próprio usuário)
+                db.cursor.execute('SELECT id FROM usuarios WHERE nome = %s AND id != %s;', (nome, usuario_id))
+                if db.cursor.fetchone():
+                    return jsonify({'message': 'Nome de usuário já existe!'}), 409
+                
+                update_fields.append('nome = %s')
+                update_values.append(nome)
+
+            # Email
+            if 'email' in data:
+                email = data['email'].strip() or None
+                update_fields.append('email = %s')
+                update_values.append(email)
+
+            # Senha
+            if 'senha' in data and data['senha'].strip():
+                senha = data['senha'].strip()
+                if len(senha) < 6:
+                    return jsonify({'message': 'Senha deve ter pelo menos 6 caracteres!'}), 400
+                
+                senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                update_fields.append('senha = %s')
+                update_values.append(senha_hash)
+
+            # Departamento
+            if 'departamento_id' in data:
+                dept_id = data.get('departamento_id')
+                if dept_id:
+                    try:
+                        dept_id = int(dept_id)
+                        db.cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
+                        if not db.cursor.fetchone():
+                            return jsonify({'message': 'Departamento não encontrado!'}), 400
+                    except ValueError:
+                        return jsonify({'message': 'ID de departamento inválido!'}), 400
+                else:
+                    dept_id = None
+                
+                update_fields.append('departamento_id = %s')
+                update_values.append(dept_id)
+
+            # Status ativo
+            if 'ativo' in data:
+                update_fields.append('ativo = %s')
+                update_values.append(bool(data['ativo']))
+
+            if not update_fields:
+                return jsonify({'message': 'Nenhum campo válido para atualizar!'}), 400
+
+            # Adicionar timestamp de atualização
+            update_fields.append('updated_at = CURRENT_TIMESTAMP')
+            update_values.append(usuario_id)
+
+            # Executar update
+            db.cursor.execute(f'''
+                UPDATE usuarios SET {', '.join(update_fields)}
+                WHERE id = %s
+                RETURNING id, nome, email, departamento_id, ativo, updated_at;
+            ''', update_values)
+
+            updated_user = db.cursor.fetchone()
+
+            # Buscar dados do departamento se existir
+            departamento_info = None
+            if updated_user[3]:
+                db.cursor.execute('SELECT nome, cor FROM departamentos WHERE id = %s;', (updated_user[3],))
+                dept_data = db.cursor.fetchone()
+                if dept_data:
+                    departamento_info = {'nome': dept_data[0], 'cor': dept_data[1]}
+
+            return jsonify({
+                'message': 'Usuário atualizado com sucesso!',
+                'usuario': {
+                    'usuario_id': str(updated_user[0]),
+                    'usuario': updated_user[1],
+                    'email': updated_user[2],
+                    'departamento_id': updated_user[3],
+                    'ativo': updated_user[4],
+                    'updated_at': format_datetime_brasilia(updated_user[5]),
+                    'departamento': departamento_info
+                }
+            }), 200
+
+    except psycopg2.IntegrityError as e:
+        if 'unique' in str(e).lower():
+            return jsonify({'message': 'Nome de usuário já existe!'}), 409
+        return jsonify({'message': 'Erro de integridade dos dados!'}), 400
+    except Exception as e:
+        print(f"Erro ao atualizar usuário: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@user_bp.route('/usuarios/<uuid:usuario_id>', methods=['DELETE'])
+@token_required
+def delete_system_user(current_user, usuario_id):
+    """Deletar usuário do sistema (soft delete)"""
+    try:
+        with DatabaseConnection() as db:
+            # Verificar se o usuário existe
+            db.cursor.execute('SELECT id, nome FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
+            existing_user = db.cursor.fetchone()
+            if not existing_user:
+                return jsonify({'message': 'Usuário não encontrado!'}), 404
+
+            # Verificar se não é o próprio usuário logado
+            if str(current_user['id']) == str(usuario_id):
+                return jsonify({'message': 'Você não pode deletar sua própria conta!'}), 400
+
+            # Soft delete - marcar como inativo
+            db.cursor.execute('''
+                UPDATE usuarios 
+                SET ativo = FALSE, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s;
+            ''', (usuario_id,))
+
+            return jsonify({
+                'message': f'Usuário {existing_user[1]} foi desativado com sucesso!'
+            }), 200
+
+    except Exception as e:
+        print(f"Erro ao deletar usuário: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@user_bp.route('/usuarios/<uuid:usuario_id>/reativar', methods=['PATCH'])
+@token_required
+def reactivate_system_user(current_user, usuario_id):
+    """Reativar usuário do sistema"""
+    try:
+        with DatabaseConnection() as db:
+            # Verificar se o usuário existe (mesmo inativo)
+            db.cursor.execute('SELECT id, nome, ativo FROM usuarios WHERE id = %s;', (usuario_id,))
+            existing_user = db.cursor.fetchone()
+            if not existing_user:
+                return jsonify({'message': 'Usuário não encontrado!'}), 404
+
+            if existing_user[2]:  # já está ativo
+                return jsonify({'message': 'Usuário já está ativo!'}), 400
+
+            # Reativar usuário
+            db.cursor.execute('''
+                UPDATE usuarios 
+                SET ativo = TRUE, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s;
+            ''', (usuario_id,))
+
+            return jsonify({
+                'message': f'Usuário {existing_user[1]} foi reativado com sucesso!'
+            }), 200
+
+    except Exception as e:
+        print(f"Erro ao reativar usuário: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@user_bp.route('/usuarios/<uuid:usuario_id>/reset-senha', methods=['PATCH'])
+@token_required
+def reset_user_password(current_user, usuario_id):
+    """Resetar senha do usuário"""
+    data = request.json
+
+    if not data or 'nova_senha' not in data:
+        return jsonify({'message': 'Nova senha é obrigatória!'}), 400
+
+    nova_senha = data['nova_senha'].strip()
+    if len(nova_senha) < 6:
+        return jsonify({'message': 'Senha deve ter pelo menos 6 caracteres!'}), 400
+
+    try:
+        with DatabaseConnection() as db:
+            # Verificar se o usuário existe
+            db.cursor.execute('SELECT id, nome FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
+            existing_user = db.cursor.fetchone()
+            if not existing_user:
+                return jsonify({'message': 'Usuário não encontrado!'}), 404
+
+            # Hash da nova senha
+            senha_hash = bcrypt.hashpw(nova_senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+            # Atualizar senha
+            db.cursor.execute('''
+                UPDATE usuarios 
+                SET senha = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s;
+            ''', (senha_hash, usuario_id))
+
+            return jsonify({
+                'message': f'Senha do usuário {existing_user[1]} foi resetada com sucesso!'
+            }), 200
+
+    except Exception as e:
+        print(f"Erro ao resetar senha: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@user_bp.route('/usuarios/inativos', methods=['GET'])
+@token_required
+def get_inactive_users(current_user):
+    """Listar usuários inativos"""
+    try:
+        with DatabaseConnection() as db:
+            db.cursor.execute('''
+                SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at, u.updated_at,
+                       d.nome as departamento_nome, d.cor as departamento_cor
+                FROM usuarios u
+                LEFT JOIN departamentos d ON u.departamento_id = d.id
+                WHERE u.ativo = FALSE
+                ORDER BY u.updated_at DESC;
+            ''')
+            usuarios = db.cursor.fetchall()
+
+            result = []
+            if usuarios:
+                for usuario in usuarios:
+                    departamento_info = None
+                    if len(usuario) > 7 and usuario[7]:
+                        departamento_info = {
+                            'nome': usuario[7],
+                            'cor': usuario[8] if len(usuario) > 8 else None
+                        }
+
+                    result.append({
+                        'usuario_id': str(usuario[0]),
+                        'usuario': usuario[1],
+                        'email': usuario[2],
+                        'departamento_id': usuario[3],
+                        'ativo': usuario[4],
+                        'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
+                        'updated_at': format_datetime_brasilia(usuario[6]) if usuario[6] else None,
+                        'departamento': departamento_info
+                    })
+
+            return jsonify(result)
+    except Exception as e:
+        print(f"Erro na consulta de usuários inativos: {e}")
+        return jsonify([]), 200
+
+@user_bp.route('/usuarios/<uuid:usuario_id>', methods=['GET'])
+@token_required
+def get_system_user(current_user, usuario_id):
+    """Obter detalhes de um usuário específico"""
+    try:
+        with DatabaseConnection() as db:
+            db.cursor.execute('''
+                SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at, u.updated_at, u.ultimo_login,
+                       d.nome as departamento_nome, d.cor as departamento_cor
+                FROM usuarios u
+                LEFT JOIN departamentos d ON u.departamento_id = d.id
+                WHERE u.id = %s;
+            ''', (usuario_id,))
+            usuario = db.cursor.fetchone()
+
+            if not usuario:
+                return jsonify({'message': 'Usuário não encontrado!'}), 404
+
+            departamento_info = None
+            if len(usuario) > 8 and usuario[8]:
+                departamento_info = {
+                    'nome': usuario[8],
+                    'cor': usuario[9] if len(usuario) > 9 else None
+                }
+
+            result = {
+                'usuario_id': str(usuario[0]),
+                'usuario': usuario[1],
+                'email': usuario[2],
+                'departamento_id': usuario[3],
+                'ativo': usuario[4],
+                'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
+                'updated_at': format_datetime_brasilia(usuario[6]) if usuario[6] else None,
+                'ultimo_login': format_datetime_brasilia(usuario[7]) if usuario[7] else None,
+                'departamento': departamento_info
+            }
+
+            return jsonify(result)
+    except Exception as e:
+        print(f"Erro ao buscar usuário: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
