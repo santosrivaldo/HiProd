@@ -13,6 +13,14 @@ def create_connection_pool():
     """Cria o pool de conexões com o banco"""
     global connection_pool
     
+    # Fechar pool existente se houver
+    if connection_pool:
+        try:
+            connection_pool.closeall()
+        except:
+            pass
+        connection_pool = None
+    
     if Config.DATABASE_URL:
         print(f"🔌 Criando pool de conexões com DATABASE_URL... (min: {Config.MIN_CONNECTIONS}, max: {Config.MAX_CONNECTIONS})")
         try:
@@ -48,39 +56,48 @@ class DatabaseConnection:
     def __enter__(self):
         global connection_pool
         with pool_lock:
-            if connection_pool is None:
+            # Verificar se o pool existe e está válido
+            if connection_pool is None or connection_pool.closed:
+                print("🔄 Pool de conexões não existe ou está fechado, recriando...")
                 connection_pool = create_connection_pool()
 
-            try:
-                self.conn = connection_pool.getconn()
-                if self.conn:
-                    # Registrar adaptador UUID para esta conexão
-                    psycopg2.extras.register_uuid(conn_or_curs=self.conn)
-                    self.cursor = self.conn.cursor()
-                    # Testar a conexão
-                    self.cursor.execute('SELECT 1;')
-                    self.cursor.fetchone()
-                    return self
-                else:
-                    raise psycopg2.OperationalError("Não foi possível obter conexão do pool")
-            except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-                print(f"⚠️ Erro ao obter conexão do pool: {e}")
-                if self.conn:
-                    try:
-                        connection_pool.putconn(self.conn, close=True)
-                    except:
-                        pass
-                # Tentar recriar o pool
+            max_retries = 3
+            for attempt in range(max_retries):
                 try:
-                    connection_pool.closeall()
-                    connection_pool = create_connection_pool()
                     self.conn = connection_pool.getconn()
-                    psycopg2.extras.register_uuid(conn_or_curs=self.conn)
-                    self.cursor = self.conn.cursor()
-                    return self
-                except Exception as reconnect_error:
-                    print(f"❌ Falha na reconexão: {reconnect_error}")
-                    raise
+                    if self.conn:
+                        # Registrar adaptador UUID para esta conexão
+                        psycopg2.extras.register_uuid(conn_or_curs=self.conn)
+                        self.cursor = self.conn.cursor()
+                        # Testar a conexão
+                        self.cursor.execute('SELECT 1;')
+                        self.cursor.fetchone()
+                        return self
+                    else:
+                        raise psycopg2.OperationalError("Não foi possível obter conexão do pool")
+                        
+                except (psycopg2.OperationalError, psycopg2.InterfaceError, psycopg2.pool.PoolError) as e:
+                    print(f"⚠️ Erro ao obter conexão do pool (tentativa {attempt + 1}/{max_retries}): {e}")
+                    
+                    if self.conn:
+                        try:
+                            connection_pool.putconn(self.conn, close=True)
+                        except:
+                            pass
+                        self.conn = None
+                    
+                    # Se não é a última tentativa, recriar o pool
+                    if attempt < max_retries - 1:
+                        print("🔄 Recriando pool de conexões...")
+                        try:
+                            if connection_pool:
+                                connection_pool.closeall()
+                        except:
+                            pass
+                        connection_pool = create_connection_pool()
+                    else:
+                        print(f"❌ Falha após {max_retries} tentativas de reconexão")
+                        raise
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         global connection_pool
@@ -117,3 +134,12 @@ def init_connection_pool():
     global connection_pool
     with pool_lock:
         connection_pool = create_connection_pool()
+
+def ensure_pool_connection():
+    """Garante que o pool de conexões está funcionando"""
+    global connection_pool
+    with pool_lock:
+        if connection_pool is None or connection_pool.closed:
+            print("🔄 Pool de conexões não está disponível, recriando...")
+            connection_pool = create_connection_pool()
+        return connection_pool

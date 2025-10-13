@@ -4,7 +4,7 @@ import psycopg2
 from flask import Flask, request, abort
 from flask_cors import CORS
 from backend.config import Config
-from backend.database import init_connection_pool
+from backend.database import init_connection_pool, ensure_pool_connection
 from backend.models import init_db, drop_all_tables
 from backend.routes.auth_routes import auth_bp
 from backend.routes.activity_routes import activity_bp
@@ -26,6 +26,13 @@ def log_requests():
     print(f"   Headers: {dict(request.headers)}")
     print(f"   Secure: {request.is_secure}")
     print(f"   Scheme: {request.scheme}")
+    
+    # Garantir que o pool de conexões está funcionando
+    try:
+        ensure_pool_connection()
+    except Exception as e:
+        print(f"⚠️ Erro ao verificar pool de conexões: {e}")
+        # Não falhar a requisição, apenas logar o erro
 
 # Handler para erros SSL/TLS (conexões malformadas)
 @app.errorhandler(400)

@@ -753,7 +753,7 @@ def capture_screenshot():
         return None
 
 def get_url_from_window_title():
-    """Extrai URL diretamente do título da janela de forma mais precisa"""
+    """Extrai URL/domínio do título da janela com foco em navegadores"""
     try:
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
@@ -761,33 +761,96 @@ def get_url_from_window_title():
         if not window_title:
             return None
         
-        # Padrões mais específicos para URLs reais
-        url_patterns = [
-            r'https?://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)',  # URLs completas
-            r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/[^\s]*',               # Domínio com path
-            r'localhost:(\d+)',                                      # localhost com porta
-            r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):?(\d+)?'        # IPs
+        safe_print(f"[DEBUG] Analisando titulo: {window_title}")
+        
+        # Padrões específicos para diferentes navegadores
+        browser_patterns = [
+            # URLs completas no título
+            r'https?://([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+            # Domínios no formato "Site - Navegador"
+            r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*[-—]\s*',
+            # Localhost com porta
+            r'localhost:(\d+)',
+            # IPs com porta
+            r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d+)',
+            # IPs sem porta
+            r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})',
+            # Padrão específico do Edge: "Título — Microsoft Edge"
+            r'^(.+?)\s*[—-]\s*Microsoft\s*Edge',
+            # Padrão para títulos com separadores especiais
+            r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+            # Padrão do Chrome: "Título - Google Chrome"
+            r'^(.+?)\s*[-—]\s*Google\s*Chrome',
+            # Padrão do Firefox: "Título - Mozilla Firefox"
+            r'^(.+?)\s*[-—]\s*Mozilla\s*Firefox'
         ]
         
-        for pattern in url_patterns:
-            matches = re.findall(pattern, window_title)
+        for i, pattern in enumerate(browser_patterns):
+            matches = re.findall(pattern, window_title, re.IGNORECASE)
             if matches:
                 if 'localhost' in pattern:
-                    return f"localhost:{matches[0]}" if matches[0] else "localhost"
-                elif r'\d{1,3}' in pattern:  # IP pattern
-                    ip, port = matches[0] if isinstance(matches[0], tuple) else (matches[0], None)
-                    return f"{ip}:{port}" if port else ip
+                    domain = f"localhost:{matches[0]}" if matches[0] else "localhost"
+                elif r'\d{1,3}' in pattern:  # IP patterns
+                    if isinstance(matches[0], tuple):
+                        ip, port = matches[0]
+                        domain = f"{ip}:{port}" if port else ip
+                    else:
+                        domain = matches[0]
                 else:
-                    domain = matches[0] if isinstance(matches[0], str) else matches[0][0]
-                    # Validar se é um domínio real
-                    if ('.' in domain and 
-                        len(domain.split('.')) >= 2 and 
-                        not domain.startswith('.') and
-                        not domain.endswith('.')):
-                        return domain.split('/')[0]  # Apenas o domínio, sem path
+                    # Para padrões de título de navegador
+                    candidate = matches[0].strip()
+                    
+                    # Se o candidato parece ser um domínio
+                    if ('.' in candidate and 
+                        len(candidate.split('.')) >= 2 and 
+                        not candidate.startswith('.') and
+                        not candidate.endswith('.') and
+                        len(candidate) < 100):  # Não muito longo
+                        
+                        # Verificar se não é apenas o nome da aplicação
+                        if not any(app in candidate.lower() for app in ['activity tracker', 'pessoal', 'trabalho']):
+                            domain = candidate
+                        else:
+                            continue
+                    else:
+                        continue
+                
+                if domain:
+                    safe_print(f"[DOMAIN] Padrao {i+1} encontrou: {domain}")
+                    return domain
         
+        # Tratamento específico para aplicações locais conhecidas
+        local_app_patterns = {
+            'activity tracker': 'localhost:5005',
+            'hiprod': 'localhost:5005',
+            'atividade tracker': 'localhost:5005',
+            'dashboard': 'localhost:5005'
+        }
+        
+        title_lower = window_title.lower()
+        for app_name, domain in local_app_patterns.items():
+            if app_name in title_lower:
+                safe_print(f"[DOMAIN] Aplicacao local detectada: {app_name} -> {domain}")
+                return domain
+        
+        # Fallback: procurar domínios conhecidos no título
+        known_domains = [
+            'github.com', 'google.com', 'youtube.com', 'facebook.com', 'instagram.com',
+            'linkedin.com', 'twitter.com', 'stackoverflow.com', 'medium.com',
+            'gmail.com', 'outlook.com', 'teams.microsoft.com', 'office.com',
+            'localhost', '127.0.0.1'
+        ]
+        
+        for domain in known_domains:
+            if domain in title_lower:
+                safe_print(f"[DOMAIN] Dominio conhecido encontrado: {domain}")
+                return domain
+        
+        safe_print(f"[DEBUG] Nenhum dominio encontrado em: {window_title}")
         return None
-    except:
+        
+    except Exception as e:
+        safe_print(f"[ERROR] Erro ao extrair URL: {e}")
         return None
 
 def get_active_window_info():
@@ -796,39 +859,48 @@ def get_active_window_info():
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
 
-        # Identificar aplicação usando a base de dados expandida
-        application = get_application_name(window_title)
-        domain = None
-
-        # Obter processo para identificação mais precisa
+        # Obter processo PRIMEIRO para identificação mais precisa
         try:
             import win32process
             _, process_id = win32process.GetWindowThreadProcessId(window)
             process = psutil.Process(process_id)
             process_name = process.name().lower()
             
-            # Usar base de dados para identificar navegadores
+            # PRIORIZAR DETECÇÃO POR PROCESSO
             app_info = detect_application_from_process(process_name)
             
-            # CAPTURA DE DOMÍNIO APENAS PARA NAVEGADORES
-            if app_info and app_info['category'] == 'navegador':
-                # Método 1: Extrair URL do título da janela
-                domain = get_url_from_window_title()
+            if app_info:
+                # Usar nome da base de dados (mais preciso)
+                application = app_info['name']
                 
-                if domain:
-                    safe_print(f"[DOMAIN] Dominio capturado: {domain}")
+                # CAPTURA DE DOMÍNIO APENAS PARA NAVEGADORES
+                if app_info['category'] == 'navegador':
+                    # Para navegadores, sempre tentar capturar domínio
+                    domain = get_url_from_window_title()
+                    
+                    if domain:
+                        safe_print(f"[DOMAIN] Navegador {application}: {domain}")
+                    else:
+                        # Tentar extrair do título como fallback
+                        domain = extract_domain_from_title(window_title)
+                        if domain:
+                            safe_print(f"[DOMAIN] Extraido do titulo: {domain}")
+                        else:
+                            safe_print(f"[WARN] Navegador {application} sem dominio detectavel")
                 else:
-                    safe_print(f"[WARN] Navegador sem dominio detectavel")
-            
-            # Para aplicações não-navegador, domain sempre None
+                    # Aplicações não-navegador sempre domain = None
+                    domain = None
+                    safe_print(f"[APP] {app_info['category']}: {application}")
             else:
+                # Fallback: usar detecção por título
+                application = get_application_name(window_title)
                 domain = None
-                category = app_info['category'] if app_info else 'desconhecido'
-                safe_print(f"[APP] Aplicacao {category}: {application}")
+                safe_print(f"[APP] Fallback: {application}")
                 
         except Exception as e:
             # Fallback se não conseguir obter processo
             safe_print(f"[WARN] Erro ao obter processo: {e}")
+            application = get_application_name(window_title)
             domain = None
 
         return {
