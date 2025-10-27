@@ -130,13 +130,54 @@ def classify_activity_with_tags(active_window, ociosidade, user_department_id=No
             return 'Não Classificado', 'neutral'
 
     # Fallback para classificação por ociosidade se nenhuma tag foi encontrada
-    print(f"🔍 Nenhuma tag encontrada, usando classificação por ociosidade: {ociosidade}")
-    if ociosidade >= 600:  # 10 minutos
-        return 'Ocioso', 'nonproductive'
-    elif ociosidade >= 300:  # 5 minutos
-        return 'Ausente', 'nonproductive'
-    else:
-        return 'Não Classificado', 'neutral'
+    print(f"🔍 Nenhuma tag encontrada, marcando como 'Não Mapeado': {ociosidade}")
+    
+    # Criar/obter tag "Não Mapeado" se não existir
+    try:
+        with DatabaseConnection() as db_tag:
+            # Verificar se a tag "Não Mapeado" existe
+            db_tag.cursor.execute('''
+                SELECT id FROM tags WHERE nome = 'Não Mapeado' AND departamento_id IS NULL
+            ''')
+            tag_result = db_tag.cursor.fetchone()
+            
+            if not tag_result:
+                # Criar tag "Não Mapeado"
+                print("🏷️ Criando tag 'Não Mapeado'...")
+                db_tag.cursor.execute('''
+                    INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id, tier, ativo)
+                    VALUES ('Não Mapeado', 'Atividades que não possuem tags específicas', '#9CA3AF', 'neutral', NULL, 1, TRUE)
+                    RETURNING id
+                ''')
+                tag_id = db_tag.cursor.fetchone()[0]
+                
+                # Adicionar palavra-chave genérica para a tag
+                db_tag.cursor.execute('''
+                    INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                    VALUES (%s, 'não mapeado', 1)
+                ''', (tag_id,))
+                
+                db_tag.conn.commit()
+                print(f"✅ Tag 'Não Mapeado' criada com ID: {tag_id}")
+            else:
+                tag_id = tag_result[0]
+                print(f"✅ Tag 'Não Mapeado' já existe com ID: {tag_id}")
+            
+            # Se temos um ID da atividade, associar com a tag "Não Mapeado"
+            if activity_id:
+                db_tag.cursor.execute('''
+                    INSERT INTO atividade_tags (atividade_id, tag_id, confidence)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (atividade_id, tag_id) DO UPDATE SET confidence = EXCLUDED.confidence;
+                ''', (activity_id, tag_id, 100.0))  # 100% de confiança para "Não Mapeado"
+                db_tag.conn.commit()
+                print(f"🏷️ Atividade {activity_id} associada à tag 'Não Mapeado'")
+                
+    except Exception as e:
+        print(f"⚠️ Erro ao criar/associar tag 'Não Mapeado': {e}")
+    
+    # Retornar categoria "Não Mapeado" independente da ociosidade
+    return 'Não Mapeado', 'neutral'
 
 # Manter função antiga para compatibilidade
 def classify_activity(active_window, ociosidade, user_department_id=None):
