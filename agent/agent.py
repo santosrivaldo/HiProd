@@ -515,11 +515,11 @@ def get_logged_user():
     return users[0].name if users else None
 
 
-def get_chrome_active_tab_url():
-    """Tenta capturar a URL da aba ativa do Chrome de forma mais precisa"""
+def get_browser_tab_info():
+    """Captura informações completas da aba ativa do navegador (URL, título, domínio)"""
     try:
-        # Método 1: PowerShell com UI Automation
-        ps_script = '''
+        # Método 1: PowerShell com UI Automation para Chrome
+        ps_script_chrome = '''
         try {
             Add-Type -AssemblyName UIAutomationClient
             $automation = [System.Windows.Automation.AutomationElement]::RootElement
@@ -554,23 +554,76 @@ def get_chrome_active_tab_url():
         }
         '''
 
-        # Desabilitar PowerShell quando executável para evitar janelas
-        if IS_EXECUTABLE:
-            return None  # Pular captura de URL do Chrome quando executável
+        # Método 2: PowerShell para Edge
+        ps_script_edge = '''
+        try {
+            Add-Type -AssemblyName UIAutomationClient
+            $automation = [System.Windows.Automation.AutomationElement]::RootElement
 
-        result = subprocess.run(['powershell', '-Command', ps_script], 
-                             capture_output=True, text=True, timeout=3)
+            # Procurar janela ativa do Edge
+            $edgeProcesses = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle -ne ""}
+            if ($edgeProcesses) {
+                $activeWindow = $automation.FindFirst([System.Windows.Automation.TreeScope]::Children, 
+                    [System.Windows.Automation.AndCondition]::new(@(
+                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ClassNameProperty, "Chrome_WidgetWin_1"),
+                        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $edgeProcesses[0].Id)
+                    )))
 
-        if result.returncode == 0 and result.stdout.strip():
-            url = result.stdout.strip()
-            if url.startswith('http') or url.startswith('localhost'):
-                if url.startswith('localhost'):
-                    return url
-                else:
-                    parsed = urlparse(url)
-                    return parsed.netloc
+                if ($activeWindow) {
+                    # Buscar barra de endereço do Edge
+                    $addressBar = $activeWindow.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                        [System.Windows.Automation.AndCondition]::new(@(
+                            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit),
+                            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, "L2")
+                        )))
 
-        # Método 2: Tentar ler histórico recente do Chrome (fallback)
+                    if ($addressBar) {
+                        $url = $addressBar.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)
+                        if ($url -and ($url.StartsWith("http") -or $url.StartsWith("localhost"))) {
+                            Write-Output $url
+                        }
+                    }
+                }
+            }
+        } catch {
+            # Silencioso se falhar
+        }
+        '''
+
+        # Tentar Chrome primeiro
+        if not IS_EXECUTABLE:  # Só executar quando não for executável
+            try:
+                result = subprocess.run(['powershell', '-Command', ps_script_chrome], 
+                                     capture_output=True, text=True, timeout=3)
+                if result.returncode == 0 and result.stdout.strip():
+                    url = result.stdout.strip()
+                    if url.startswith('http') or url.startswith('localhost'):
+                        parsed = urlparse(url)
+                        return {
+                            'url': url,
+                            'domain': parsed.netloc if parsed.netloc else url,
+                            'title': None  # Será extraído do título da janela
+                        }
+            except Exception:
+                pass
+
+            # Tentar Edge se Chrome falhar
+            try:
+                result = subprocess.run(['powershell', '-Command', ps_script_edge], 
+                                     capture_output=True, text=True, timeout=3)
+                if result.returncode == 0 and result.stdout.strip():
+                    url = result.stdout.strip()
+                    if url.startswith('http') or url.startswith('localhost'):
+                        parsed = urlparse(url)
+                        return {
+                            'url': url,
+                            'domain': parsed.netloc if parsed.netloc else url,
+                            'title': None  # Será extraído do título da janela
+                        }
+            except Exception:
+                pass
+
+        # Método 3: Tentar ler histórico recente do Chrome (fallback)
         try:
             import sqlite3
             import os
@@ -595,7 +648,7 @@ def get_chrome_active_tab_url():
                         
                         # Buscar a URL mais recente (último minuto)
                         cursor.execute("""
-                            SELECT url FROM urls 
+                            SELECT url, title FROM urls 
                             WHERE last_visit_time > (strftime('%s', 'now') - 60) * 1000000 + 11644473600000000
                             ORDER BY last_visit_time DESC 
                             LIMIT 1
@@ -609,13 +662,14 @@ def get_chrome_active_tab_url():
                             temp_history.unlink()
                         
                         if result:
-                            url = result[0]
-                            if url.startswith('http') or url.startswith('localhost'):
-                                if url.startswith('localhost'):
-                                    return url.split('/')[0]  # Retornar só localhost:porta
-                                else:
-                                    parsed = urlparse(url)
-                                    return parsed.netloc
+                            url, title = result
+                            if url and (url.startswith('http') or url.startswith('localhost')):
+                                parsed = urlparse(url)
+                                return {
+                                    'url': url,
+                                    'domain': parsed.netloc if parsed.netloc else url,
+                                    'title': title
+                                }
                         break
                     except Exception:
                         # Limpar arquivo temporário em caso de erro
@@ -627,9 +681,53 @@ def get_chrome_active_tab_url():
             pass
 
     except Exception as e:
-        safe_print(f"[WARN] Erro ao capturar URL do Chrome: {e}")
+        safe_print(f"[WARN] Erro ao capturar informações do navegador: {e}")
 
     return None
+
+
+def extract_page_title_from_window(window_title):
+    """Extrai o título da página (aba) do título da janela do navegador"""
+    try:
+        if not window_title:
+            return None
+
+        # Padrões para extrair título da página de diferentes navegadores
+        browser_patterns = [
+            # Chrome: "Título da Página - Google Chrome"
+            r'^(.+?)\s*[-—]\s*Google\s*Chrome',
+            # Edge: "Título da Página — Microsoft Edge"
+            r'^(.+?)\s*[—-]\s*Microsoft\s*Edge',
+            # Firefox: "Título da Página - Mozilla Firefox"
+            r'^(.+?)\s*[-—]\s*Mozilla\s*Firefox',
+            # Opera: "Título da Página - Opera"
+            r'^(.+?)\s*[-—]\s*Opera',
+            # Brave: "Título da Página - Brave"
+            r'^(.+?)\s*[-—]\s*Brave',
+            # Padrão genérico para navegadores
+            r'^(.+?)\s*[-—]\s*(Chrome|Edge|Firefox|Opera|Brave)',
+        ]
+
+        for pattern in browser_patterns:
+            match = re.search(pattern, window_title, re.IGNORECASE)
+            if match:
+                title = match.group(1).strip()
+                # Validar se o título não está vazio e não é muito longo
+                if title and len(title) > 0 and len(title) < 200:
+                    safe_print(f"[PAGE_TITLE] Título extraído: {title}")
+                    return title
+
+        # Se não encontrou padrão de navegador, retornar o título completo se for curto
+        if len(window_title) < 100 and not any(browser in window_title.lower() for browser in ['chrome', 'edge', 'firefox', 'opera', 'brave']):
+            safe_print(f"[PAGE_TITLE] Usando título completo: {window_title}")
+            return window_title
+
+        safe_print(f"[PAGE_TITLE] Não foi possível extrair título de: {window_title}")
+        return None
+
+    except Exception as e:
+        safe_print(f"[WARN] Erro ao extrair título da página: {e}")
+        return None
 
 
 def extract_domain_from_title(window_title):
@@ -854,7 +952,7 @@ def get_url_from_window_title():
         return None
 
 def get_active_window_info():
-    """Captura informações da janela ativa com foco na precisão do domínio"""
+    """Captura informações completas da janela ativa: URL, nome da página, domínio"""
     try:
         window = win32gui.GetForegroundWindow()
         window_title = win32gui.GetWindowText(window)
@@ -873,46 +971,86 @@ def get_active_window_info():
                 # Usar nome da base de dados (mais preciso)
                 application = app_info['name']
                 
-                # CAPTURA DE DOMÍNIO APENAS PARA NAVEGADORES
+                # CAPTURA COMPLETA DE INFORMAÇÕES PARA NAVEGADORES
                 if app_info['category'] == 'navegador':
-                    # Para navegadores, sempre tentar capturar domínio
-                    domain = get_url_from_window_title()
+                    # Tentar capturar informações completas do navegador
+                    browser_info = get_browser_tab_info()
                     
-                    if domain:
-                        safe_print(f"[DOMAIN] Navegador {application}: {domain}")
+                    if browser_info:
+                        # Usar informações capturadas do navegador
+                        url = browser_info.get('url')
+                        domain = browser_info.get('domain')
+                        page_title = browser_info.get('title')
+                        
+                        # Se não conseguiu o título do histórico, extrair do título da janela
+                        if not page_title:
+                            page_title = extract_page_title_from_window(window_title)
+                        
+                        safe_print(f"[BROWSER] {application}: URL={url}, Domain={domain}, Title={page_title}")
+                        
+                        return {
+                            'window_title': window_title,
+                            'url': url,
+                            'page_title': page_title,
+                            'domain': domain,
+                            'application': application
+                        }
                     else:
-                        # Tentar extrair do título como fallback
+                        # Fallback: extrair do título da janela
                         domain = extract_domain_from_title(window_title)
-                        if domain:
-                            safe_print(f"[DOMAIN] Extraido do titulo: {domain}")
-                        else:
-                            safe_print(f"[WARN] Navegador {application} sem dominio detectavel")
+                        page_title = extract_page_title_from_window(window_title)
+                        
+                        safe_print(f"[BROWSER_FALLBACK] {application}: Domain={domain}, Title={page_title}")
+                        
+                        return {
+                            'window_title': window_title,
+                            'url': None,
+                            'page_title': page_title,
+                            'domain': domain,
+                            'application': application
+                        }
                 else:
-                    # Aplicações não-navegador sempre domain = None
-                    domain = None
+                    # Aplicações não-navegador
                     safe_print(f"[APP] {app_info['category']}: {application}")
+                    return {
+                        'window_title': window_title,
+                        'url': None,
+                        'page_title': None,
+                        'domain': None,
+                        'application': application
+                    }
             else:
                 # Fallback: usar detecção por título
                 application = get_application_name(window_title)
-                domain = None
                 safe_print(f"[APP] Fallback: {application}")
+                
+                return {
+                    'window_title': window_title,
+                    'url': None,
+                    'page_title': None,
+                    'domain': None,
+                    'application': application
+                }
                 
         except Exception as e:
             # Fallback se não conseguir obter processo
             safe_print(f"[WARN] Erro ao obter processo: {e}")
             application = get_application_name(window_title)
-            domain = None
-
-        return {
-            'window_title': window_title,
-            'domain': domain,
-            'application': application
-        }
+            
+            return {
+                'window_title': window_title,
+                'url': None,
+                'page_title': None,
+                'domain': None,
+                'application': application
+            }
 
     except Exception as e:
         safe_print(f"[ERROR] Erro ao capturar informacoes da janela: {e}")
         return {
             'window_title': 'Erro ao capturar janela',
+            'url': None,
+            'page_title': None,
             'domain': None,
             'application': 'Sistema Local'
         }
@@ -1112,7 +1250,9 @@ def enviar_atividade(registro):
                              headers=get_headers())
         if resp.status_code == 201:
             domain_info = f" | Domínio: {registro.get('domain', 'N/A')}" if registro.get('domain') else ""
-            safe_print(f"[OK] Atividade enviada: {registro['active_window']}{domain_info}")
+            page_info = f" | Página: {registro.get('page_title', 'N/A')}" if registro.get('page_title') else ""
+            url_info = f" | URL: {registro.get('url', 'N/A')}" if registro.get('url') else ""
+            safe_print(f"[OK] Atividade enviada: {registro['active_window']}{domain_info}{page_info}{url_info}")
         elif resp.status_code == 401:
             safe_print("[WARN] Token expirado, renovando...")
             login()
@@ -1199,18 +1339,20 @@ def main():
     # Contador para verificação periódica do usuário
     verificacao_contador = 0
 
-    last_window_info = {"window_title": "", "domain": None, "application": ""}
+    last_window_info = {"window_title": "", "url": None, "page_title": None, "domain": None, "application": ""}
     ociosidade = 0
     registros = []
 
     tz = pytz.timezone('America/Sao_Paulo')  # Brasília timezone
 
-    safe_print("[START] Agente iniciado com captura de dominio!")
-    safe_print("[INFO] Metodos disponiveis:")
-    safe_print("   - Extracao de URL do titulo")
-    safe_print("   - Deteccao por processo")
+    safe_print("[START] Agente iniciado com captura completa de informações!")
+    safe_print("[INFO] Funcionalidades disponíveis:")
+    safe_print("   - Captura de URL completa da página")
+    safe_print("   - Captura do nome da página (título da aba)")
+    safe_print("   - Captura do domínio de uso")
+    safe_print("   - Detecção por processo")
     safe_print("   - Base de dados expandida")
-    safe_print("   - Categorizacao automatica")
+    safe_print("   - Categorização automática")
 
     while True:
         current_window_info = get_active_window_info()
@@ -1247,9 +1389,11 @@ def main():
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0
 
-        # Verificar mudança significativa de janela/domínio/aplicação
+        # Verificar mudança significativa de janela/URL/página/domínio/aplicação
         window_changed = (
             current_window_info['window_title'] != last_window_info['window_title'] or 
+            current_window_info['url'] != last_window_info['url'] or
+            current_window_info['page_title'] != last_window_info['page_title'] or
             current_window_info['domain'] != last_window_info['domain'] or
             current_window_info['application'] != last_window_info['application']
         )
@@ -1258,6 +1402,10 @@ def main():
             # Log da mudança para debug
             if current_window_info['window_title'] != last_window_info['window_title']:
                 safe_print(f"[INFO] Mudança de janela: {last_window_info['window_title'][:50]}... -> {current_window_info['window_title'][:50]}...")
+            if current_window_info['url'] != last_window_info['url']:
+                safe_print(f"[URL] Mudança de URL: {last_window_info['url']} -> {current_window_info['url']}")
+            if current_window_info['page_title'] != last_window_info['page_title']:
+                safe_print(f"[PAGE] Mudança de página: {last_window_info['page_title']} -> {current_window_info['page_title']}")
             if current_window_info['domain'] != last_window_info['domain']:
                 safe_print(f"[DOMAIN] Mudança de domínio: {last_window_info['domain']} -> {current_window_info['domain']}")
             if current_window_info['application'] != last_window_info['application']:
@@ -1284,13 +1432,15 @@ def main():
                     'usuario_monitorado_id': usuario_monitorado_id,
                     'ociosidade': ociosidade,
                     'active_window': current_window_info['window_title'],
+                    'url': current_window_info['url'],
+                    'page_title': current_window_info['page_title'],
                     'domain': current_window_info['domain'],
                     'application': current_window_info['application'],
                     'screenshot': screenshot_b64,
                     'horario': datetime.now(tz).isoformat()
                 }
                 registros.append(registro)
-                safe_print(f"[LOG] Registro adicionado: {current_window_info['application']} - {current_window_info['domain'] or 'N/A'}")
+                safe_print(f"[LOG] Registro adicionado: {current_window_info['application']} - {current_window_info['page_title'] or 'N/A'} - {current_window_info['domain'] or 'N/A'}")
             else:
                 safe_print("[ERROR] Não foi possível obter ID do usuário monitorado, pulando registro...")
 
