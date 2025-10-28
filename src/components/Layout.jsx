@@ -18,6 +18,7 @@ import TagManagement from "./TagManagement";
 import UserManagement from "./UserManagement";
 import Settings from "./Settings";
 import WorkScheduleManagement from "./WorkScheduleManagement";
+import WeeklyTimeline from "../pages/WeeklyTimeline";
 
 const navigation = [
   { name: "Dashboard", icon: ChartBarIcon, component: "dashboard" },
@@ -29,6 +30,7 @@ const navigation = [
   { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags" },
   { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users" },
   { name: "Escalas", icon: ClockIcon, component: "schedules" },
+  { name: "Timeline", icon: ClockIcon, component: "timeline" },
   { name: "Configurações", icon: Cog6ToothIcon, component: "settings" },
 ];
 
@@ -52,6 +54,8 @@ export default function Layout({ children }) {
         return <WorkScheduleManagement />;
       case "settings":
         return <Settings />;
+      case "timeline":
+        return <WeeklyTimeline />;
       default:
         return <Dashboard />;
     }
