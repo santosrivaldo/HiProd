@@ -44,6 +44,17 @@ const CHART_COLORS = [
   '#06B6D4', '#F97316', '#84CC16', '#EC4899', '#6B7280'
 ]
 
+// Cálculo consistente da duração (segundos)
+const getActivityDurationSeconds = (activity) => {
+  const total = activity?.duracao_total
+  const single = activity?.duracao
+  if (typeof total === 'number' && !isNaN(total)) return total
+  if (typeof single === 'number' && !isNaN(single)) return single
+  const grouped = activity?.eventos_agrupados
+  if (typeof grouped === 'number' && grouped > 0) return grouped * 10
+  return 0
+}
+
 // Função auxiliar para extrair domínio
 const extractDomainFromWindow = (activeWindow) => {
   if (!activeWindow) return null
@@ -220,7 +231,7 @@ export default function Dashboard() {
     }
 
     filteredActivities.forEach(activity => {
-      const duration = activity.duracao || activity.duracao_total || 10
+      const duration = getActivityDurationSeconds(activity)
       summary.total += duration
 
       const produtividade = activity.produtividade || 'neutral'
@@ -244,7 +255,7 @@ export default function Dashboard() {
       if (!domain) {
         domain = extractDomainFromWindow(activity.active_window) || 'Sistema Local'
       }
-      const duration = activity.duracao || activity.duracao_total || 10
+      const duration = getActivityDurationSeconds(activity)
 
       if (!domainMap[domain]) {
         domainMap[domain] = { name: domain, value: 0, activities: 0 }
@@ -266,7 +277,7 @@ export default function Dashboard() {
       if (!application) {
         application = extractApplicationFromWindow(activity.active_window) || 'Aplicação Desconhecida'
       }
-      const duration = activity.duracao || activity.duracao_total || 10
+      const duration = getActivityDurationSeconds(activity)
 
       if (!applicationMap[application]) {
         applicationMap[application] = { name: application, value: 0, activities: 0 }
@@ -294,7 +305,7 @@ export default function Dashboard() {
 
     filteredActivities.forEach(activity => {
       const hour = parseBrasiliaDate(activity.horario).getHours()
-      const duration = activity.duracao_total || activity.duracao || (activity.eventos_agrupados || 1) * 10
+      const duration = getActivityDurationSeconds(activity)
       const produtividade = activity.produtividade || 'neutral'
 
       hourlyMap[hour].total += duration
@@ -332,7 +343,7 @@ export default function Dashboard() {
         }
       }
 
-      const duration = activity.duracao || 10
+      const duration = getActivityDurationSeconds(activity)
       const produtividade = activity.produtividade || 'neutral'
 
       if (dailyData[day][produtividade] !== undefined) {
@@ -366,7 +377,7 @@ export default function Dashboard() {
         }
       }
 
-      const duration = activity.duracao || 10
+      const duration = getActivityDurationSeconds(activity)
       const produtividade = activity.produtividade || 'neutral'
 
       userStatsMap[userId].total += duration
