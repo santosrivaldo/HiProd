@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -137,6 +137,7 @@ export default function Dashboard() {
   const [departments, setDepartments] = useState([])
   const [viewMode, setViewMode] = useState('overview') // overview, domains, applications, timeline
   const navigate = useNavigate()
+  const loadingRef = useRef(false) // Ref para evitar múltiplas chamadas simultâneas
 
   const handleViewScreenshot = (activityId) => {
     navigate(`/screenshots/${activityId}`)
@@ -440,8 +441,13 @@ export default function Dashboard() {
   }, [dateRange, selectedUser, selectedDepartment])
 
   const loadDashboardData = useCallback(async () => {
-    if (loading) return
+    // Usar ref para evitar múltiplas chamadas simultâneas
+    if (loadingRef.current) {
+      console.log('⏳ Já está carregando, aguardando...')
+      return
+    }
 
+    loadingRef.current = true
     setLoading(true)
     try {
       console.log('🔄 Carregando dados do dashboard...')
@@ -452,6 +458,12 @@ export default function Dashboard() {
         api.get('/departamentos')
       ])
 
+      console.log('📦 Dados recebidos:', {
+        atividades: activitiesRes.data?.length || 0,
+        usuarios: usersRes.data?.length || 0,
+        departamentos: departmentsRes.data?.length || 0
+      })
+
       const activities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
       const usersList = Array.isArray(usersRes.data) ? usersRes.data : []
       const departmentsList = Array.isArray(departmentsRes.data) ? departmentsRes.data : []
@@ -459,13 +471,22 @@ export default function Dashboard() {
       setUsers(usersList)
       setDepartments(departmentsList)
 
+      console.log('🔄 Processando atividades...')
       const processedData = processActivities(activities, usersList, departmentsList)
       processedData.rawActivities = activities // Store raw data for reprocessing
+      
+      console.log('📊 Dados processados:', {
+        summary: processedData.summary,
+        timelineData: processedData.timelineData?.length || 0,
+        recentActivities: processedData.recentActivities?.length || 0
+      })
+      
       setDashboardData(processedData)
 
       console.log('✅ Dashboard carregado com sucesso')
     } catch (error) {
       console.error('❌ Erro ao carregar dashboard:', error)
+      console.error('❌ Detalhes do erro:', error.response || error.message)
       setDashboardData({
         pieData: [],
         timelineData: [],
@@ -478,13 +499,29 @@ export default function Dashboard() {
       })
     } finally {
       setLoading(false)
+      loadingRef.current = false
     }
-  }, [loading, processActivities])
+  }, [processActivities])
 
   // Carregar dados automaticamente quando o componente monta
   useEffect(() => {
-    if (!dashboardData && !loading) {
-      loadDashboardData()
+    console.log('🚀 Dashboard montado, verificando se precisa carregar dados...')
+    console.log('📊 Estado atual:', { 
+      dashboardData: !!dashboardData, 
+      loading, 
+      loadingRef: loadingRef.current 
+    })
+    
+    // Sempre tentar carregar se não tiver dados
+    if (!dashboardData) {
+      console.log('▶️ Iniciando carregamento automático...')
+      // Usar setTimeout para garantir que o componente está totalmente montado
+      const timer = setTimeout(() => {
+        loadDashboardData()
+      }, 100)
+      return () => clearTimeout(timer)
+    } else {
+      console.log('✅ Dashboard já tem dados')
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
