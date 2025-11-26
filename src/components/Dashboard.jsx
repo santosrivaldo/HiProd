@@ -142,48 +142,6 @@ export default function Dashboard() {
     navigate(`/screenshots/${activityId}`)
   }
 
-  const loadDashboardData = useCallback(async () => {
-    if (loading) return
-
-    setLoading(true)
-    try {
-      console.log('🔄 Carregando dados do dashboard...')
-
-      const [activitiesRes, usersRes, departmentsRes] = await Promise.all([
-        api.get('/atividades?agrupar=true&limite=500'),
-        api.get('/usuarios-monitorados'),
-        api.get('/departamentos')
-      ])
-
-      const activities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
-      const usersList = Array.isArray(usersRes.data) ? usersRes.data : []
-      const departmentsList = Array.isArray(departmentsRes.data) ? departmentsRes.data : []
-
-      setUsers(usersList)
-      setDepartments(departmentsList)
-
-      const processedData = processActivities(activities, usersList, departmentsList)
-      processedData.rawActivities = activities // Store raw data for reprocessing
-      setDashboardData(processedData)
-
-      console.log('✅ Dashboard carregado com sucesso')
-    } catch (error) {
-      console.error('❌ Erro ao carregar dashboard:', error)
-      setDashboardData({
-        pieData: [],
-        timelineData: [],
-        userStats: [],
-        summary: { productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 },
-        recentActivities: [],
-        domainData: [],
-        applicationData: [],
-        hourlyData: []
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [loading])
-
   const processActivities = useCallback((activities, usersList, departmentsList) => {
     const now = new Date()
     const startDate = startOfDay(subDays(now, dateRange))
@@ -444,8 +402,56 @@ export default function Dashboard() {
     }
   }, [dateRange, selectedUser, selectedDepartment])
 
+  const loadDashboardData = useCallback(async () => {
+    if (loading) return
 
+    setLoading(true)
+    try {
+      console.log('🔄 Carregando dados do dashboard...')
 
+      const [activitiesRes, usersRes, departmentsRes] = await Promise.all([
+        api.get('/atividades?agrupar=true&limite=500'),
+        api.get('/usuarios-monitorados'),
+        api.get('/departamentos')
+      ])
+
+      const activities = Array.isArray(activitiesRes.data) ? activitiesRes.data : []
+      const usersList = Array.isArray(usersRes.data) ? usersRes.data : []
+      const departmentsList = Array.isArray(departmentsRes.data) ? departmentsRes.data : []
+
+      setUsers(usersList)
+      setDepartments(departmentsList)
+
+      const processedData = processActivities(activities, usersList, departmentsList)
+      processedData.rawActivities = activities // Store raw data for reprocessing
+      setDashboardData(processedData)
+
+      console.log('✅ Dashboard carregado com sucesso')
+    } catch (error) {
+      console.error('❌ Erro ao carregar dashboard:', error)
+      setDashboardData({
+        pieData: [],
+        timelineData: [],
+        userStats: [],
+        summary: { productive: 0, nonproductive: 0, neutral: 0, idle: 0, total: 0 },
+        recentActivities: [],
+        domainData: [],
+        applicationData: [],
+        hourlyData: []
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [loading, processActivities])
+
+  // Carregar dados automaticamente quando o componente monta
+  useEffect(() => {
+    if (!dashboardData && !loading) {
+      loadDashboardData()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reprocessar dados quando filtros mudarem
   useEffect(() => {
     if (dashboardData && dashboardData.rawActivities && users.length > 0 && departments.length > 0) {
       const processedData = processActivities(
