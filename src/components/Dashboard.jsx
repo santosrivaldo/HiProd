@@ -151,11 +151,48 @@ export default function Dashboard() {
 
     let filteredActivities = activities.filter(activity => {
       if (!activity?.horario) return false
-      const activityDate = parseBrasiliaDate(activity.horario)
-      return activityDate >= startDate && activityDate <= endDate
+      
+      // Parse da data da atividade - pode vir como ISO string do backend
+      let activityDate
+      try {
+        // Tentar parse direto primeiro
+        activityDate = new Date(activity.horario)
+        
+        // Se for inválido, tentar parseBrasiliaDate
+        if (isNaN(activityDate.getTime())) {
+          activityDate = parseBrasiliaDate(activity.horario)
+        }
+        
+        // Se ainda for inválido, pular
+        if (!activityDate || isNaN(activityDate.getTime())) {
+          console.warn('⚠️ Data inválida ignorada:', activity.horario)
+          return false
+        }
+      } catch (e) {
+        console.warn('⚠️ Erro ao parsear data:', activity.horario, e)
+        return false
+      }
+      
+      // Comparar apenas as datas (sem hora) para o filtro ser mais permissivo
+      const activityDateOnly = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate())
+      const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+      const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+      
+      const isInRange = activityDateOnly >= startDateOnly && activityDateOnly <= endDateOnly
+      if (!isInRange) {
+        console.debug('📅 Atividade fora do período:', activity.horario, 'Data parseada:', activityDateOnly, 'Range:', startDateOnly, 'a', endDateOnly)
+      }
+      
+      return isInRange
     })
 
-    console.log(`🔍 ${filteredActivities.length} atividades após filtro de data`)
+    console.log(`🔍 ${filteredActivities.length} atividades após filtro de data (de ${activities.length} total)`)
+    
+    if (filteredActivities.length === 0 && activities.length > 0) {
+      console.warn('⚠️ Nenhuma atividade passou no filtro de data!')
+      console.log('📅 Período do filtro:', startDate.toISOString(), 'a', endDate.toISOString())
+      console.log('📅 Primeiras 3 atividades:', activities.slice(0, 3).map(a => ({ horario: a.horario, parsed: new Date(a.horario) })))
+    }
 
     if (selectedUser !== 'all') {
       const userId = parseInt(selectedUser)
