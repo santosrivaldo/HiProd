@@ -11,9 +11,6 @@ import re
 import sys
 import logging
 from urllib.parse import urlparse
-import base64
-from PIL import ImageGrab, Image
-import io
 
 # Detectar se está rodando como executável
 IS_EXECUTABLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
@@ -823,33 +820,6 @@ def extract_domain_from_title(window_title):
 
 # Função removida - não filtrar atividades irrelevantes
 
-def capture_screenshot():
-    """Captura screenshot da tela atual"""
-    try:
-        from PIL import Image, ImageGrab
-        
-        # Capturar screenshot
-        screenshot = ImageGrab.grab()
-        
-        # Redimensionar para economizar espaço (max 800x600)
-        screenshot.thumbnail((800, 600), Image.Resampling.LANCZOS)
-        
-        # Converter para base64
-        buffer = io.BytesIO()
-        # Compressão agressiva para reduzir tamanho (qualidade ~ 55)
-        screenshot.save(buffer, format='JPEG', quality=55, optimize=True)
-        buffer.seek(0)
-        
-        # Codificar em base64
-        screenshot_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        
-        safe_print(f"[SCREENSHOT] Screenshot capturado: {len(screenshot_b64)} bytes")
-        return screenshot_b64
-        
-    except Exception as e:
-        safe_print(f"[ERROR] Erro ao capturar screenshot: {e}")
-        return None
-
 def get_url_from_window_title():
     """Extrai URL/domínio do título da janela com foco em navegadores"""
     try:
@@ -1424,9 +1394,6 @@ def main():
                 safe_print("[WARN] ID do usuário monitorado é None, tentando recriar...")
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
 
-            # Capturar screenshot a cada 10 segundos
-            screenshot_b64 = capture_screenshot()
-
             if usuario_monitorado_id is not None:
                 registro = {
                     'usuario_monitorado_id': usuario_monitorado_id,
@@ -1436,7 +1403,6 @@ def main():
                     'page_title': current_window_info['page_title'],
                     'domain': current_window_info['domain'],
                     'application': current_window_info['application'],
-                    'screenshot': screenshot_b64,
                     'horario': datetime.now(tz).isoformat()
                 }
                 registros.append(registro)

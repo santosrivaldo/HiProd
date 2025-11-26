@@ -2,9 +2,6 @@
 # Requisições HTTP
 requests>=2.31.0
 
-# Manipulação de imagens e screenshots
-Pillow>=10.0.0
-
 # Informações do sistema
 psutil>=5.9.0
 

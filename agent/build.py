@@ -155,9 +155,6 @@ class AgentBuilder:
         
         # Adicionar imports ocultos
         hidden_imports = [
-            'PIL._tkinter_finder',
-            'PIL.Image',
-            'PIL.ImageGrab',
             'requests.packages.urllib3',
             'psutil',
             'pytz',
