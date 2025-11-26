@@ -388,6 +388,8 @@ def get_atividades(current_user):
             result = []
             for row in rows:
                 if agrupar:
+                    # Quando agrupa, row[11] contém duracao_total (soma de todas as durações)
+                    duracao_total = row[11] if row[11] is not None else 0
                     result.append({
                         'id': row[0],
                         'usuario_monitorado_id': row[1],
@@ -399,8 +401,9 @@ def get_atividades(current_user):
                         'horario': row[7].isoformat() if row[7] else None,  # primeiro_horario
                         'ultimo_horario': row[8].isoformat() if row[8] else None,
                         'ociosidade': row[9] or 0,
-                        'eventos_agrupados': row[10],
-                        'duracao': row[11] or 10,
+                        'eventos_agrupados': row[10] or 1,
+                        'duracao': duracao_total,  # Para compatibilidade
+                        'duracao_total': duracao_total,  # Campo correto com a soma total
                         'domain': row[12] if len(row) > 12 else None,
                         'application': row[13] if len(row) > 13 else None,
                         'data_atividade': row[14].isoformat() if row[14] else None,
@@ -408,6 +411,8 @@ def get_atividades(current_user):
                         'screenshot_size': row[16] if len(row) > 16 else None
                     })
                 else:
+                    # Quando não agrupa, row[10] contém duracao_total (duracao individual)
+                    duracao_total = row[10] if row[10] is not None else 10
                     result.append({
                         'id': row[0],
                         'usuario_monitorado_id': row[1],
@@ -419,9 +424,12 @@ def get_atividades(current_user):
                         'horario': row[7].isoformat() if row[7] else None,
                         'ociosidade': row[8] or 0,
                         'eventos_agrupados': 1,
-                        'duracao': row[10] or 10,
+                        'duracao': duracao_total,  # Para compatibilidade
+                        'duracao_total': duracao_total,  # Campo correto
                         'domain': row[11] if len(row) > 11 else None,
-                        'application': row[12] if len(row) > 12 else None
+                        'application': row[12] if len(row) > 12 else None,
+                        'has_screenshot': row[13] if len(row) > 13 else False,
+                        'screenshot_size': row[14] if len(row) > 14 else None
                     })
 
             # Criar resposta com headers de paginação

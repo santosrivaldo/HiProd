@@ -232,13 +232,17 @@ export default function Dashboard() {
 
     filteredActivities.forEach(activity => {
       const duration = getActivityDurationSeconds(activity)
+      if (duration <= 0) return
+      
       summary.total += duration
 
       const produtividade = activity.produtividade || 'neutral'
+      const ociosidade = activity.ociosidade || 0
+      
       if (summary[produtividade] !== undefined) {
         summary[produtividade] += duration
       } else {
-        if (activity.ociosidade >= 600) {
+        if (ociosidade >= 600) {
           summary.idle += duration
         } else {
           summary.neutral += duration
@@ -251,17 +255,19 @@ export default function Dashboard() {
     // Processar dados por domínio
     const domainMap = {}
     filteredActivities.forEach(activity => {
+      const duration = getActivityDurationSeconds(activity)
+      if (duration <= 0) return
+      
       let domain = activity.domain
       if (!domain) {
         domain = extractDomainFromWindow(activity.active_window) || 'Sistema Local'
       }
-      const duration = getActivityDurationSeconds(activity)
 
       if (!domainMap[domain]) {
         domainMap[domain] = { name: domain, value: 0, activities: 0 }
       }
       domainMap[domain].value += duration
-      domainMap[domain].activities += activity.eventos_agrupados || 1
+      domainMap[domain].activities += (activity.eventos_agrupados || 1)
     })
 
     const domainData = Object.values(domainMap)
@@ -273,17 +279,19 @@ export default function Dashboard() {
     // Processar dados por aplicação
     const applicationMap = {}
     filteredActivities.forEach(activity => {
+      const duration = getActivityDurationSeconds(activity)
+      if (duration <= 0) return
+      
       let application = activity.application
       if (!application) {
         application = extractApplicationFromWindow(activity.active_window) || 'Aplicação Desconhecida'
       }
-      const duration = getActivityDurationSeconds(activity)
 
       if (!applicationMap[application]) {
         applicationMap[application] = { name: application, value: 0, activities: 0 }
       }
       applicationMap[application].value += duration
-      applicationMap[application].activities += activity.eventos_agrupados || 1
+      applicationMap[application].activities += (activity.eventos_agrupados || 1)
     })
 
     const applicationData = Object.values(applicationMap)
@@ -304,15 +312,22 @@ export default function Dashboard() {
     }
 
     filteredActivities.forEach(activity => {
-      const hour = parseBrasiliaDate(activity.horario).getHours()
+      if (!activity?.horario) return
+      const activityDate = parseBrasiliaDate(activity.horario)
+      if (!activityDate) return
+      
+      const hour = activityDate.getHours()
       const duration = getActivityDurationSeconds(activity)
+      if (duration <= 0) return
+      
       const produtividade = activity.produtividade || 'neutral'
+      const ociosidade = activity.ociosidade || 0
 
       hourlyMap[hour].total += duration
       if (hourlyMap[hour][produtividade] !== undefined) {
         hourlyMap[hour][produtividade] += duration
       } else {
-        if (activity.ociosidade >= 600) {
+        if (ociosidade >= 600) {
           hourlyMap[hour].idle += duration
         } else {
           hourlyMap[hour].neutral += duration
@@ -332,7 +347,11 @@ export default function Dashboard() {
 
     const dailyData = {}
     filteredActivities.forEach(activity => {
-      const day = format(parseBrasiliaDate(activity.horario), 'yyyy-MM-dd')
+      if (!activity?.horario) return
+      const activityDate = parseBrasiliaDate(activity.horario)
+      if (!activityDate) return
+      
+      const day = format(activityDate, 'yyyy-MM-dd')
       if (!dailyData[day]) {
         dailyData[day] = {
           date: day,
@@ -344,12 +363,15 @@ export default function Dashboard() {
       }
 
       const duration = getActivityDurationSeconds(activity)
+      if (duration <= 0) return
+      
       const produtividade = activity.produtividade || 'neutral'
+      const ociosidade = activity.ociosidade || 0
 
       if (dailyData[day][produtividade] !== undefined) {
         dailyData[day][produtividade] += duration
       } else {
-        if (activity.ociosidade >= 600) {
+        if (ociosidade >= 600) {
           dailyData[day].idle += duration
         } else {
           dailyData[day].neutral += duration
@@ -361,6 +383,8 @@ export default function Dashboard() {
 
     const userStatsMap = {}
     filteredActivities.forEach(activity => {
+      if (!activity?.usuario_monitorado_id) return
+      
       const userId = activity.usuario_monitorado_id
       const userName = activity.usuario_monitorado_nome ||
                       usersList.find(u => u.id === userId)?.nome ||
@@ -378,13 +402,16 @@ export default function Dashboard() {
       }
 
       const duration = getActivityDurationSeconds(activity)
+      if (duration <= 0) return
+      
       const produtividade = activity.produtividade || 'neutral'
+      const ociosidade = activity.ociosidade || 0
 
       userStatsMap[userId].total += duration
       if (userStatsMap[userId][produtividade] !== undefined) {
         userStatsMap[userId][produtividade] += duration
       } else {
-        if (activity.ociosidade >= 600) {
+        if (ociosidade >= 600) {
           userStatsMap[userId].idle += duration
         } else {
           userStatsMap[userId].neutral += duration
