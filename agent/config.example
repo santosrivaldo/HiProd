@@ -1,36 +1,86 @@
 # Configuração do HiProd Agent
 # Copie este arquivo para .env e configure as variáveis
+# IMPORTANTE: Renomeie este arquivo para .env (sem o "example")
 
-# URL da API (obrigatório)
-API_URL=http://localhost:8010
+# ========================================
+# CONFIGURAÇÕES OBRIGATÓRIAS
+# ========================================
 
-# Credenciais do usuário monitorado (obrigatório)
-USER_NAME=seu_usuario
-USER_PASSWORD=sua_senha
+# URL da API do HiProd (obrigatório)
+# Exemplo: http://192.241.155.236:8010 ou http://localhost:8010
+API_URL=http://192.241.155.236:8010
 
-# Configurações de captura
+# Credenciais do agente para autenticação (obrigatório)
+# Estas credenciais são usadas para o agent se autenticar na API
+USER_NAME=connect
+USER_PASSWORD=L@undry60
+
+# Alternativamente, você pode usar:
+# AGENT_USER=connect
+# AGENT_PASS=L@undry60
+
+# ========================================
+# CONFIGURAÇÕES DE MONITORAMENTO
+# ========================================
+
+# Intervalo entre verificações de atividade (em segundos)
+MONITOR_INTERVAL=10
+
+# Tempo de inatividade antes de considerar ocioso (em segundos)
+# 600 segundos = 10 minutos
+IDLE_THRESHOLD=600
+
+# ========================================
+# CONFIGURAÇÕES DE CAPTURA (Futuro)
+# ========================================
+
+# Habilitar captura de screenshots
 SCREENSHOT_ENABLED=true
+
+# Qualidade do screenshot (1-100)
 SCREENSHOT_QUALITY=55
+
+# Tamanho máximo do screenshot
 SCREENSHOT_MAX_SIZE=800x600
 
-# Configurações de monitoramento
-MONITOR_INTERVAL=10
-IDLE_THRESHOLD=600
-WORKING_HOURS_START=08:00
-WORKING_HOURS_END=18:00
+# ========================================
+# CONFIGURAÇÕES DE REDE
+# ========================================
 
-# Configurações de rede
+# Timeout para requisições HTTP (em segundos)
 REQUEST_TIMEOUT=30
+
+# Número máximo de tentativas em caso de falha
 MAX_RETRIES=3
+
+# Tamanho máximo da fila offline
 OFFLINE_QUEUE_MAX_SIZE=1000
 
-# Configurações de log
+# ========================================
+# CONFIGURAÇÕES DE LOG (Futuro)
+# ========================================
+
+# Nível de log: DEBUG, INFO, WARNING, ERROR, CRITICAL
 LOG_LEVEL=INFO
-LOG_FILE=agent.log
+
+# Arquivo de log
+LOG_FILE=hiprod-agent.log
+
+# Tamanho máximo do arquivo de log
 LOG_MAX_SIZE=10MB
+
+# Número de backups de log
 LOG_BACKUP_COUNT=5
 
-# Configurações avançadas
+# ========================================
+# CONFIGURAÇÕES AVANÇADAS (Futuro)
+# ========================================
+
+# Comprimir screenshots antes de enviar
 COMPRESS_SCREENSHOTS=true
+
+# Criptografar dados da fila offline
 ENCRYPT_OFFLINE_DATA=false
+
+# Iniciar automaticamente com o sistema
 AUTO_START_WITH_SYSTEM=false

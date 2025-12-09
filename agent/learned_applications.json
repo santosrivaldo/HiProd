@@ -1,0 +1,216 @@
+{
+  "cursor.exe": {
+    "name": "Cursor",
+    "category": "sistema",
+    "keywords": [
+      "cursor",
+      "cursor.exe"
+    ],
+    "first_seen": "2025-11-27T10:02:36.504770-03:00",
+    "window_title_sample": "HiProd - Cursor",
+    "usage_count": 52,
+    "last_used": "2025-12-03T11:12:18.391747-03:00"
+  },
+  "applicationframehost.exe": {
+    "name": "ApplicationFrameHost",
+    "category": "comunicacao",
+    "keywords": [
+      "applicationframehost",
+      "applicationframehost.exe"
+    ],
+    "first_seen": "2025-11-27T10:02:46.510487-03:00",
+    "window_title_sample": "WhatsApp",
+    "usage_count": 39,
+    "last_used": "2025-12-03T11:19:11.582486-03:00"
+  },
+  "python.exe": {
+    "name": "python",
+    "category": "sistema",
+    "keywords": [
+      "python",
+      "python.exe"
+    ],
+    "first_seen": "2025-11-27T12:50:33.169489-03:00",
+    "window_title_sample": "HiProd Agent - Tela de Bloqueio",
+    "usage_count": 29,
+    "last_used": "2025-12-03T14:55:43.926595-03:00"
+  },
+  "bitrix24.exe": {
+    "name": "Bitrix24",
+    "category": "sistema",
+    "keywords": [
+      "bitrix24",
+      "bitrix24.exe"
+    ],
+    "first_seen": "2025-11-27T13:00:27.875203-03:00",
+    "window_title_sample": "Como estou me sentindo hoje?",
+    "usage_count": 304,
+    "last_used": "2025-12-03T16:36:45.398739-03:00"
+  },
+  "lockapp.exe": {
+    "name": "LockApp",
+    "category": "sistema",
+    "keywords": [
+      "lockapp",
+      "lockapp.exe"
+    ],
+    "first_seen": "2025-11-27T13:21:37.704731-03:00",
+    "window_title_sample": "Tela de Bloqueio padrão do Windows",
+    "usage_count": 212,
+    "last_used": "2025-12-03T15:55:12.305519-03:00"
+  },
+  "searchhost.exe": {
+    "name": "SearchHost",
+    "category": "sistema",
+    "keywords": [
+      "searchhost",
+      "searchhost.exe"
+    ],
+    "first_seen": "2025-11-27T13:31:47.608526-03:00",
+    "window_title_sample": "Pesquisar",
+    "usage_count": 5,
+    "last_used": "2025-12-03T10:50:57.812661-03:00"
+  },
+  "mobaxterm.exe": {
+    "name": "MobaXterm",
+    "category": "sistema",
+    "keywords": [
+      "mobaxterm",
+      "mobaxterm.exe"
+    ],
+    "first_seen": "2025-11-27T14:41:11.985150-03:00",
+    "window_title_sample": null,
+    "usage_count": 233,
+    "last_used": "2025-12-03T16:25:09.519004-03:00"
+  },
+  "startmenuexperiencehost.exe": {
+    "name": "StartMenuExperienceHost",
+    "category": "sistema",
+    "keywords": [
+      "startmenuexperiencehost",
+      "startmenuexperiencehost.exe"
+    ],
+    "first_seen": "2025-11-28T09:50:31.073110-03:00",
+    "window_title_sample": "Iniciar",
+    "usage_count": 2,
+    "last_used": "2025-11-28T09:50:31.074136-03:00"
+  },
+  "credentialuibroker.exe": {
+    "name": "CredentialUIBroker",
+    "category": "sistema",
+    "keywords": [
+      "credentialuibroker",
+      "credentialuibroker.exe"
+    ],
+    "first_seen": "2025-11-28T10:10:36.788623-03:00",
+    "window_title_sample": "Segurança do Windows",
+    "usage_count": 2,
+    "last_used": "2025-11-28T10:10:36.791094-03:00"
+  },
+  "mstsc.exe": {
+    "name": "mstsc",
+    "category": "sistema",
+    "keywords": [
+      "mstsc",
+      "mstsc.exe"
+    ],
+    "first_seen": "2025-11-28T10:10:46.795876-03:00",
+    "window_title_sample": "10.10.10.2 - Conexão de Área de Trabalho Remota",
+    "usage_count": 40,
+    "last_used": "2025-11-28T11:58:30.010396-03:00"
+  },
+  "shellhost.exe": {
+    "name": "ShellHost",
+    "category": "sistema",
+    "keywords": [
+      "shellhost",
+      "shellhost.exe"
+    ],
+    "first_seen": "2025-11-28T12:01:47.463002-03:00",
+    "window_title_sample": "Configurações rápidas",
+    "usage_count": 7,
+    "last_used": "2025-12-03T14:51:17.412126-03:00"
+  },
+  "keepassxc.exe": {
+    "name": "KeePassXC",
+    "category": "sistema",
+    "keywords": [
+      "keepassxc",
+      "keepassxc.exe"
+    ],
+    "first_seen": "2025-11-28T12:02:49.771558-03:00",
+    "window_title_sample": "Senhas.kdbx [Bloqueada] - KeePassXC",
+    "usage_count": 10,
+    "last_used": "2025-11-28T12:04:12.496519-03:00"
+  },
+  "postman.exe": {
+    "name": "Postman",
+    "category": "sistema",
+    "keywords": [
+      "postman",
+      "postman.exe"
+    ],
+    "first_seen": "2025-11-28T12:08:29.847931-03:00",
+    "window_title_sample": "Postman API Platform",
+    "usage_count": 1
+  },
+  "wslsettings.exe": {
+    "name": "wslsettings",
+    "category": "sistema",
+    "keywords": [
+      "wslsettings",
+      "wslsettings.exe"
+    ],
+    "first_seen": "2025-12-02T08:55:35.373044-03:00",
+    "window_title_sample": "Bem-vindo ao Subsistema do Windows para Linux",
+    "usage_count": 2,
+    "last_used": "2025-12-02T08:55:35.374489-03:00"
+  },
+  "motty.exe": {
+    "name": "MoTTY",
+    "category": "sistema",
+    "keywords": [
+      "motty",
+      "motty.exe"
+    ],
+    "first_seen": "2025-12-03T10:13:28.403282-03:00",
+    "window_title_sample": "MobaXterm paste confirmation",
+    "usage_count": 2,
+    "last_used": "2025-12-03T10:13:28.405457-03:00"
+  },
+  "shellexperiencehost.exe": {
+    "name": "ShellExperienceHost",
+    "category": "sistema",
+    "keywords": [
+      "shellexperiencehost",
+      "shellexperiencehost.exe"
+    ],
+    "first_seen": "2025-12-03T10:56:48.150149-03:00",
+    "window_title_sample": "Nova notificação",
+    "usage_count": 13,
+    "last_used": "2025-12-03T15:00:11.824570-03:00"
+  },
+  "simplay.exe": {
+    "name": "SimPlay",
+    "category": "sistema",
+    "keywords": [
+      "simplay",
+      "simplay.exe"
+    ],
+    "first_seen": "2025-12-03T14:53:29.915788-03:00",
+    "window_title_sample": "Intelbras SIMPlay",
+    "usage_count": 2,
+    "last_used": "2025-12-03T14:53:29.917331-03:00"
+  },
+  "msiexec.exe": {
+    "name": "msiexec",
+    "category": "sistema",
+    "keywords": [
+      "msiexec",
+      "msiexec.exe"
+    ],
+    "first_seen": "2025-12-03T16:41:11.977249-03:00",
+    "window_title_sample": "Wazuh Agent Setup",
+    "usage_count": 1
+  }
+}

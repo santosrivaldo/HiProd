@@ -15,6 +15,29 @@ from urllib.parse import urlparse
 # Detectar se está rodando como executável
 IS_EXECUTABLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
 
+# Variável global para controlar se o agente deve parar
+AGENT_SHOULD_STOP = False
+
+def check_stop_flag():
+    """Verifica se existe flag de parada"""
+    global AGENT_SHOULD_STOP
+    try:
+        flag_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.agent_stop_flag')
+        if os.path.exists(flag_file):
+            with open(flag_file, 'r') as f:
+                content = f.read().strip()
+                if content == 'STOP':
+                    AGENT_SHOULD_STOP = True
+                    # Remover flag
+                    try:
+                        os.remove(flag_file)
+                    except:
+                        pass
+                    return True
+    except:
+        pass
+    return AGENT_SHOULD_STOP
+
 def safe_print(*args, **kwargs):
     """Print seguro - completamente silencioso quando executável"""
     if not IS_EXECUTABLE:
@@ -28,22 +51,29 @@ except ImportError:
     gw = None
     pyperclip = None
 
+# ========================================
+# CONFIGURAÇÕES HARDCODED - Para compilação em executável
+# ========================================
+# IMPORTANTE: Estas configurações são hardcoded porque o agent será compilado
+# em executável. Altere os valores abaixo antes de compilar.
+
+# URL da API do HiProd
 API_BASE_URL = 'http://192.241.155.236:8010'
 LOGIN_URL = f"{API_BASE_URL}/login"
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
 
-# Credenciais do agente (HARDCODED - SEM .ENV)
+# Credenciais do agente para autenticação na API
 AGENT_USER = "connect"
 AGENT_PASS = "L@undry60"
 
-# Configurações de monitoramento (HARDCODED)
-SCREENSHOT_ENABLED = True
-SCREENSHOT_QUALITY = 55
-MONITOR_INTERVAL = 10  # segundos
-IDLE_THRESHOLD = 600   # segundos (10 minutos)
-REQUEST_TIMEOUT = 30   # segundos
-MAX_RETRIES = 3
+# Configurações de monitoramento
+SCREENSHOT_ENABLED = True      # Habilitar captura de screenshots (futuro)
+SCREENSHOT_QUALITY = 55        # Qualidade do screenshot (1-100)
+MONITOR_INTERVAL = 10          # Intervalo entre verificações (segundos)
+IDLE_THRESHOLD = 600           # Tempo de inatividade para considerar ocioso (segundos)
+REQUEST_TIMEOUT = 30           # Timeout para requisições HTTP (segundos)
+MAX_RETRIES = 3                # Número máximo de tentativas em caso de falha
 
 # ========================================
 # BASE DE DADOS DE APLICATIVOS EXPANDIDA
@@ -210,7 +240,7 @@ APPLICATION_DATABASE = {
     'explorer.exe': {
         'name': 'Windows Explorer',
         'category': 'sistema',
-        'keywords': ['explorer', 'windows explorer', 'arquivos']
+        'keywords': ['explorer', 'windows explorer', 'arquivos', 'file explorer']
     },
     'notepad.exe': {
         'name': 'Notepad',
@@ -224,13 +254,73 @@ APPLICATION_DATABASE = {
     },
     'cmd.exe': {
         'name': 'Prompt de Comando',
-        'category': 'desenvolvimento',
-        'keywords': ['cmd', 'prompt', 'terminal']
+        'category': 'sistema',
+        'keywords': ['cmd', 'prompt', 'terminal', 'command prompt']
     },
     'powershell.exe': {
         'name': 'PowerShell',
-        'category': 'desenvolvimento',
+        'category': 'sistema',
         'keywords': ['powershell', 'terminal']
+    },
+    'taskmgr.exe': {
+        'name': 'Gerenciador de Tarefas',
+        'category': 'sistema',
+        'keywords': ['task manager', 'gerenciador de tarefas']
+    },
+    'control.exe': {
+        'name': 'Painel de Controle',
+        'category': 'sistema',
+        'keywords': ['control panel', 'painel de controle']
+    },
+    'msconfig.exe': {
+        'name': 'Configuração do Sistema',
+        'category': 'sistema',
+        'keywords': ['msconfig', 'configuracao do sistema']
+    },
+    'regedit.exe': {
+        'name': 'Editor do Registro',
+        'category': 'sistema',
+        'keywords': ['regedit', 'registry editor']
+    },
+    'services.exe': {
+        'name': 'Serviços do Windows',
+        'category': 'sistema',
+        'keywords': ['services', 'servicos']
+    },
+    'mmc.exe': {
+        'name': 'Console de Gerenciamento',
+        'category': 'sistema',
+        'keywords': ['mmc', 'management console']
+    },
+    'winrar.exe': {
+        'name': 'WinRAR',
+        'category': 'sistema',
+        'keywords': ['winrar', 'rar']
+    },
+    '7zfm.exe': {
+        'name': '7-Zip',
+        'category': 'sistema',
+        'keywords': ['7-zip', '7zip']
+    },
+    'mspaint.exe': {
+        'name': 'Paint',
+        'category': 'sistema',
+        'keywords': ['paint', 'mspaint']
+    },
+    'snippingtool.exe': {
+        'name': 'Ferramenta de Captura',
+        'category': 'sistema',
+        'keywords': ['snipping tool', 'captura']
+    },
+    'osk.exe': {
+        'name': 'Teclado Virtual',
+        'category': 'sistema',
+        'keywords': ['on-screen keyboard', 'teclado virtual']
+    },
+    'magnify.exe': {
+        'name': 'Lupa',
+        'category': 'sistema',
+        'keywords': ['magnifier', 'lupa']
     },
     
     # Entretenimento
@@ -421,22 +511,126 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
-def detect_application_from_process(process_name):
+def load_learned_applications():
+    """Carrega aplicações aprendidas do arquivo JSON"""
+    global _LEARNED_APPLICATIONS
+    try:
+        if os.path.exists(_LEARNED_APPS_FILE):
+            with open(_LEARNED_APPS_FILE, 'r', encoding='utf-8') as f:
+                _LEARNED_APPLICATIONS = json.load(f)
+            safe_print(f"[LEARN] Carregadas {len(_LEARNED_APPLICATIONS)} aplicações aprendidas")
+        else:
+            _LEARNED_APPLICATIONS = {}
+            safe_print("[LEARN] Nenhuma aplicação aprendida encontrada")
+    except Exception as e:
+        safe_print(f"[WARN] Erro ao carregar aplicações aprendidas: {e}")
+        _LEARNED_APPLICATIONS = {}
+
+def save_learned_applications():
+    """Salva aplicações aprendidas no arquivo JSON"""
+    try:
+        with open(_LEARNED_APPS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(_LEARNED_APPLICATIONS, f, ensure_ascii=False, indent=2)
+        safe_print(f"[LEARN] Aplicações aprendidas salvas: {len(_LEARNED_APPLICATIONS)}")
+    except Exception as e:
+        safe_print(f"[ERROR] Erro ao salvar aplicações aprendidas: {e}")
+
+def learn_application(process_name, window_title, application_name=None):
+    """Aprende uma nova aplicação e adiciona ao catálogo aprendido"""
+    if not process_name:
+        return
+    
+    process_lower = process_name.lower()
+    
+    # Não aprender se já está na base de dados principal
+    if process_lower in APPLICATION_DATABASE:
+        return
+    
+    # Não aprender se já foi aprendida
+    if process_lower in _LEARNED_APPLICATIONS:
+        return
+    
+    # Criar entrada para a aplicação aprendida
+    if not application_name:
+        # Usar nome do processo sem extensão como nome da aplicação
+        application_name = process_name.replace('.exe', '').replace('.EXE', '')
+    
+    # Extrair categoria básica do título da janela
+    category = 'sistema'  # padrão
+    title_lower = (window_title or '').lower()
+    
+    if any(word in title_lower for word in ['chrome', 'firefox', 'edge', 'opera', 'brave', 'navegador', 'browser']):
+        category = 'navegador'
+    elif any(word in title_lower for word in ['code', 'visual studio', 'pycharm', 'intellij', 'sublime', 'editor']):
+        category = 'desenvolvimento'
+    elif any(word in title_lower for word in ['word', 'excel', 'powerpoint', 'office', 'documento']):
+        category = 'escritorio'
+    elif any(word in title_lower for word in ['teams', 'slack', 'discord', 'whatsapp', 'telegram', 'email']):
+        category = 'comunicacao'
+    elif any(word in title_lower for word in ['photoshop', 'illustrator', 'figma', 'design', 'canva']):
+        category = 'design'
+    elif any(word in title_lower for word in ['youtube', 'netflix', 'spotify', 'jogo', 'game']):
+        category = 'entretenimento'
+    
+    # Adicionar ao catálogo aprendido
+    _LEARNED_APPLICATIONS[process_lower] = {
+        'name': application_name,
+        'category': category,
+        'keywords': [application_name.lower(), process_lower],
+        'first_seen': datetime.now(pytz.timezone('America/Sao_Paulo')).isoformat(),
+        'window_title_sample': window_title[:100] if window_title else None,
+        'usage_count': 1
+    }
+    
+    safe_print(f"[LEARN] Nova aplicação aprendida: {application_name} ({process_name}) - Categoria: {category}")
+    
+    # Salvar imediatamente quando uma nova aplicação é aprendida
+    # (salvamento periódico também ocorre, mas é bom salvar novas descobertas)
+    try:
+        save_learned_applications()
+    except Exception as e:
+        safe_print(f"[WARN] Erro ao salvar após aprender aplicação: {e}")
+
+def detect_application_from_process(process_name, update_usage=True):
     """Detectar aplicação pelo nome do processo"""
     if not process_name:
         return None
     
     process_lower = process_name.lower()
     
-    # Busca direta na base de dados
+    # 1. Busca direta na base de dados principal
     if process_lower in APPLICATION_DATABASE:
         return APPLICATION_DATABASE[process_lower]
     
-    # Busca por palavras-chave
+    # 2. Busca no catálogo aprendido
+    if process_lower in _LEARNED_APPLICATIONS:
+        app_info = _LEARNED_APPLICATIONS[process_lower].copy()  # Copiar para não modificar o original diretamente
+        # Atualizar contador de uso
+        if update_usage:
+            _LEARNED_APPLICATIONS[process_lower]['usage_count'] = \
+                _LEARNED_APPLICATIONS[process_lower].get('usage_count', 0) + 1
+            _LEARNED_APPLICATIONS[process_lower]['last_used'] = \
+                datetime.now(pytz.timezone('America/Sao_Paulo')).isoformat()
+        return app_info
+    
+    # 3. Busca por palavras-chave na base principal
     for app_key, app_info in APPLICATION_DATABASE.items():
-        for keyword in app_info['keywords']:
+        for keyword in app_info.get('keywords', []):
             if keyword.lower() in process_lower:
                 return app_info
+    
+    # 4. Busca por palavras-chave no catálogo aprendido
+    for app_key, app_info in _LEARNED_APPLICATIONS.items():
+        for keyword in app_info.get('keywords', []):
+            if keyword.lower() in process_lower:
+                result = app_info.copy()
+                # Atualizar contador de uso da aplicação encontrada por palavra-chave
+                if update_usage and app_key in _LEARNED_APPLICATIONS:
+                    _LEARNED_APPLICATIONS[app_key]['usage_count'] = \
+                        _LEARNED_APPLICATIONS[app_key].get('usage_count', 0) + 1
+                    _LEARNED_APPLICATIONS[app_key]['last_used'] = \
+                        datetime.now(pytz.timezone('America/Sao_Paulo')).isoformat()
+                return result
     
     return None
 
@@ -990,9 +1184,33 @@ def get_active_window_info():
                         'application': application
                     }
             else:
-                # Fallback: usar detecção por título
-                application = get_application_name(window_title)
-                safe_print(f"[APP] Fallback: {application}")
+                # Processo não encontrado na base de dados - APRENDER automaticamente
+                try:
+                    import win32process
+                    window = win32gui.GetForegroundWindow()
+                    _, process_id = win32process.GetWindowThreadProcessId(window)
+                    process = psutil.Process(process_id)
+                    process_name = process.name()
+                    process_name_lower = process_name.lower()
+                    
+                    # Aprender a aplicação se ainda não foi aprendida
+                    if process_name_lower not in _LEARNED_APPLICATIONS:
+                        learn_application(process_name, window_title)
+                    
+                    # Buscar novamente (agora deve encontrar no catálogo aprendido)
+                    # A função detect_application_from_process já atualiza o contador de uso automaticamente
+                    app_info = detect_application_from_process(process_name)
+                    if app_info:
+                        application = app_info['name']
+                    else:
+                        # Usar nome do processo como aplicação (sem .exe)
+                        application = process_name.replace('.exe', '').replace('.EXE', '')
+                    
+                    safe_print(f"[APP] Processo aprendido/em uso: {application} ({process_name})")
+                except Exception as e:
+                    # Fallback: usar detecção por título
+                    application = get_application_name(window_title)
+                    safe_print(f"[APP] Fallback: {application} - Erro: {e}")
                 
                 return {
                     'window_title': window_title,
@@ -1006,6 +1224,27 @@ def get_active_window_info():
             # Fallback se não conseguir obter processo
             safe_print(f"[WARN] Erro ao obter processo: {e}")
             application = get_application_name(window_title)
+            
+            # Se ainda for "Sistema Local", tentar extrair do título da janela
+            if application == 'Sistema Local' and window_title:
+                # Tentar identificar pelo título
+                title_lower = window_title.lower()
+                if 'explorer' in title_lower or 'arquivo' in title_lower:
+                    application = 'Windows Explorer'
+                elif 'calculadora' in title_lower or 'calculator' in title_lower:
+                    application = 'Calculadora'
+                elif 'notepad' in title_lower or 'bloco de notas' in title_lower:
+                    application = 'Notepad'
+                elif 'paint' in title_lower:
+                    application = 'Paint'
+                elif 'cmd' in title_lower or 'prompt' in title_lower:
+                    application = 'Prompt de Comando'
+                elif 'powershell' in title_lower:
+                    application = 'PowerShell'
+                else:
+                    # Usar parte do título como nome da aplicação
+                    application = window_title[:50] if len(window_title) > 50 else window_title
+                    safe_print(f"[APP] Usando título como aplicação: {application}")
             
             return {
                 'window_title': window_title,
@@ -1089,6 +1328,15 @@ def get_application_name(window_title):
         'Discord': ['discord'],
         'WhatsApp': ['whatsapp'],
         'Telegram': ['telegram'],
+        # Sistemas locais
+        'Windows Explorer': ['explorer', 'arquivo', 'file explorer', 'pasta'],
+        'Calculadora': ['calculadora', 'calculator'],
+        'Paint': ['paint'],
+        'Prompt de Comando': ['cmd', 'command prompt', 'prompt de comando'],
+        'PowerShell': ['powershell'],
+        'Gerenciador de Tarefas': ['task manager', 'gerenciador de tarefas'],
+        'Painel de Controle': ['control panel', 'painel de controle'],
+        'Ferramenta de Captura': ['snipping tool', 'captura'],
     }
 
     for app, patterns in app_patterns.items():
@@ -1096,6 +1344,14 @@ def get_application_name(window_title):
             if pattern in title_lower:
                 return app
 
+    # Se não encontrou padrão conhecido, usar o título da janela como nome da aplicação
+    # Isso garante que sistemas locais sejam registrados mesmo sem estar na base
+    if window_title and len(window_title.strip()) > 0:
+        # Limitar tamanho e remover caracteres problemáticos
+        app_name = window_title[:60].strip()
+        safe_print(f"[APP] Aplicação não catalogada, usando título: {app_name}")
+        return app_name
+    
     return 'Sistema Local'
 
 
@@ -1214,6 +1470,11 @@ def esta_em_horario_trabalho(usuario_nome, tz):
 
 
 def enviar_atividade(registro):
+    # Verificar se agente deve parar antes de enviar
+    if check_stop_flag():
+        safe_print("[AGENT] Agente deve parar - não enviando atividade")
+        return False
+    
     try:
         resp = requests.post(ATIVIDADE_URL,
                              json=registro,
@@ -1246,6 +1507,22 @@ def enviar_atividade(registro):
 #  Fila Offline Persistente
 # =========================
 _OFFLINE_QUEUE_FILE = os.path.join(os.path.dirname(__file__), 'offline_queue.jsonl')
+
+# =========================
+#  Banco de Dados de Aplicações Aprendidas (por usuário)
+# =========================
+def get_learned_apps_file():
+    """Retorna o caminho do arquivo de aplicações aprendidas"""
+    if IS_EXECUTABLE:
+        # Quando executável, salvar no mesmo diretório do executável
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # Quando script Python, salvar no diretório do script
+        base_dir = os.path.dirname(__file__)
+    return os.path.join(base_dir, 'learned_applications.json')
+
+_LEARNED_APPS_FILE = get_learned_apps_file()
+_LEARNED_APPLICATIONS = {}  # Cache em memória: {process_name: {info}}
 
 def _save_offline(registro: dict) -> None:
     try:
@@ -1300,6 +1577,16 @@ def _flush_offline_queue(max_items: int = 200) -> None:
 
 
 def main():
+    # Carregar aplicações aprendidas na inicialização
+    load_learned_applications()
+    
+    # Mostrar configurações carregadas (sem senha)
+    safe_print(f"[CONFIG] API_URL: {API_BASE_URL}")
+    safe_print(f"[CONFIG] USER_NAME: {AGENT_USER}")
+    safe_print(f"[CONFIG] MONITOR_INTERVAL: {MONITOR_INTERVAL}s")
+    safe_print(f"[CONFIG] IDLE_THRESHOLD: {IDLE_THRESHOLD}s")
+    safe_print(f"[CONFIG] Aplicações aprendidas: {len(_LEARNED_APPLICATIONS)}")
+    
     # Primeiro login
     login()
 
@@ -1324,7 +1611,26 @@ def main():
     safe_print("   - Base de dados expandida")
     safe_print("   - Categorização automática")
 
+    # Limpar flag de parada antiga ao iniciar (pode ter ficado de execução anterior)
+    try:
+        flag_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.agent_stop_flag')
+        if os.path.exists(flag_file):
+            os.remove(flag_file)
+            safe_print("[AGENT] Flag de parada antiga removida - agente iniciando normalmente")
+    except:
+        pass
+    
+    # Resetar variável global de parada
+    global AGENT_SHOULD_STOP
+    AGENT_SHOULD_STOP = False
+
     while True:
+        # Verificar flag de parada
+        if check_stop_flag():
+            safe_print("[AGENT] Flag de parada detectada! Parando agente...")
+            safe_print("[AGENT] Agente encerrado com sucesso.")
+            return  # Encerrar o agente
+        
         current_window_info = get_active_window_info()
         current_usuario_nome = get_logged_user()
 
@@ -1388,6 +1694,8 @@ def main():
 
         if ociosidade % 10 == 0:
             # Enviar todas as atividades (sem filtro)
+            # IMPORTANTE: Sistemas locais são sempre registrados, mesmo quando não identificados
+            # na base de dados. O nome do processo ou título da janela será usado como aplicação.
             
             # Verificar se temos um ID válido antes de criar o registro
             if usuario_monitorado_id is None:
@@ -1422,6 +1730,15 @@ def main():
 
         # A cada ciclo, tentar reenviar fila offline
         _flush_offline_queue(max_items=100)
+        
+        # Salvar aplicações aprendidas periodicamente (a cada 60 ciclos = ~10 minutos)
+        if not hasattr(main, '_save_counter'):
+            main._save_counter = 0
+        main._save_counter += 1
+        
+        if main._save_counter >= 60:  # A cada ~10 minutos
+            save_learned_applications()
+            main._save_counter = 0
 
         time.sleep(10)
 
