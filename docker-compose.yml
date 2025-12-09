@@ -5,9 +5,10 @@ services:
     container_name: hiprod-db
     environment:
       # OBRIGATÓRIO: DB_USER e DB_PASSWORD devem ser definidos no arquivo .env
-      # Não usar valores padrão por segurança
-      POSTGRES_USER: ${DB_USER?Erro: DB_USER não definido no arquivo .env}
-      POSTGRES_PASSWORD: ${DB_PASSWORD?Erro: DB_PASSWORD não definido no arquivo .env}
+      # Execute ./docker-check-env.sh (Linux/Mac) ou docker-check-env.bat (Windows) antes de iniciar
+      # Se as variáveis não estiverem definidas, o container falhará ao iniciar
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME:-hiprod}
     # Porta removida por segurança - banco acessível apenas via rede interna do Docker
     # Para desenvolvimento local, descomente a linha abaixo se necessário:
@@ -35,11 +36,12 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       # OBRIGATÓRIO: DB_USER e DB_PASSWORD devem ser definidos no arquivo .env
-      DB_USER: ${DB_USER?Erro: DB_USER não definido no arquivo .env}
-      DB_PASSWORD: ${DB_PASSWORD?Erro: DB_PASSWORD não definido no arquivo .env}
+      # Execute ./docker-check-env.sh (Linux/Mac) ou docker-check-env.bat (Windows) antes de iniciar
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-hiprod}
       # JWT_SECRET_KEY também deve ser definido no .env para produção
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY?Erro: JWT_SECRET_KEY não definido no arquivo .env}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
       FLASK_HOST: 0.0.0.0
       FLASK_PORT: 8000
       FLASK_DEBUG: 0
