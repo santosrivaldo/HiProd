@@ -1500,7 +1500,28 @@ def enviar_atividade(registro):
         elif resp.status_code == 404 and "Usuário monitorado não encontrado" in resp.text:
             safe_print(f"[ERROR] Usuário monitorado ID {registro['usuario_monitorado_id']} não encontrado!")
             safe_print("[INFO] Tentando recriar usuário monitorado...")
-            return False
+            # Tentar obter o nome do usuário atual e recriar
+            try:
+                current_usuario_nome = get_logged_user()
+                if current_usuario_nome:
+                    new_user_id = get_usuario_monitorado_id(current_usuario_nome)
+                    if new_user_id and new_user_id != 0:
+                        safe_print(f"[OK] Usuário monitorado recriado com ID: {new_user_id}")
+                        # Atualizar o registro com o novo ID e tentar enviar novamente
+                        registro['usuario_monitorado_id'] = new_user_id
+                        return enviar_atividade(registro)
+                    else:
+                        safe_print("[ERROR] Não foi possível recriar usuário monitorado")
+                        _save_offline(registro)
+                        return False
+                else:
+                    safe_print("[ERROR] Não foi possível obter nome do usuário atual")
+                    _save_offline(registro)
+                    return False
+            except Exception as e:
+                safe_print(f"[ERROR] Erro ao tentar recriar usuário: {e}")
+                _save_offline(registro)
+                return False
         else:
             safe_print(f"[ERROR] Erro ao enviar atividade: {resp.status_code} {resp.text}")
             _save_offline(registro)

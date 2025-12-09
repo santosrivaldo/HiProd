@@ -49,12 +49,13 @@ export default function FacePresencePage() {
     return `${hours}h ${minutes}min`
   }
 
-  const formatHours = (hours) => {
-    if (!hours || hours === 0) return '0h'
-    const h = Math.floor(hours)
-    const m = Math.round((hours - h) * 60)
-    if (m === 0) return `${h}h`
-    return `${h}h ${m}min`
+  const formatMinutes = (minutes) => {
+    if (!minutes || minutes === 0) return '0min'
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (hours === 0) return `${mins}min`
+    if (mins === 0) return `${hours}h`
+    return `${hours}h ${mins}min`
   }
 
   const loadData = useCallback(async () => {
@@ -82,15 +83,15 @@ export default function FacePresencePage() {
       const statsData = Array.isArray(statsRes.data) ? statsRes.data : []
       setStats(statsData)
 
-      // Calcular resumo
-      const totalHoras = statsData.reduce((sum, stat) => sum + (stat.horas_presente || 0), 0)
+      // Calcular resumo (horas_presente na verdade são minutos)
+      const totalMinutos = statsData.reduce((sum, stat) => sum + (stat.horas_presente || 0), 0)
       const totalVerificacoes = statsData.reduce((sum, stat) => sum + (stat.total_verificacoes || 0), 0)
       const usuariosUnicos = new Set(statsData.map(s => s.usuario_id)).size
 
       setSummary({
-        totalHoras: totalHoras,
+        totalHoras: totalMinutos, // Na verdade são minutos
         totalUsuarios: usuariosUnicos || usersList.length,
-        mediaHoras: usuariosUnicos > 0 ? totalHoras / usuariosUnicos : 0,
+        mediaHoras: usuariosUnicos > 0 ? totalMinutos / usuariosUnicos : 0, // Na verdade são minutos
         totalVerificacoes: totalVerificacoes
       })
 
@@ -123,7 +124,7 @@ export default function FacePresencePage() {
         ? `${stat.hora}:00`
         : format(parseISO(stat.semana), 'dd/MM'),
       usuario: stat.usuario_nome,
-      horas: stat.horas_presente || 0,
+      minutos: stat.horas_presente || 0,  // Na verdade são minutos
       deteccoes: stat.deteccoes || 0,
       ausencias: stat.ausencias || 0,
       taxaPresenca: stat.total_verificacoes > 0 
@@ -250,9 +251,9 @@ export default function FacePresencePage() {
                 <ClockIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total de Horas</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total de Minutos</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {formatHours(summary.totalHoras)}
+                  {formatMinutes(summary.totalHoras)}
                 </p>
               </div>
             </div>
@@ -284,7 +285,7 @@ export default function FacePresencePage() {
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Média por Usuário</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {formatHours(summary.mediaHoras)}
+                  {formatMinutes(summary.mediaHoras)}
                 </p>
               </div>
             </div>
@@ -312,7 +313,7 @@ export default function FacePresencePage() {
       {chartDataGrouped.length > 0 && (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 mb-6">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-            Horas de Presença por Período
+            Minutos de Presença por Período
           </h2>
           <ResponsiveContainer width="100%" height={400}>
             <AreaChart data={chartDataGrouped}>
@@ -328,7 +329,7 @@ export default function FacePresencePage() {
                 tickFormatter={(value) => `${value}h`}
               />
               <Tooltip 
-                formatter={(value) => `${formatHours(value)}`}
+                formatter={(value) => `${formatMinutes(value)}`}
                 contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
               />
               <Legend />
@@ -338,7 +339,7 @@ export default function FacePresencePage() {
                 stroke="#8B5CF6" 
                 fill="#8B5CF6" 
                 fillOpacity={0.3}
-                name="Horas de Presença"
+                name="Minutos de Presença"
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -362,7 +363,7 @@ export default function FacePresencePage() {
                     Usuário
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Horas Presente
+                    Minutos Presente
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Detecções
@@ -402,7 +403,7 @@ export default function FacePresencePage() {
                           {stat.usuario_nome || `Usuário ${stat.usuario_id}`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white font-semibold">
-                          {formatHours(stat.horas_presente || 0)}
+                          {formatMinutes(stat.horas_presente || 0)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 dark:text-green-400">
                           {stat.deteccoes || 0}

@@ -824,7 +824,7 @@ def get_face_presence_stats(current_user):
                         COUNT(*) FILTER (WHERE fpc.face_detected = FALSE) as ausencias,
                         COUNT(*) as total_verificacoes,
                         MAX(fpc.presence_time) as tempo_max_presenca,
-                        SUM(CASE WHEN fpc.face_detected = TRUE THEN 60 ELSE 0 END) as minutos_presente
+                        COUNT(*) FILTER (WHERE fpc.face_detected = TRUE) as minutos_presente
                     FROM face_presence_checks fpc
                     LEFT JOIN usuarios_monitorados um ON fpc.usuario_monitorado_id = um.id
                     {where_clause}
@@ -893,7 +893,7 @@ def get_face_presence_stats(current_user):
                         'total_verificacoes': row[5] or 0,
                         'tempo_max_presenca': row[6] or 0,
                         'minutos_presente': row[7] or 0,
-                        'horas_presente': round((row[7] or 0) / 60, 2)
+                        'horas_presente': (row[7] or 0)  # Na verdade são minutos (verificações com face detectada)
                     })
                 elif group_by == 'hour':
                     result.append({
@@ -916,7 +916,7 @@ def get_face_presence_stats(current_user):
                         'total_verificacoes': row[5] or 0,
                         'tempo_max_presenca': row[6] or 0,
                         'minutos_presente': row[7] or 0,
-                        'horas_presente': round((row[7] or 0) / 60, 2)
+                        'horas_presente': (row[7] or 0)  # Na verdade são minutos (verificações com face detectada)
                     })
 
             return jsonify(result), 200
