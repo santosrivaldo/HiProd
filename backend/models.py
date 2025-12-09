@@ -262,11 +262,25 @@ def init_db():
                 user_agent TEXT,
                 domain VARCHAR(255),
                 application VARCHAR(100),
+                face_presence_time INTEGER DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
             );
             ''')
+            
+            # Adicionar coluna face_presence_time se não existir (para tabelas já criadas)
+            db.cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name='atividades' AND column_name='face_presence_time';
+            """)
+            if not db.cursor.fetchone():
+                print("🔧 Adicionando coluna face_presence_time à tabela atividades...")
+                db.cursor.execute("ALTER TABLE atividades ADD COLUMN face_presence_time INTEGER DEFAULT NULL;")
+                print("✅ Coluna face_presence_time adicionada com sucesso!")
+            else:
+                print("✅ Coluna face_presence_time já existe")
 
             # Garantir colunas de screenshots na tabela atividades
             screenshot_columns = [

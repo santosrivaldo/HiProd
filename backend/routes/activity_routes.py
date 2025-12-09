@@ -212,17 +212,27 @@ def add_activity(current_user):
             if application:
                 application = application[:100]
 
+            # Obter tempo de presença facial se fornecido
+            face_presence_time = data.get('face_presence_time')
+            if face_presence_time is not None:
+                try:
+                    face_presence_time = int(face_presence_time)
+                except (ValueError, TypeError):
+                    face_presence_time = None
+            
             # Salvar atividade temporariamente
             db.cursor.execute('''
                 INSERT INTO atividades
                 (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade,
-                 horario, duracao, ip_address, user_agent, domain, application, screenshot, screenshot_data, screenshot_size, screenshot_format)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 horario, duracao, ip_address, user_agent, domain, application, face_presence_time,
+                 screenshot, screenshot_data, screenshot_size, screenshot_format)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
             ''', (
                 usuario_monitorado_id, ociosidade, active_window, titulo_janela,
                 'pending', 'neutral', horario_atual,
-                duracao, ip_address, user_agent, domain, application, screenshot, screenshot_data, screenshot_size, screenshot_format
+                duracao, ip_address, user_agent, domain, application, face_presence_time,
+                screenshot, screenshot_data, screenshot_size, screenshot_format
             ))
 
             activity_id = db.cursor.fetchone()[0]
@@ -347,7 +357,8 @@ def get_atividades(current_user):
                         MAX(a.application) as application,
                         DATE(a.horario) as data_atividade,
                         MAX(CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END)::boolean as has_screenshot,
-                        MAX(a.screenshot_size) as screenshot_size
+                        MAX(a.screenshot_size) as screenshot_size,
+                        MAX(a.face_presence_time) as face_presence_time
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
@@ -373,7 +384,8 @@ def get_atividades(current_user):
                         a.domain,
                         a.application,
                         CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
-                        a.screenshot_size
+                        a.screenshot_size,
+                        a.face_presence_time
                     FROM atividades a
                     LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
                     {where_clause}
@@ -408,7 +420,8 @@ def get_atividades(current_user):
                         'application': row[13] if len(row) > 13 else None,
                         'data_atividade': row[14].isoformat() if row[14] else None,
                         'has_screenshot': row[15] if len(row) > 15 else False,
-                        'screenshot_size': row[16] if len(row) > 16 else None
+                        'screenshot_size': row[16] if len(row) > 16 else None,
+                        'face_presence_time': row[17] if len(row) > 17 else None
                     })
                 else:
                     # Quando não agrupa, row[10] contém duracao_total (duracao individual)
@@ -425,6 +438,12 @@ def get_atividades(current_user):
                         'ociosidade': row[8] or 0,
                         'eventos_agrupados': 1,
                         'duracao': duracao_total,  # Para compatibilidade
+                        'duracao_total': duracao_total,
+                        'domain': row[11] if len(row) > 11 else None,
+                        'application': row[12] if len(row) > 12 else None,
+                        'has_screenshot': row[13] if len(row) > 13 else False,
+                        'screenshot_size': row[14] if len(row) > 14 else None,
+                        'face_presence_time': row[15] if len(row) > 15 else None
                         'duracao_total': duracao_total,  # Campo correto
                         'domain': row[11] if len(row) > 11 else None,
                         'application': row[12] if len(row) > 12 else None,

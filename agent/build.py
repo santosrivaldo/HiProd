@@ -82,6 +82,7 @@ class AgentBuilder:
         main_file = self.agent_dir / "main.py"
         agent_file = self.agent_dir / "agent.py"
         lock_screen_file = self.agent_dir / "lock_screen.py"
+        face_detection_file = self.agent_dir / "face_detection.py"
         
         if not main_file.exists():
             self.print_error("Arquivo main.py nao encontrado!")
@@ -91,6 +92,9 @@ class AgentBuilder:
             return False
         if not lock_screen_file.exists():
             self.print_error("Arquivo lock_screen.py nao encontrado!")
+            return False
+        if not face_detection_file.exists():
+            self.print_error("Arquivo face_detection.py nao encontrado!")
             return False
         
         self.print_success("Todos os pre-requisitos atendidos")
