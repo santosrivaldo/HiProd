@@ -726,3 +726,196 @@ def get_screenshots_batch(current_user):
     except Exception as e:
         print(f"Erro ao obter screenshots em lote: {e}")
         return jsonify({'error': 'Erro interno do servidor'}), 500
+
+@activity_bp.route('/face-presence-check', methods=['POST'])
+@token_required
+def add_face_presence_check(current_user):
+    """
+    Endpoint para receber pontos de verificação facial a cada 1 minuto.
+    Armazena cada verificação individualmente para análise detalhada.
+    """
+    try:
+        data = request.json
+        print(f"📥 Recebendo verificação facial: {data}")
+
+        if not data:
+            return jsonify({'message': 'Dados JSON não fornecidos!'}), 400
+
+        required_fields = ['usuario_monitorado_id', 'face_detected']
+        missing_fields = [field for field in required_fields if field not in data]
+
+        if missing_fields:
+            return jsonify({
+                'message': f'Campos obrigatórios ausentes: {", ".join(missing_fields)}'
+            }), 400
+
+        usuario_monitorado_id = data['usuario_monitorado_id']
+        face_detected = bool(data['face_detected'])
+        presence_time = int(data.get('presence_time', 0))  # Tempo acumulado em segundos
+
+        with DatabaseConnection() as db:
+            # Verificar se o usuário monitorado existe
+            db.cursor.execute("""
+                SELECT id FROM usuarios_monitorados
+                WHERE id = %s AND ativo = TRUE;
+            """, (usuario_monitorado_id,))
+            
+            if not db.cursor.fetchone():
+                return jsonify({
+                    'message': f'Usuário monitorado não encontrado ou inativo! ID: {usuario_monitorado_id}'
+                }), 404
+
+            # Usar timezone de Brasília
+            check_time = get_brasilia_now()
+
+            # Salvar ponto de verificação
+            db.cursor.execute('''
+                INSERT INTO face_presence_checks
+                (usuario_monitorado_id, face_detected, presence_time, check_time)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id;
+            ''', (usuario_monitorado_id, face_detected, presence_time, check_time))
+
+            check_id = db.cursor.fetchone()[0]
+            print(f"✅ Ponto de verificação facial salvo: ID {check_id}")
+
+            return jsonify({
+                'message': 'Ponto de verificação facial registrado com sucesso!',
+                'id': check_id
+            }), 201
+
+    except Exception as e:
+        print(f"❌ Erro ao registrar verificação facial: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@activity_bp.route('/face-presence-stats', methods=['GET'])
+@token_required
+def get_face_presence_stats(current_user):
+    """
+    Retorna estatísticas de presença facial por usuário e período.
+    """
+    try:
+        usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        group_by = request.args.get('group_by', 'day')  # day, hour, week
+
+        with DatabaseConnection() as db:
+            where_clause = "WHERE 1=1"
+            params = []
+
+            if usuario_monitorado_id:
+                where_clause += " AND fpc.usuario_monitorado_id = %s"
+                params.append(usuario_monitorado_id)
+
+            if start_date:
+                where_clause += " AND DATE(fpc.check_time) >= %s"
+                params.append(start_date)
+
+            if end_date:
+                where_clause += " AND DATE(fpc.check_time) <= %s"
+                params.append(end_date)
+
+            # Query para obter estatísticas agregadas
+            if group_by == 'day':
+                query = f"""
+                    SELECT 
+                        DATE(fpc.check_time) as data,
+                        um.id as usuario_id,
+                        um.nome as usuario_nome,
+                        COUNT(*) FILTER (WHERE fpc.face_detected = TRUE) as deteccoes,
+                        COUNT(*) FILTER (WHERE fpc.face_detected = FALSE) as ausencias,
+                        COUNT(*) as total_verificacoes,
+                        MAX(fpc.presence_time) as tempo_max_presenca,
+                        SUM(CASE WHEN fpc.face_detected = TRUE THEN 60 ELSE 0 END) as minutos_presente
+                    FROM face_presence_checks fpc
+                    LEFT JOIN usuarios_monitorados um ON fpc.usuario_monitorado_id = um.id
+                    {where_clause}
+                    GROUP BY DATE(fpc.check_time), um.id, um.nome
+                    ORDER BY data DESC, um.nome;
+                """
+            elif group_by == 'hour':
+                query = f"""
+                    SELECT 
+                        DATE(fpc.check_time) as data,
+                        EXTRACT(HOUR FROM fpc.check_time) as hora,
+                        um.id as usuario_id,
+                        um.nome as usuario_nome,
+                        COUNT(*) FILTER (WHERE fpc.face_detected = TRUE) as deteccoes,
+                        COUNT(*) FILTER (WHERE fpc.face_detected = FALSE) as ausencias,
+                        COUNT(*) as total_verificacoes,
+                        MAX(fpc.presence_time) as tempo_max_presenca
+                    FROM face_presence_checks fpc
+                    LEFT JOIN usuarios_monitorados um ON fpc.usuario_monitorado_id = um.id
+                    {where_clause}
+                    GROUP BY DATE(fpc.check_time), EXTRACT(HOUR FROM fpc.check_time), um.id, um.nome
+                    ORDER BY data DESC, hora DESC, um.nome;
+                """
+            else:  # week
+                query = f"""
+                    SELECT 
+                        DATE_TRUNC('week', fpc.check_time)::date as semana,
+                        um.id as usuario_id,
+                        um.nome as usuario_nome,
+                        COUNT(*) FILTER (WHERE fpc.face_detected = TRUE) as deteccoes,
+                        COUNT(*) FILTER (WHERE fpc.face_detected = FALSE) as ausencias,
+                        COUNT(*) as total_verificacoes,
+                        MAX(fpc.presence_time) as tempo_max_presenca,
+                        SUM(CASE WHEN fpc.face_detected = TRUE THEN 60 ELSE 0 END) as minutos_presente
+                    FROM face_presence_checks fpc
+                    LEFT JOIN usuarios_monitorados um ON fpc.usuario_monitorado_id = um.id
+                    {where_clause}
+                    GROUP BY DATE_TRUNC('week', fpc.check_time), um.id, um.nome
+                    ORDER BY semana DESC, um.nome;
+                """
+
+            db.cursor.execute(query, params)
+            rows = db.cursor.fetchall()
+
+            result = []
+            for row in rows:
+                if group_by == 'day':
+                    result.append({
+                        'data': row[0].isoformat() if row[0] else None,
+                        'usuario_id': row[1],
+                        'usuario_nome': row[2],
+                        'deteccoes': row[3] or 0,
+                        'ausencias': row[4] or 0,
+                        'total_verificacoes': row[5] or 0,
+                        'tempo_max_presenca': row[6] or 0,
+                        'minutos_presente': row[7] or 0,
+                        'horas_presente': round((row[7] or 0) / 60, 2)
+                    })
+                elif group_by == 'hour':
+                    result.append({
+                        'data': row[0].isoformat() if row[0] else None,
+                        'hora': int(row[1]) if row[1] else None,
+                        'usuario_id': row[2],
+                        'usuario_nome': row[3],
+                        'deteccoes': row[4] or 0,
+                        'ausencias': row[5] or 0,
+                        'total_verificacoes': row[6] or 0,
+                        'tempo_max_presenca': row[7] or 0
+                    })
+                else:  # week
+                    result.append({
+                        'semana': row[0].isoformat() if row[0] else None,
+                        'usuario_id': row[1],
+                        'usuario_nome': row[2],
+                        'deteccoes': row[3] or 0,
+                        'ausencias': row[4] or 0,
+                        'total_verificacoes': row[5] or 0,
+                        'tempo_max_presenca': row[6] or 0,
+                        'minutos_presente': row[7] or 0,
+                        'horas_presente': round((row[7] or 0) / 60, 2)
+                    })
+
+            return jsonify(result), 200
+
+    except Exception as e:
+        print(f"❌ Erro ao obter estatísticas de presença facial: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!'}), 500

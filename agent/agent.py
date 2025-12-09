@@ -1511,6 +1511,58 @@ def enviar_atividade(registro):
         return False
     return True
 
+def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_time):
+    """
+    Envia um ponto de verificação facial para a API.
+    Chamado a cada 1 minuto quando há verificação facial.
+    
+    Args:
+        usuario_monitorado_id: ID do usuário monitorado
+        face_detected: bool - Se uma face foi detectada
+        presence_time: int - Tempo total de presença acumulado em segundos
+    
+    Returns:
+        bool: True se enviado com sucesso, False caso contrário
+    """
+    if check_stop_flag():
+        return False
+    
+    try:
+        check_data = {
+            'usuario_monitorado_id': usuario_monitorado_id,
+            'face_detected': face_detected,
+            'presence_time': int(presence_time)
+        }
+        
+        face_check_url = f"{API_BASE_URL}/face-presence-check"
+        resp = requests.post(face_check_url,
+                             json=check_data,
+                             headers=get_headers(),
+                             timeout=10)
+        
+        if resp.status_code == 201:
+            if not IS_EXECUTABLE:
+                status = "✓ Detectado" if face_detected else "✗ Ausente"
+                safe_print(f"[FACE-CHECK] {status} | Tempo: {presence_time/60:.1f}min | Enviado com sucesso")
+            return True
+        elif resp.status_code == 401:
+            safe_print("[WARN] Token expirado ao enviar verificação facial, renovando...")
+            login()
+            # Tentar novamente
+            return enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_time)
+        elif resp.status_code == 404:
+            if not IS_EXECUTABLE:
+                safe_print(f"[WARN] Usuário monitorado não encontrado para verificação facial")
+            return False
+        else:
+            if not IS_EXECUTABLE:
+                safe_print(f"[ERROR] Erro ao enviar verificação facial: {resp.status_code}")
+            return False
+    except Exception as e:
+        if not IS_EXECUTABLE:
+            safe_print(f"[ERROR] Erro ao enviar verificação facial: {e}")
+        return False
+
 
 # =========================
 #  Fila Offline Persistente
@@ -1714,13 +1766,24 @@ def main():
                     check_time = time.time()
                     presence_info = presence_tracker.update_presence(face_detected, check_time)
                     
+                    # Obter tempo total de presença
+                    total_presence_time = presence_info['total_presence_time']
+                    
                     if not IS_EXECUTABLE:
                         if face_detected:
-                            total_min = presence_info['total_presence_time'] / 60
+                            total_min = total_presence_time / 60
                             safe_print(f"[FACE] ✓ Presença detectada | Tempo total: {total_min:.1f} min")
                         else:
-                            total_min = presence_info['total_presence_time'] / 60
+                            total_min = total_presence_time / 60
                             safe_print(f"[FACE] ⚠ Ausente | Tempo acumulado: {total_min:.1f} min")
+                    
+                    # Enviar ponto de verificação para a API
+                    if usuario_monitorado_id is not None and usuario_monitorado_id != 0:
+                        enviar_face_presence_check(
+                            usuario_monitorado_id=usuario_monitorado_id,
+                            face_detected=face_detected,
+                            presence_time=total_presence_time
+                        )
                     
                 except Exception as e:
                     if not IS_EXECUTABLE:

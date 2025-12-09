@@ -312,6 +312,32 @@ def init_db():
                 UNIQUE(atividade_id, tag_id)
             );
             ''')
+            
+            # Tabela para pontos de verificação facial (criar após atividades)
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS face_presence_checks (
+                id SERIAL PRIMARY KEY,
+                usuario_monitorado_id INTEGER NOT NULL,
+                face_detected BOOLEAN NOT NULL,
+                presence_time INTEGER DEFAULT 0,
+                check_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
+            );
+            ''')
+            
+            # Criar índices para melhor performance
+            db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_face_presence_checks_usuario ON face_presence_checks(usuario_monitorado_id);
+            ''')
+            db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_face_presence_checks_time ON face_presence_checks(check_time DESC);
+            ''')
+            db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_face_presence_checks_date ON face_presence_checks(DATE(check_time));
+            ''')
+            
+            print("✅ Tabela face_presence_checks criada")
 
             print("✅ Todas as tabelas criadas")
 

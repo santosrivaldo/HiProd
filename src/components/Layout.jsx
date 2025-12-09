@@ -11,6 +11,7 @@ import {
   Bars3Icon,
   XMarkIcon,
   ClockIcon,
+  UserIcon,
 } from "@heroicons/react/24/outline";
 import Dashboard from "./Dashboard";
 import ActivityManagement from "./ActivityManagement";
@@ -18,17 +19,20 @@ import TagManagement from "./TagManagement";
 import UserManagement from "./UserManagement";
 import Settings from "./Settings";
 import WorkScheduleManagement from "./WorkScheduleManagement";
+import { useNavigate } from "react-router-dom";
 const navigation = [
-  { name: "Dashboard", icon: ChartBarIcon, component: "dashboard" },
+  { name: "Dashboard", icon: ChartBarIcon, component: "dashboard", path: "/" },
   {
     name: "Gerenciamento",
     icon: ClipboardDocumentListIcon,
     component: "management",
+    path: "/activities",
   },
-  { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags" },
-  { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users" },
-  { name: "Escalas", icon: ClockIcon, component: "schedules" },
-  { name: "Configurações", icon: Cog6ToothIcon, component: "settings" },
+  { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags", path: "/tags" },
+  { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users", path: "/users" },
+  { name: "Escalas", icon: ClockIcon, component: "schedules", path: "/schedules" },
+  { name: "Presença Facial", icon: UserIcon, component: "face-presence", path: "/face-presence" },
+  { name: "Configurações", icon: Cog6ToothIcon, component: "settings", path: "/settings" },
 ];
 
 export default function Layout({ children }) {
@@ -36,6 +40,7 @@ export default function Layout({ children }) {
   const [currentView, setCurrentView] = useState("dashboard");
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const navigate = useNavigate();
 
   const renderCurrentView = () => {
     switch (currentView) {
@@ -87,7 +92,11 @@ export default function Layout({ children }) {
                 <button
                   key={item.name}
                   onClick={() => {
-                    setCurrentView(item.component);
+                    if (item.path) {
+                      navigate(item.path);
+                    } else {
+                      setCurrentView(item.component);
+                    }
                     setSidebarOpen(false);
                   }}
                   className={`w-full group flex items-center px-2 py-2 text-base font-medium rounded-md ${
@@ -148,9 +157,15 @@ export default function Layout({ children }) {
                 {navigation.map((item) => (
                   <button
                     key={item.name}
-                    onClick={() => setCurrentView(item.component)}
+                    onClick={() => {
+                      if (item.path) {
+                        navigate(item.path);
+                      } else {
+                        setCurrentView(item.component);
+                      }
+                    }}
                     className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                      currentView === item.component
+                      currentView === item.component || window.location.pathname === item.path
                         ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
                         : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                     }`}
@@ -207,12 +222,16 @@ export default function Layout({ children }) {
         <main className="flex-1 relative z-0 overflow-y-auto focus:outline-none">
           <div className="py-6">
             <div className="max-w-8xl mx-auto px-4 sm:px-6 md:px-8">
-              {currentView === "dashboard" && <Dashboard />}
-              {currentView === "management" && <ActivityManagement />}
-              {currentView === "tags" && <TagManagement />}
-              {currentView === "users" && <UserManagement />}
-              {currentView === "schedules" && <WorkScheduleManagement />}
-              {currentView === "settings" && <Settings />}
+              {children || (
+                <>
+                  {currentView === "dashboard" && <Dashboard />}
+                  {currentView === "management" && <ActivityManagement />}
+                  {currentView === "tags" && <TagManagement />}
+                  {currentView === "users" && <UserManagement />}
+                  {currentView === "schedules" && <WorkScheduleManagement />}
+                  {currentView === "settings" && <Settings />}
+                </>
+              )}
             </div>
           </div>
         </main>
