@@ -26,9 +26,15 @@ import {
   GlobeAltIcon,
   ComputerDesktopIcon,
   ClockIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  UserIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
+import MetricCard from './charts/MetricCard'
+import AdvancedChart from './charts/AdvancedChart'
+import AdvancedFilters from './filters/AdvancedFilters'
+import AIInsights from './ai/AIInsights'
 
 const COLORS = {
   productive: '#10B981',
@@ -208,7 +214,8 @@ export default function Dashboard() {
         nonproductive: 0,
         neutral: 0,
         idle: 0,
-        total: 0
+        total: 0,
+        facePresence: 0
       }
 
       filteredActivities.forEach(activity => {
@@ -227,6 +234,11 @@ export default function Dashboard() {
           } else {
             summary.neutral += duration
           }
+        }
+        
+        // Adicionar tempo de presença facial ao summary
+        if (activity.face_presence_time) {
+          summary.facePresence += activity.face_presence_time
         }
       })
 
@@ -546,113 +558,169 @@ export default function Dashboard() {
     )
   }
 
-  const { pieData, timelineData, userStats, summary, recentActivities, domainData, applicationData, hourlyData, presenceStats = [], totalPresenceTime = 0 } = dashboardData
+  const { pieData, timelineData, userStats, summary, recentActivities, domainData, applicationData, hourlyData, presenceStats = [], totalPresenceTime = 0 } = dashboardData || {}
+  
+  // Garantir que filteredActivities existe para o componente
+  const filteredActivities = dashboardData?.rawActivities || []
+
+  const handleResetFilters = () => {
+    setDateRange(7)
+    setSelectedUser('all')
+    setSelectedDepartment('all')
+  }
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-6 flex justify-between items-center">
+    <div className="p-6 space-y-6">
+      {/* Header Moderno */}
+      <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400">Bem-vindo, {user?.usuario}!</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Dashboard de Produtividade
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Bem-vindo, <span className="font-semibold">{user?.usuario}</span>! Análise completa de atividades e performance.
+          </p>
         </div>
         <button
           onClick={loadDashboardData}
           disabled={loading}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50 flex items-center space-x-2"
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center space-x-2 shadow-md hover:shadow-lg transition-all"
         >
-          <ArrowPathIcon className="h-4 w-4" />
+          <ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           <span>Atualizar</span>
         </button>
       </div>
 
-      {/* Controles */}
-      <div className="mb-6 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Período:</label>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(parseInt(e.target.value))}
-              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-            >
-              <option value={1}>Hoje</option>
-              <option value={7}>Últimos 7 dias</option>
-              <option value={30}>Últimos 30 dias</option>
-            </select>
-          </div>
+      {/* Filtros Avançados */}
+      <AdvancedFilters
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
+        selectedUser={selectedUser}
+        onUserChange={setSelectedUser}
+        selectedDepartment={selectedDepartment}
+        onDepartmentChange={setSelectedDepartment}
+        users={users}
+        departments={departments}
+        onReset={handleResetFilters}
+      />
 
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Usuário:</label>
-            <select
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+      {/* Tabs de Visualização */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex space-x-8">
+          {[
+            { id: 'overview', name: 'Visão Geral', icon: ChartBarIcon },
+            { id: 'domains', name: 'Domínios', icon: GlobeAltIcon },
+            { id: 'applications', name: 'Aplicações', icon: ComputerDesktopIcon },
+            { id: 'timeline', name: 'Timeline', icon: CalendarDaysIcon }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setViewMode(tab.id)}
+              className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
+                viewMode === tab.id
+                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+              }`}
             >
-              <option value="all">Todos os usuários</option>
-              {users.map(user => (
-                <option key={user.id} value={user.id}>{user.nome}</option>
-              ))}
-            </select>
-          </div>
+              <tab.icon className="h-5 w-5" />
+              <span>{tab.name}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
 
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Departamento:</label>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-            >
-              <option value="all">Todos os departamentos</option>
-              {departments.map(dept => (
-                <option key={dept.id} value={dept.id}>{dept.nome}</option>
-              ))}
-            </select>
-          </div>
+      {/* Cards de Métricas Principais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard
+          title="Tempo Produtivo"
+          value={formatTime(summary.productive)}
+          subtitle={formatPercentage(summary.productive, summary.total)}
+          icon={ChartBarIcon}
+          color="green"
+          trend={summary.productive > summary.total * 0.5 ? 'up' : 'down'}
+          trendValue={formatPercentage(summary.productive, summary.total)}
+        />
+        <MetricCard
+          title="Tempo Não Produtivo"
+          value={formatTime(summary.nonproductive)}
+          subtitle={formatPercentage(summary.nonproductive, summary.total)}
+          icon={ChartBarIcon}
+          color="red"
+          trend={summary.nonproductive < summary.total * 0.3 ? 'up' : 'down'}
+          trendValue={formatPercentage(summary.nonproductive, summary.total)}
+        />
+        <MetricCard
+          title="Tempo Neutro"
+          value={formatTime(summary.neutral)}
+          subtitle={formatPercentage(summary.neutral, summary.total)}
+          icon={ClockIcon}
+          color="yellow"
+        />
+        <MetricCard
+          title="Tempo Total"
+          value={formatTime(summary.total)}
+          subtitle={`${filteredActivities.length} atividades`}
+          icon={ClockIcon}
+          color="blue"
+        />
+      </div>
 
-          <div className="flex items-center space-x-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Visualização:</label>
-            <select
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value)}
-              className="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-            >
-              <option value="overview">Visão Geral</option>
-              <option value="domains">Por Domínio</option>
-              <option value="applications">Por Aplicação</option>
-              <option value="timeline">Timeline Diária</option>
-            </select>
-          </div>
+      {/* Seção de IA e Visualizações */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Insights de IA */}
+        <div className="lg:col-span-1">
+          <AIInsights 
+            data={dashboardData} 
+            onAnalyze={loadDashboardData}
+          />
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8">
-            {[
-              { id: 'overview', name: 'Visão Geral', icon: ChartBarIcon },
-              { id: 'domains', name: 'Domínios', icon: GlobeAltIcon },
-              { id: 'applications', name: 'Aplicações', icon: ComputerDesktopIcon },
-              { id: 'timeline', name: 'Timeline', icon: CalendarDaysIcon }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setViewMode(tab.id)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                  viewMode === tab.id
-                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-              >
-                <tab.icon className="h-4 w-4" />
-                <span>{tab.name}</span>
-              </button>
-            ))}
-          </nav>
+        {/* Gráfico de Pizza - Distribuição de Produtividade */}
+        <div className="lg:col-span-2">
+          <AdvancedChart
+            type="pie"
+            data={pieData}
+            dataKey="value"
+            height={350}
+            title="Distribuição de Produtividade"
+            subtitle="Tempo gasto por categoria"
+            colors={pieData.map(d => d.color)}
+          />
         </div>
       </div>
 
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+      {/* Gráficos de Análise Temporal */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Timeline Diária */}
+        <AdvancedChart
+          type="area"
+          data={timelineData}
+          xKey="date"
+          yKeys={['productive', 'nonproductive', 'neutral', 'idle']}
+          height={300}
+          title="Evolução Diária"
+          subtitle="Tendência de produtividade ao longo do tempo"
+          stacked={true}
+          colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral, COLORS.idle]}
+        />
+
+        {/* Distribuição por Hora */}
+        <AdvancedChart
+          type="bar"
+          data={hourlyData}
+          xKey="hour"
+          yKeys={['productive', 'nonproductive', 'neutral']}
+          height={300}
+          title="Distribuição por Hora do Dia"
+          subtitle="Horários mais produtivos"
+          stacked={true}
+          colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
+          formatTooltip={(value) => formatTime(value)}
+        />
+      </div>
+
+      {/* Cards de Estatísticas Adicionais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl border border-gray-200 dark:border-gray-700">
           <div className="p-6">
             <div className="flex items-center space-x-3">
