@@ -871,8 +871,20 @@ def get_face_presence_stats(current_user):
                     ORDER BY semana DESC, um.nome;
                 """
 
-            db.cursor.execute(query, params)
-            rows = db.cursor.fetchall()
+            try:
+                db.cursor.execute(query, params)
+                rows = db.cursor.fetchall()
+            except Exception as db_error:
+                # Verificar se a tabela não existe
+                error_msg = str(db_error)
+                if 'does not exist' in error_msg.lower() or 'relation' in error_msg.lower():
+                    print(f"⚠️ Tabela face_presence_checks ainda não foi criada. Execute a inicialização do banco.")
+                    return jsonify({
+                        'message': 'Tabela de verificação facial ainda não foi criada. Aguarde a inicialização do banco.',
+                        'data': []
+                    }), 200
+                else:
+                    raise db_error
 
             result = []
             for row in rows:

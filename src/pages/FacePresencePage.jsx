@@ -96,8 +96,14 @@ export default function FacePresencePage() {
 
     } catch (err) {
       console.error('❌ Erro ao carregar dados de presença facial:', err)
-      setError(err.message || 'Erro ao carregar dados')
+      const errorMessage = err.response?.data?.message || err.message || 'Erro ao carregar dados'
+      setError(errorMessage)
       setStats([])
+      
+      // Se for erro 404 ou tabela não existe, mostrar mensagem específica
+      if (err.response?.status === 404 || errorMessage.includes('does not exist')) {
+        setError('Tabela de verificação facial ainda não foi criada. Aguarde alguns minutos após o primeiro envio de dados.')
+      }
     } finally {
       setLoading(false)
     }

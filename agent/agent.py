@@ -1527,6 +1527,12 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
     if check_stop_flag():
         return False
     
+    # Validar ID antes de enviar
+    if not usuario_monitorado_id or usuario_monitorado_id == 0:
+        if not IS_EXECUTABLE:
+            safe_print(f"[FACE-CHECK] ⚠ ID de usuário inválido ({usuario_monitorado_id}), não enviando verificação")
+        return False
+    
     try:
         check_data = {
             'usuario_monitorado_id': usuario_monitorado_id,
@@ -1543,7 +1549,7 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
         if resp.status_code == 201:
             if not IS_EXECUTABLE:
                 status = "✓ Detectado" if face_detected else "✗ Ausente"
-                safe_print(f"[FACE-CHECK] {status} | Tempo: {presence_time/60:.1f}min | Enviado com sucesso")
+                safe_print(f"[FACE-CHECK] {status} | Usuário ID: {usuario_monitorado_id} | Tempo: {presence_time/60:.1f}min | ✅ Enviado")
             return True
         elif resp.status_code == 401:
             safe_print("[WARN] Token expirado ao enviar verificação facial, renovando...")
@@ -1552,15 +1558,17 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
             return enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_time)
         elif resp.status_code == 404:
             if not IS_EXECUTABLE:
-                safe_print(f"[WARN] Usuário monitorado não encontrado para verificação facial")
+                error_msg = resp.text if hasattr(resp, 'text') else 'N/A'
+                safe_print(f"[FACE-CHECK] ⚠ Usuário monitorado ID {usuario_monitorado_id} não encontrado: {error_msg}")
             return False
         else:
             if not IS_EXECUTABLE:
-                safe_print(f"[ERROR] Erro ao enviar verificação facial: {resp.status_code}")
+                error_msg = resp.text if hasattr(resp, 'text') else 'N/A'
+                safe_print(f"[FACE-CHECK] ❌ Erro {resp.status_code} ao enviar verificação facial: {error_msg}")
             return False
     except Exception as e:
         if not IS_EXECUTABLE:
-            safe_print(f"[ERROR] Erro ao enviar verificação facial: {e}")
+            safe_print(f"[FACE-CHECK] ❌ Exceção ao enviar verificação facial: {e}")
         return False
 
 
@@ -1778,12 +1786,21 @@ def main():
                             safe_print(f"[FACE] ⚠ Ausente | Tempo acumulado: {total_min:.1f} min")
                     
                     # Enviar ponto de verificação para a API
+                    # Verificar se temos um ID válido antes de enviar
+                    if usuario_monitorado_id is None or usuario_monitorado_id == 0:
+                        # Tentar obter o ID novamente
+                        safe_print(f"[FACE-CHECK] Tentando obter ID do usuário {current_usuario_nome}...")
+                        usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
+                    
                     if usuario_monitorado_id is not None and usuario_monitorado_id != 0:
                         enviar_face_presence_check(
                             usuario_monitorado_id=usuario_monitorado_id,
                             face_detected=face_detected,
                             presence_time=total_presence_time
                         )
+                    else:
+                        if not IS_EXECUTABLE:
+                            safe_print(f"[FACE-CHECK] ⚠ Não foi possível enviar verificação: usuário {current_usuario_nome} não encontrado ou ID inválido")
                     
                 except Exception as e:
                     if not IS_EXECUTABLE:
