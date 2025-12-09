@@ -12,8 +12,24 @@ import sys
 import logging
 from urllib.parse import urlparse
 
-# Detectar se está rodando como executável
+# Detectar se está rodando como executável (precisa estar antes de safe_print)
 IS_EXECUTABLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+def safe_print(*args, **kwargs):
+    """Print seguro - completamente silencioso quando executável"""
+    if not IS_EXECUTABLE:
+        # Apenas quando rodando como script Python
+        print(*args, **kwargs)
+    # Quando executável: completamente silencioso (modo fantasma)
+
+# Importar módulo de detecção facial
+try:
+    import face_detection
+    FACE_DETECTION_AVAILABLE = True
+except ImportError:
+    FACE_DETECTION_AVAILABLE = False
+    if not IS_EXECUTABLE:
+        print("[WARN] Módulo face_detection não encontrado. Verificação facial desabilitada.")
 
 # Variável global para controlar se o agente deve parar
 AGENT_SHOULD_STOP = False
@@ -37,13 +53,6 @@ def check_stop_flag():
     except:
         pass
     return AGENT_SHOULD_STOP
-
-def safe_print(*args, **kwargs):
-    """Print seguro - completamente silencioso quando executável"""
-    if not IS_EXECUTABLE:
-        # Apenas quando rodando como script Python
-        print(*args, **kwargs)
-    # Quando executável: completamente silencioso (modo fantasma)
 try:
     import pygetwindow as gw
     import pyperclip
@@ -1595,6 +1604,18 @@ def main():
 
     # Contador para verificação periódica do usuário
     verificacao_contador = 0
+    
+    # Contador para verificação de presença facial (a cada 1 minuto = 6 ciclos de 10 segundos)
+    face_check_contador = 0
+    FACE_CHECK_INTERVAL = 6  # 6 ciclos * 10 segundos = 60 segundos = 1 minuto
+    
+    # Obter o tracker de presença facial
+    presence_tracker = None
+    if FACE_DETECTION_AVAILABLE:
+        try:
+            presence_tracker = face_detection.get_presence_tracker()
+        except:
+            presence_tracker = None
 
     last_window_info = {"window_title": "", "url": None, "page_title": None, "domain": None, "application": ""}
     ociosidade = 0
@@ -1610,6 +1631,9 @@ def main():
     safe_print("   - Detecção por processo")
     safe_print("   - Base de dados expandida")
     safe_print("   - Categorização automática")
+    if FACE_DETECTION_AVAILABLE:
+        safe_print("   - Verificação de presença facial (a cada 1 minuto)")
+        safe_print("   - Rastreamento de tempo de presença em frente ao PC")
 
     # Limpar flag de parada antiga ao iniciar (pode ter ficado de execução anterior)
     try:
@@ -1637,9 +1661,19 @@ def main():
         # Detectar mudança de usuário
         if current_usuario_nome != last_usuario_nome:
             safe_print(f"[USER] Mudanca de usuario: {last_usuario_nome} -> {current_usuario_nome}")
+            
+            # Resetar tracker de presença ao trocar de usuário
+            if presence_tracker is not None:
+                try:
+                    final_time = face_detection.reset_presence_tracker()
+                    safe_print(f"[FACE] Tempo de presença do usuário anterior: {final_time:.0f} segundos ({final_time/60:.1f} minutos)")
+                except:
+                    pass
+            
             last_usuario_nome = current_usuario_nome
             usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0  # Reset contador
+            face_check_contador = 0  # Reset contador de face também
 
             # Se não conseguiu obter o ID do usuário, pular este ciclo
             if not usuario_monitorado_id or usuario_monitorado_id == 0:
@@ -1664,6 +1698,35 @@ def main():
                 safe_print(f"[WARN] Usuário {usuario_monitorado_id} não encontrado, recriando...")
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0
+        
+        # Verificar presença facial a cada 1 minuto
+        if FACE_DETECTION_AVAILABLE and presence_tracker is not None:
+            face_check_contador += 1
+            if face_check_contador >= FACE_CHECK_INTERVAL:
+                try:
+                    # Usar versão silenciosa quando executável
+                    if IS_EXECUTABLE:
+                        face_detected = face_detection.check_face_presence_silent(timeout=3)
+                    else:
+                        face_detected = face_detection.check_face_presence(timeout=3)
+                    
+                    # Atualizar tracker de presença
+                    check_time = time.time()
+                    presence_info = presence_tracker.update_presence(face_detected, check_time)
+                    
+                    if not IS_EXECUTABLE:
+                        if face_detected:
+                            total_min = presence_info['total_presence_time'] / 60
+                            safe_print(f"[FACE] ✓ Presença detectada | Tempo total: {total_min:.1f} min")
+                        else:
+                            total_min = presence_info['total_presence_time'] / 60
+                            safe_print(f"[FACE] ⚠ Ausente | Tempo acumulado: {total_min:.1f} min")
+                    
+                except Exception as e:
+                    if not IS_EXECUTABLE:
+                        safe_print(f"[FACE] Erro ao verificar presença facial: {e}")
+                
+                face_check_contador = 0
 
         # Verificar mudança significativa de janela/URL/página/domínio/aplicação
         window_changed = (
@@ -1703,6 +1766,14 @@ def main():
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
 
             if usuario_monitorado_id is not None:
+                # Obter tempo de presença facial se disponível
+                face_presence_time = None
+                if presence_tracker is not None:
+                    try:
+                        face_presence_time = presence_tracker.get_presence_time()
+                    except:
+                        pass
+                
                 registro = {
                     'usuario_monitorado_id': usuario_monitorado_id,
                     'ociosidade': ociosidade,
@@ -1713,12 +1784,19 @@ def main():
                     'application': current_window_info['application'],
                     'horario': datetime.now(tz).isoformat()
                 }
+                
+                # Adicionar tempo de presença facial se disponível
+                if face_presence_time is not None:
+                    registro['face_presence_time'] = int(face_presence_time)  # Tempo em segundos
+                
                 registros.append(registro)
-                safe_print(f"[LOG] Registro adicionado: {current_window_info['application']} - {current_window_info['page_title'] or 'N/A'} - {current_window_info['domain'] or 'N/A'}")
+                presence_info = f" | Presença: {face_presence_time/60:.1f}min" if face_presence_time is not None else ""
+                safe_print(f"[LOG] Registro adicionado: {current_window_info['application']} - {current_window_info['page_title'] or 'N/A'}{presence_info}")
             else:
                 safe_print("[ERROR] Não foi possível obter ID do usuário monitorado, pulando registro...")
 
-        if len(registros) >= 6:
+        # Diminuir de 6 para 3 registros antes do envio (envio mais frequente)
+        if len(registros) >= 3:
             # Sempre persistir tentativas e nunca descartar
             safe_print(f"[SEND] Preparando envio de {len(registros)} registros")
             for r in registros:

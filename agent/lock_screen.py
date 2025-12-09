@@ -19,6 +19,37 @@ AGENT_RUNNING = True
 AGENT_PAUSED = False  # Nova variável para pausar o agente durante intervalos
 AGENT_THREAD = None
 
+# Detectar se está rodando como executável
+IS_EXECUTABLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+def import_agent_module():
+    """
+    Importa o módulo agent de forma compatível com executável e script Python.
+    Retorna o módulo agent ou None se não encontrado.
+    """
+    try:
+        if IS_EXECUTABLE:
+            # Quando executável, importar diretamente
+            import agent as agent_module
+            return agent_module
+        else:
+            # Quando script Python, usar importlib.util
+            import importlib.util
+            agent_path = os.path.join(os.path.dirname(__file__), 'agent.py')
+            
+            if not os.path.exists(agent_path):
+                raise FileNotFoundError("agent.py não encontrado")
+            
+            spec = importlib.util.spec_from_file_location("agent_module", agent_path)
+            agent_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(agent_module)
+            return agent_module
+    except Exception as e:
+        print(f"[ERROR] Erro ao importar agent: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 # Função para enviar notificações do Windows
 def show_windows_notification(title, message, duration=5):
     """Exibe uma notificação toast no Windows"""
@@ -2138,15 +2169,10 @@ class LockScreen:
                 return  # Não iniciar o agente
             
             # 5. Importar o agent apenas quando o expediente estiver aberto
-            import importlib.util
-            agent_path = os.path.join(os.path.dirname(__file__), 'agent.py')
+            agent_module = import_agent_module()
             
-            if not os.path.exists(agent_path):
-                raise FileNotFoundError("agent.py não encontrado")
-            
-            spec = importlib.util.spec_from_file_location("agent_module", agent_path)
-            agent_module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(agent_module)
+            if agent_module is None:
+                raise FileNotFoundError("Não foi possível importar o módulo agent")
             
             # 6. Atualizar estado compartilhado e iniciar agente
             print("[INFO] ✓ Expediente aberto. Iniciando agente de atividades...")
@@ -4045,14 +4071,10 @@ def main():
                 floating_btn = create_floating_button(user_id=user_id, start_time=start_time)
                 print("[INFO] ✓ Botão flutuante criado!")
                 
-                import importlib.util
-                agent_path = os.path.join(os.path.dirname(__file__), 'agent.py')
+                # Importar o módulo agent
+                agent_module = import_agent_module()
                 
-                if os.path.exists(agent_path):
-                    spec = importlib.util.spec_from_file_location("agent_module", agent_path)
-                    agent_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(agent_module)
-                    
+                if agent_module is not None:
                     print("[INFO] Agent iniciado com sucesso!")
                     
                     # Iniciar agent em thread separada para não bloquear o botão flutuante

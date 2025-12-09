@@ -25,3 +25,14 @@ pathlib2>=2.3.7; python_version < "3.4"
 
 # Build para executável
 pyinstaller>=5.13.0
+
+# Notificações (opcional)
+win10toast>=0.9; sys_platform == "win32"
+plyer>=2.1.0
+
+# Utilitários GUI
+pygetwindow>=0.0.9
+pyperclip>=1.8.2
+
+# Detecção facial
+opencv-python>=4.8.0

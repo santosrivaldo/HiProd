@@ -78,10 +78,19 @@ class AgentBuilder:
             print("Execute: pip install pyinstaller")
             return False
         
-        # Verificar se o arquivo principal existe
+        # Verificar se os arquivos principais existem
+        main_file = self.agent_dir / "main.py"
         agent_file = self.agent_dir / "agent.py"
+        lock_screen_file = self.agent_dir / "lock_screen.py"
+        
+        if not main_file.exists():
+            self.print_error("Arquivo main.py nao encontrado!")
+            return False
         if not agent_file.exists():
             self.print_error("Arquivo agent.py nao encontrado!")
+            return False
+        if not lock_screen_file.exists():
+            self.print_error("Arquivo lock_screen.py nao encontrado!")
             return False
         
         self.print_success("Todos os pre-requisitos atendidos")
@@ -130,55 +139,22 @@ class AgentBuilder:
             return str(icon_path)
     
     def build_executable(self):
-        """Compila o executável usando PyInstaller"""
+        """Compila o executável usando PyInstaller com arquivo spec"""
         self.print_step("Compilando executável")
         
         # Criar ícone se necessário
         icon_path = self.create_icon()
         
-        # Comando do PyInstaller
-        cmd_parts = [
-            f'"{self.pyinstaller_path}"',
-            '--onefile',  # Arquivo único
-            '--windowed',  # Sem console (fantasma)
-            '--noconsole',  # Garantir que não abra console
-            '--name=HiProd-Agent',
-            '--distpath=dist',
-            '--workpath=build',
-            '--clean',
-            '--noconfirm',
-        ]
+        # Verificar se o arquivo spec existe
+        if not self.spec_file.exists():
+            self.print_error(f"Arquivo spec nao encontrado: {self.spec_file}")
+            return False
         
-        # Adicionar ícone se disponível
-        if icon_path:
-            cmd_parts.append(f'--icon="{icon_path}"')
+        # Usar o arquivo spec para compilar
+        # O spec já contém todas as configurações necessárias
+        command = f'"{self.pyinstaller_path}" --clean --noconfirm "{self.spec_file}"'
         
-        # Adicionar imports ocultos
-        hidden_imports = [
-            'requests.packages.urllib3',
-            'psutil',
-            'pytz',
-        ]
-        
-        for imp in hidden_imports:
-            cmd_parts.append(f'--hidden-import={imp}')
-        
-        # Configurações adicionais para executável silencioso
-        cmd_parts.extend([
-            '--disable-windowed-traceback',  # Desabilitar tracebacks em janelas
-            '--bootloader-ignore-signals',   # Ignorar sinais do sistema
-            '--strip',                       # Remover símbolos de debug
-        ])
-        
-        # Adicionar dados
-        cmd_parts.extend([
-            '--add-data=config.example;.',
-            'agent.py'
-        ])
-        
-        command = ' '.join(cmd_parts)
-        
-        if not self.run_command(command, "Executando PyInstaller"):
+        if not self.run_command(command, "Executando PyInstaller com arquivo spec"):
             return False
         
         self.print_success("Executavel compilado com sucesso!")
