@@ -444,11 +444,6 @@ def get_atividades(current_user):
                         'has_screenshot': row[13] if len(row) > 13 else False,
                         'screenshot_size': row[14] if len(row) > 14 else None,
                         'face_presence_time': row[15] if len(row) > 15 else None
-                        'duracao_total': duracao_total,  # Campo correto
-                        'domain': row[11] if len(row) > 11 else None,
-                        'application': row[12] if len(row) > 12 else None,
-                        'has_screenshot': row[13] if len(row) > 13 else False,
-                        'screenshot_size': row[14] if len(row) > 14 else None
                     })
 
             # Criar resposta com headers de paginação
