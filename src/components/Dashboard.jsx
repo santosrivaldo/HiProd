@@ -654,82 +654,7 @@ export default function Dashboard() {
         </nav>
       </div>
 
-      {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <button
-          onClick={() => handleProductivityFilter('productive')}
-          className={`transition-all transform hover:scale-105 ${productivityFilter === 'productive' ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
-        >
-          <MetricCard
-            title="Tempo Produtivo"
-            value={formatTime(summary.productive)}
-            subtitle={formatPercentage(summary.productive, summary.total)}
-            icon={ChartBarIcon}
-            color="green"
-            trend={summary.productive > summary.total * 0.5 ? 'up' : 'down'}
-            trendValue={formatPercentage(summary.productive, summary.total)}
-          />
-        </button>
-        <button
-          onClick={() => handleProductivityFilter('nonproductive')}
-          className={`transition-all transform hover:scale-105 ${productivityFilter === 'nonproductive' ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}
-        >
-          <MetricCard
-            title="Tempo Não Produtivo"
-            value={formatTime(summary.nonproductive)}
-            subtitle={formatPercentage(summary.nonproductive, summary.total)}
-            icon={ChartBarIcon}
-            color="red"
-            trend={summary.nonproductive < summary.total * 0.3 ? 'up' : 'down'}
-            trendValue={formatPercentage(summary.nonproductive, summary.total)}
-          />
-        </button>
-        <button
-          onClick={() => handleProductivityFilter('neutral')}
-          className={`transition-all transform hover:scale-105 ${productivityFilter === 'neutral' ? 'ring-2 ring-yellow-500 ring-offset-2' : ''}`}
-        >
-          <MetricCard
-            title="Tempo Neutro"
-            value={formatTime(summary.neutral)}
-            subtitle={formatPercentage(summary.neutral, summary.total)}
-            icon={ClockIcon}
-            color="yellow"
-          />
-        </button>
-        <button
-          onClick={() => handleProductivityFilter('idle')}
-          className={`transition-all transform hover:scale-105 ${productivityFilter === 'idle' ? 'ring-2 ring-gray-500 ring-offset-2' : ''}`}
-        >
-          <MetricCard
-            title="Tempo Ocioso"
-            value={formatTime(summary.idle)}
-            subtitle={formatPercentage(summary.idle, summary.total)}
-            icon={ClockIcon}
-            color="indigo"
-          />
-        </button>
-      </div>
-
-      {/* Indicador de Filtro Ativo */}
-      {productivityFilter && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <FunnelIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
-              Filtro ativo: <span className="capitalize">{productivityFilter === 'idle' ? 'Ocioso' : productivityFilter === 'productive' ? 'Produtivo' : productivityFilter === 'nonproductive' ? 'Não Produtivo' : 'Neutro'}</span>
-            </span>
-          </div>
-          <button
-            onClick={() => setProductivityFilter(null)}
-            className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-          >
-            Remover filtro
-          </button>
-        </div>
-      )}
-
-      {/* Cards de Estatísticas Adicionais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      {/* Conteúdo baseado na tab selecionada */}
         <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg rounded-xl border border-gray-200 dark:border-gray-700">
           <div className="p-6">
             <div className="flex items-center space-x-3">
@@ -805,202 +730,179 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Seção de Relatório de Presença Facial */}
-      {presenceStats.length > 0 && (
-        <div className="mb-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Relatório de Presença Facial</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Tempo detectado em frente ao computador</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            {presenceStats
-              .sort((a, b) => b.maxPresenceTime - a.maxPresenceTime)
-              .map((stat, index) => {
-                const hours = Math.floor(stat.maxPresenceTime / 3600)
-                const minutes = Math.floor((stat.maxPresenceTime % 3600) / 60)
-                const percentage = summary.total > 0 ? (stat.maxPresenceTime / summary.total) * 100 : 0
-                
-                return (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                    <div className="flex items-center space-x-4 flex-1 min-w-0">
-                      <div className="flex-shrink-0 w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                        <span className="text-purple-600 dark:text-purple-400 font-bold text-sm">#{index + 1}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stat.nome}</p>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {stat.activitiesWithPresence} registro{stat.activitiesWithPresence !== 1 ? 's' : ''} com detecção
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{percentage.toFixed(1)}% do tempo total</p>
-                      </div>
-                      <div className="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                        <div 
-                          className="h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-500" 
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
-        </div>
-      )}
-
-      {/* Conteúdo baseado na visualização */}
+      {/* VISÃO GERAL - Conteúdo Principal */}
       {viewMode === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Gráfico de Pizza */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Distribuição por Produtividade</h2>
-              <div className="text-sm text-gray-500 dark:text-gray-400">Total: {formatTime(summary.total)}</div>
-            </div>
-            {pieData.length > 0 ? (
-              <div className="space-y-4">
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={90}
-                      innerRadius={40}
-                      fill="#8884d8"
-                      dataKey="value"
-                      label={({ name, percent }) => `${(percent * 100).toFixed(1)}%`}
-                      labelLine={false}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatTime(value)} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="grid grid-cols-2 gap-3">
-                  {pieData.map((entry, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{entry.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {formatTime(entry.value)} ({formatPercentage(entry.value, summary.total)})
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <ChartBarIcon className="mx-auto h-12 w-12 mb-2" />
-                  <p className="text-sm">Nenhum dado disponível</p>
-                </div>
-              </div>
-            )}
+        <>
+          {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <button
+              onClick={() => handleProductivityFilter('productive')}
+              className={`transition-all transform hover:scale-105 ${productivityFilter === 'productive' ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
+            >
+              <MetricCard
+                title="Tempo Produtivo"
+                value={formatTime(summary.productive)}
+                subtitle={formatPercentage(summary.productive, summary.total)}
+                icon={ChartBarIcon}
+                color="green"
+                trend={summary.productive > summary.total * 0.5 ? 'up' : 'down'}
+                trendValue={formatPercentage(summary.productive, summary.total)}
+              />
+            </button>
+            <button
+              onClick={() => handleProductivityFilter('nonproductive')}
+              className={`transition-all transform hover:scale-105 ${productivityFilter === 'nonproductive' ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}
+            >
+              <MetricCard
+                title="Tempo Não Produtivo"
+                value={formatTime(summary.nonproductive)}
+                subtitle={formatPercentage(summary.nonproductive, summary.total)}
+                icon={ChartBarIcon}
+                color="red"
+                trend={summary.nonproductive < summary.total * 0.3 ? 'up' : 'down'}
+                trendValue={formatPercentage(summary.nonproductive, summary.total)}
+              />
+            </button>
+            <button
+              onClick={() => handleProductivityFilter('neutral')}
+              className={`transition-all transform hover:scale-105 ${productivityFilter === 'neutral' ? 'ring-2 ring-yellow-500 ring-offset-2' : ''}`}
+            >
+              <MetricCard
+                title="Tempo Neutro"
+                value={formatTime(summary.neutral)}
+                subtitle={formatPercentage(summary.neutral, summary.total)}
+                icon={ClockIcon}
+                color="yellow"
+              />
+            </button>
+            <button
+              onClick={() => handleProductivityFilter('idle')}
+              className={`transition-all transform hover:scale-105 ${productivityFilter === 'idle' ? 'ring-2 ring-gray-500 ring-offset-2' : ''}`}
+            >
+              <MetricCard
+                title="Tempo Ocioso"
+                value={formatTime(summary.idle)}
+                subtitle={formatPercentage(summary.idle, summary.total)}
+                icon={ClockIcon}
+                color="indigo"
+              />
+            </button>
           </div>
 
-          {/* Insights */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Insights de Produtividade</h2>
+          {/* Indicador de Filtro Ativo */}
+          {productivityFilter && (
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-2">
+                <FunnelIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+                  Filtro ativo: <span className="capitalize">{productivityFilter === 'idle' ? 'Ocioso' : productivityFilter === 'productive' ? 'Produtivo' : productivityFilter === 'nonproductive' ? 'Não Produtivo' : 'Neutro'}</span>
+                </span>
+              </div>
+              <button
+                onClick={() => setProductivityFilter(null)}
+                className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+              >
+                Remover filtro
+              </button>
             </div>
-            {summary.total > 0 ? (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">
-                          {Math.round((summary.productive / summary.total) * 100)}%
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-green-800 dark:text-green-200">Taxa de Produtividade</p>
-                        <p className="text-xs text-green-600 dark:text-green-400">{formatTime(summary.productive)} produtivo</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
-                        <ClockIcon className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Tempo Total Ativo</p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400">{formatTime(summary.total)} registrado</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold text-xs">{recentActivities.length}</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-purple-800 dark:text-purple-200">Atividades Recentes</p>
-                        <p className="text-xs text-purple-600 dark:text-purple-400">Últimas sessões</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {hourlyData.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Atividade por Hora do Dia</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <AreaChart data={hourlyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                        <defs>
-                          <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                        <XAxis dataKey="hour" tickFormatter={formatHour} interval={3} stroke="#6B7280" fontSize={11} />
-                        <YAxis tickFormatter={(value) => value > 3600 ? `${Math.round(value/3600)}h` : `${Math.round(value/60)}m`} stroke="#6B7280" fontSize={11} />
-                        <Tooltip labelFormatter={(hour) => `${formatHour(hour)}`} formatter={(value) => [formatTime(value), 'Atividade']} />
-                        <Area type="monotone" dataKey="total" stroke="#3B82F6" strokeWidth={2} fillOpacity={1} fill="url(#colorActivity)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-[300px] text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <ChartBarIcon className="mx-auto h-16 w-16 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum dado disponível</h3>
-                  <p className="text-sm">Carregue o dashboard para ver os insights</p>
-                </div>
-              </div>
-            )}
+          )}
+
+          {/* Layout Compacto - Grid de Visualizações */}
+          <div className="grid grid-cols-12 gap-4">
+            {/* Coluna 1: Insights de IA (3 colunas) */}
+            <div className="col-span-12 lg:col-span-3">
+              <AIInsights 
+                data={dashboardData} 
+                onAnalyze={loadDashboardData}
+              />
+            </div>
+
+            {/* Coluna 2: Gráfico de Pizza (4 colunas) */}
+            <div className="col-span-12 lg:col-span-4">
+              <AdvancedChart
+                type="pie"
+                data={pieData}
+                dataKey="value"
+                height={280}
+                title="Distribuição de Produtividade"
+                subtitle="Tempo por categoria"
+                colors={pieData.map(d => d.color)}
+              />
+            </div>
+
+            {/* Coluna 3: Timeline Diária (5 colunas) */}
+            <div className="col-span-12 lg:col-span-5">
+              <AdvancedChart
+                type="area"
+                data={timelineData}
+                xKey="date"
+                yKeys={['productive', 'nonproductive', 'neutral']}
+                height={280}
+                title="Evolução Diária"
+                subtitle="Tendência ao longo do tempo"
+                stacked={true}
+                colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
+              />
+            </div>
+
+            {/* Coluna 4: Distribuição por Hora (6 colunas) */}
+            <div className="col-span-12 lg:col-span-6">
+              <AdvancedChart
+                type="bar"
+                data={hourlyData}
+                xKey="hour"
+                yKeys={['productive', 'nonproductive', 'neutral']}
+                height={250}
+                title="Distribuição por Hora"
+                subtitle="Horários mais produtivos"
+                stacked={true}
+                colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
+                formatTooltip={(value) => formatTime(value)}
+              />
+            </div>
+
+            {/* Coluna 5: Estatísticas Compactas (6 colunas) */}
+            <div className="col-span-12 lg:col-span-6">
+              <CompactStats
+                domainData={domainData}
+                applicationData={applicationData}
+                userStats={userStats}
+                formatTime={formatTime}
+              />
+            </div>
           </div>
-        </div>
+        </>
       )}
 
+      {/* DOMÍNIOS - Página Dedicada */}
       {viewMode === 'domains' && (
-        <div className="space-y-6 mb-6">
+        <div className="space-y-6">
+          {/* Resumo de Domínios */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <MetricCard
+              title="Total de Domínios"
+              value={domainData.length}
+              subtitle="Domínios únicos"
+              icon={GlobeAltIcon}
+              color="blue"
+            />
+            <MetricCard
+              title="Tempo Total"
+              value={formatTime(domainData.reduce((sum, d) => sum + d.value, 0))}
+              subtitle="Em todos os domínios"
+              icon={ClockIcon}
+              color="indigo"
+            />
+            <MetricCard
+              title="Top Domínio"
+              value={domainData[0]?.name?.substring(0, 20) || 'N/A'}
+              subtitle={domainData[0] ? formatTime(domainData[0].value) : '0min'}
+              icon={GlobeAltIcon}
+              color="green"
+            />
+          </div>
+
+          {/* Lista de Domínios */}
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Top Domínios por Tempo de Uso</h2>
@@ -1099,69 +1001,42 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Seção de Relatório de Presença Facial */}
-      {presenceStats.length > 0 && (
-        <div className="mb-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Relatório de Presença Facial</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Tempo detectado em frente ao computador</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            {presenceStats
-              .sort((a, b) => b.maxPresenceTime - a.maxPresenceTime)
-              .map((stat, index) => {
-                const hours = Math.floor(stat.maxPresenceTime / 3600)
-                const minutes = Math.floor((stat.maxPresenceTime % 3600) / 60)
-                const percentage = summary.total > 0 ? (stat.maxPresenceTime / summary.total) * 100 : 0
-                
-                return (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                    <div className="flex items-center space-x-4 flex-1 min-w-0">
-                      <div className="flex-shrink-0 w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                        <span className="text-purple-600 dark:text-purple-400 font-bold text-sm">#{index + 1}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{stat.nome}</p>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {stat.activitiesWithPresence} registro{stat.activitiesWithPresence !== 1 ? 's' : ''} com detecção
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{percentage.toFixed(1)}% do tempo total</p>
-                      </div>
-                      <div className="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                        <div 
-                          className="h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-500" 
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
-        </div>
-      )}
-
       {viewMode === 'timeline' && (
-        <div className="space-y-6 mb-6">
+        <div className="space-y-6">
+          {/* Resumo da Timeline */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <MetricCard
+              title="Dias Monitorados"
+              value={timelineData.length}
+              subtitle="Período analisado"
+              icon={CalendarDaysIcon}
+              color="blue"
+            />
+            <MetricCard
+              title="Tempo Total"
+              value={formatTime(summary.total)}
+              subtitle="Período completo"
+              icon={ClockIcon}
+              color="indigo"
+            />
+            <MetricCard
+              title="Média Diária"
+              value={formatTime(timelineData.length > 0 ? summary.total / timelineData.length : 0)}
+              subtitle="Por dia"
+              icon={ChartBarIcon}
+              color="green"
+            />
+            <MetricCard
+              title="Atividades"
+              value={filteredActivities.length}
+              subtitle="Total registrado"
+              icon={ChartBarIcon}
+              color="purple"
+            />
+          </div>
+
+          {/* Timeline Visual */}
+          <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Atividade Diária por Produtividade</h2>
