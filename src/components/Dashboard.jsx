@@ -28,13 +28,15 @@ import {
   ClockIcon,
   CalendarDaysIcon,
   UserIcon,
-  SparklesIcon
+  SparklesIcon,
+  FunnelIcon
 } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 import MetricCard from './charts/MetricCard'
 import AdvancedChart from './charts/AdvancedChart'
 import AdvancedFilters from './filters/AdvancedFilters'
 import AIInsights from './ai/AIInsights'
+import CompactStats from './dashboard/CompactStats'
 
 const COLORS = {
   productive: '#10B981',
@@ -139,6 +141,7 @@ export default function Dashboard() {
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
   const [viewMode, setViewMode] = useState('overview')
+  const [productivityFilter, setProductivityFilter] = useState(null) // 'productive', 'nonproductive', 'neutral', 'idle', null
   const navigate = useNavigate()
 
   // Carregar dados do dashboard
@@ -204,6 +207,19 @@ export default function Dashboard() {
             userIds.includes(activity.usuario_monitorado_id)
           )
         }
+      }
+
+      // Filtrar por produtividade (se selecionado)
+      if (productivityFilter) {
+        filteredActivities = filteredActivities.filter(activity => {
+          const produtividade = activity.produtividade || 'neutral'
+          const ociosidade = activity.ociosidade || 0
+          
+          if (productivityFilter === 'idle') {
+            return ociosidade >= 600
+          }
+          return produtividade === productivityFilter
+        })
       }
 
       console.log(`✅ ${filteredActivities.length} atividades após filtros`)
@@ -481,7 +497,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [dateRange, selectedUser, selectedDepartment])
+  }, [dateRange, selectedUser, selectedDepartment, productivityFilter])
 
   // Carregar dados quando o componente monta ou quando filtros mudam
   useEffect(() => {
@@ -567,6 +583,15 @@ export default function Dashboard() {
     setDateRange(7)
     setSelectedUser('all')
     setSelectedDepartment('all')
+    setProductivityFilter(null)
+  }
+
+  const handleProductivityFilter = (filter) => {
+    if (productivityFilter === filter) {
+      setProductivityFilter(null) // Deselecionar se já estiver selecionado
+    } else {
+      setProductivityFilter(filter)
+    }
   }
 
   return (
@@ -629,94 +654,143 @@ export default function Dashboard() {
         </nav>
       </div>
 
-      {/* Cards de Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
-          title="Tempo Produtivo"
-          value={formatTime(summary.productive)}
-          subtitle={formatPercentage(summary.productive, summary.total)}
-          icon={ChartBarIcon}
-          color="green"
-          trend={summary.productive > summary.total * 0.5 ? 'up' : 'down'}
-          trendValue={formatPercentage(summary.productive, summary.total)}
-        />
-        <MetricCard
-          title="Tempo Não Produtivo"
-          value={formatTime(summary.nonproductive)}
-          subtitle={formatPercentage(summary.nonproductive, summary.total)}
-          icon={ChartBarIcon}
-          color="red"
-          trend={summary.nonproductive < summary.total * 0.3 ? 'up' : 'down'}
-          trendValue={formatPercentage(summary.nonproductive, summary.total)}
-        />
-        <MetricCard
-          title="Tempo Neutro"
-          value={formatTime(summary.neutral)}
-          subtitle={formatPercentage(summary.neutral, summary.total)}
-          icon={ClockIcon}
-          color="yellow"
-        />
-        <MetricCard
-          title="Tempo Total"
-          value={formatTime(summary.total)}
-          subtitle={`${filteredActivities.length} atividades`}
-          icon={ClockIcon}
-          color="blue"
-        />
+      {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <button
+          onClick={() => handleProductivityFilter('productive')}
+          className={`transition-all transform hover:scale-105 ${productivityFilter === 'productive' ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
+        >
+          <MetricCard
+            title="Tempo Produtivo"
+            value={formatTime(summary.productive)}
+            subtitle={formatPercentage(summary.productive, summary.total)}
+            icon={ChartBarIcon}
+            color="green"
+            trend={summary.productive > summary.total * 0.5 ? 'up' : 'down'}
+            trendValue={formatPercentage(summary.productive, summary.total)}
+          />
+        </button>
+        <button
+          onClick={() => handleProductivityFilter('nonproductive')}
+          className={`transition-all transform hover:scale-105 ${productivityFilter === 'nonproductive' ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}
+        >
+          <MetricCard
+            title="Tempo Não Produtivo"
+            value={formatTime(summary.nonproductive)}
+            subtitle={formatPercentage(summary.nonproductive, summary.total)}
+            icon={ChartBarIcon}
+            color="red"
+            trend={summary.nonproductive < summary.total * 0.3 ? 'up' : 'down'}
+            trendValue={formatPercentage(summary.nonproductive, summary.total)}
+          />
+        </button>
+        <button
+          onClick={() => handleProductivityFilter('neutral')}
+          className={`transition-all transform hover:scale-105 ${productivityFilter === 'neutral' ? 'ring-2 ring-yellow-500 ring-offset-2' : ''}`}
+        >
+          <MetricCard
+            title="Tempo Neutro"
+            value={formatTime(summary.neutral)}
+            subtitle={formatPercentage(summary.neutral, summary.total)}
+            icon={ClockIcon}
+            color="yellow"
+          />
+        </button>
+        <button
+          onClick={() => handleProductivityFilter('idle')}
+          className={`transition-all transform hover:scale-105 ${productivityFilter === 'idle' ? 'ring-2 ring-gray-500 ring-offset-2' : ''}`}
+        >
+          <MetricCard
+            title="Tempo Ocioso"
+            value={formatTime(summary.idle)}
+            subtitle={formatPercentage(summary.idle, summary.total)}
+            icon={ClockIcon}
+            color="indigo"
+          />
+        </button>
       </div>
 
-      {/* Seção de IA e Visualizações */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Insights de IA */}
-        <div className="lg:col-span-1">
+      {/* Indicador de Filtro Ativo */}
+      {productivityFilter && (
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <FunnelIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+              Filtro ativo: <span className="capitalize">{productivityFilter === 'idle' ? 'Ocioso' : productivityFilter === 'productive' ? 'Produtivo' : productivityFilter === 'nonproductive' ? 'Não Produtivo' : 'Neutro'}</span>
+            </span>
+          </div>
+          <button
+            onClick={() => setProductivityFilter(null)}
+            className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+          >
+            Remover filtro
+          </button>
+        </div>
+      )}
+
+      {/* Layout Compacto - Grid de Visualizações (12 colunas) */}
+      <div className="grid grid-cols-12 gap-4">
+        {/* Coluna 1: Insights de IA (3 colunas) */}
+        <div className="col-span-12 lg:col-span-3">
           <AIInsights 
             data={dashboardData} 
             onAnalyze={loadDashboardData}
           />
         </div>
 
-        {/* Gráfico de Pizza - Distribuição de Produtividade */}
-        <div className="lg:col-span-2">
+        {/* Coluna 2: Gráfico de Pizza (4 colunas) */}
+        <div className="col-span-12 lg:col-span-4">
           <AdvancedChart
             type="pie"
             data={pieData}
             dataKey="value"
-            height={350}
+            height={280}
             title="Distribuição de Produtividade"
-            subtitle="Tempo gasto por categoria"
+            subtitle="Tempo por categoria"
             colors={pieData.map(d => d.color)}
           />
         </div>
-      </div>
 
-      {/* Gráficos de Análise Temporal */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Timeline Diária */}
-        <AdvancedChart
-          type="area"
-          data={timelineData}
-          xKey="date"
-          yKeys={['productive', 'nonproductive', 'neutral', 'idle']}
-          height={300}
-          title="Evolução Diária"
-          subtitle="Tendência de produtividade ao longo do tempo"
-          stacked={true}
-          colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral, COLORS.idle]}
-        />
+        {/* Coluna 3: Timeline Diária (5 colunas) */}
+        <div className="col-span-12 lg:col-span-5">
+          <AdvancedChart
+            type="area"
+            data={timelineData}
+            xKey="date"
+            yKeys={['productive', 'nonproductive', 'neutral']}
+            height={280}
+            title="Evolução Diária"
+            subtitle="Tendência ao longo do tempo"
+            stacked={true}
+            colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
+          />
+        </div>
 
-        {/* Distribuição por Hora */}
-        <AdvancedChart
-          type="bar"
-          data={hourlyData}
-          xKey="hour"
-          yKeys={['productive', 'nonproductive', 'neutral']}
-          height={300}
-          title="Distribuição por Hora do Dia"
-          subtitle="Horários mais produtivos"
-          stacked={true}
-          colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
-          formatTooltip={(value) => formatTime(value)}
-        />
+        {/* Coluna 4: Distribuição por Hora (6 colunas) */}
+        <div className="col-span-12 lg:col-span-6">
+          <AdvancedChart
+            type="bar"
+            data={hourlyData}
+            xKey="hour"
+            yKeys={['productive', 'nonproductive', 'neutral']}
+            height={250}
+            title="Distribuição por Hora"
+            subtitle="Horários mais produtivos"
+            stacked={true}
+            colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
+            formatTooltip={(value) => formatTime(value)}
+          />
+        </div>
+
+        {/* Coluna 5: Estatísticas Compactas (6 colunas) */}
+        <div className="col-span-12 lg:col-span-6">
+          <CompactStats
+            domainData={domainData}
+            applicationData={applicationData}
+            userStats={userStats}
+            formatTime={formatTime}
+          />
+        </div>
       </div>
 
       {/* Cards de Estatísticas Adicionais */}
