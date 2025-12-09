@@ -115,19 +115,55 @@ Suba a API e o banco com Docker Compose. O processo:
 - Executa a inicialização/migração (init_db)
 - Inicia a API em 0.0.0.0:8000
 
+### ⚠️ IMPORTANTE: Configuração de Segurança
+
+**Antes de executar o Docker Compose, você DEVE criar um arquivo `.env` com as variáveis de ambiente:**
+
+```bash
+# Criar arquivo .env na raiz do projeto
+cat > .env << EOF
+# Banco de Dados - OBRIGATÓRIO: Use senhas fortes!
+DB_USER=hiprod_user
+DB_PASSWORD=SUA_SENHA_FORTE_AQUI_ALTERE_ISTO
+DB_NAME=hiprod
+DB_HOST=db
+DB_PORT=5432
+
+# Segurança JWT - OBRIGATÓRIO: Use uma chave secreta forte!
+JWT_SECRET_KEY=SUA_CHAVE_SECRETA_FORTE_AQUI_ALTERE_ISTO
+EOF
+```
+
+**⚠️ NUNCA use valores padrão em produção!**
+
+### Executar Docker Compose
+
 ```bash
 docker compose up --build
 ```
 
-Variáveis usadas (com defaults):
-- DB_HOST=db
-- DB_PORT=5432
-- DB_USER=postgres
-- DB_PASSWORD=postgres
-- DB_NAME=hiprod
-- JWT_SECRET_KEY=change-me
+### Variáveis Obrigatórias
 
-A API ficará disponível em http://localhost:8000 e o banco em localhost:5432.
+O docker-compose **NÃO** aceita valores padrão por segurança. Você DEVE definir:
+
+- `DB_USER` - Usuário do banco de dados
+- `DB_PASSWORD` - Senha forte do banco (mínimo 16 caracteres)
+- `JWT_SECRET_KEY` - Chave secreta para JWT (mínimo 32 caracteres)
+
+### Variáveis Opcionais
+
+- `DB_NAME` - Nome do banco (padrão: `hiprod`)
+- `DB_HOST` - Host do banco (padrão: `db` no Docker)
+- `DB_PORT` - Porta do banco (padrão: `5432`)
+
+### Segurança Implementada
+
+✅ **Banco de dados não exposto externamente** - Apenas acessível via rede interna do Docker  
+✅ **Senhas obrigatórias** - Não aceita valores padrão  
+✅ **Rede isolada** - Serviços se comunicam apenas dentro da rede Docker  
+✅ **Restart automático** - Serviços reiniciam automaticamente em caso de falha
+
+A API ficará disponível em http://localhost:8010. O banco de dados **NÃO** está exposto externamente por segurança.
 
 ## 👤 Login Inicial
 

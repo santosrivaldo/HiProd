@@ -4,11 +4,15 @@ services:
     image: postgres:15-alpine
     container_name: hiprod-db
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      # OBRIGATÓRIO: DB_USER e DB_PASSWORD devem ser definidos no arquivo .env
+      # Não usar valores padrão por segurança
+      POSTGRES_USER: ${DB_USER?Erro: DB_USER não definido no arquivo .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD?Erro: DB_PASSWORD não definido no arquivo .env}
       POSTGRES_DB: ${DB_NAME:-hiprod}
-    ports:
-      - "5433:5432"
+    # Porta removida por segurança - banco acessível apenas via rede interna do Docker
+    # Para desenvolvimento local, descomente a linha abaixo se necessário:
+    # ports:
+    #   - "127.0.0.1:5433:5432"  # Apenas localhost, não exposto externamente
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +20,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks:
+      - hiprod-network
+    # Restart policy para garantir disponibilidade
+    restart: unless-stopped
 
   api:
     build: .
@@ -26,12 +34,12 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      # OBRIGATÓRIO: DB_USER e DB_PASSWORD devem ser definidos no arquivo .env
+      DB_USER: ${DB_USER?Erro: DB_USER não definido no arquivo .env}
+      DB_PASSWORD: ${DB_PASSWORD?Erro: DB_PASSWORD não definido no arquivo .env}
       DB_NAME: ${DB_NAME:-hiprod}
-      # Alternatively, you can set DATABASE_URL
-      # DATABASE_URL: postgresql://postgres:postgres@db:5432/hiprod
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
+      # JWT_SECRET_KEY também deve ser definido no .env para produção
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY?Erro: JWT_SECRET_KEY não definido no arquivo .env}
       FLASK_HOST: 0.0.0.0
       FLASK_PORT: 8000
       FLASK_DEBUG: 0
@@ -39,6 +47,9 @@ services:
       - "8010:8000"
     volumes:
       - .:/app
+    networks:
+      - hiprod-network
+    restart: unless-stopped
 
   frontend:
     image: node:20-alpine
@@ -57,6 +68,14 @@ services:
       - "5005:5000"
     volumes:
       - .:/app
+    networks:
+      - hiprod-network
+    restart: unless-stopped
 
 volumes:
   pgdata:
+
+networks:
+  hiprod-network:
+    driver: bridge
+    # Rede interna isolada - serviços se comunicam apenas dentro desta rede
