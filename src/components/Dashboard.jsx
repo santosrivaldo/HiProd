@@ -724,13 +724,11 @@ export default function Dashboard() {
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatTime(summary.total)}</p>
                   <p className="text-sm font-medium text-blue-600 dark:text-blue-400">100%</p>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
-
-      {/* VISÃO GERAL - Conteúdo Principal */}
+      </div>
+      </div>
+      </div>
+        </div>
       {viewMode === 'overview' && (
         <>
           {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
