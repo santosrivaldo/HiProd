@@ -728,7 +728,6 @@ export default function Dashboard() {
       </div>
       </div>
       </div>
-        </div>
       {viewMode === 'overview' ? (
         <>
           {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
