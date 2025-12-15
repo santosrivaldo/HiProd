@@ -729,7 +729,7 @@ export default function Dashboard() {
       </div>
       </div>
         </div>
-      {viewMode === 'overview' && (
+      {viewMode === 'overview' ? (
         <>
           {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -870,7 +870,7 @@ export default function Dashboard() {
             </div>
           </div>
         </>
-      )}
+      ) : null}
 
       {/* DOMÍNIOS - Página Dedicada */}
       {viewMode === 'domains' && (
