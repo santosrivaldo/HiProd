@@ -960,7 +960,6 @@ export default function Dashboard() {
           </div>
 
           {/* Timeline Visual */}
-          <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Atividade Diária por Produtividade</h2>
@@ -989,7 +988,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </div>
       )}
 
       {/* Atividades Recentes */}
