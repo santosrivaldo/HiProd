@@ -126,7 +126,7 @@ export default function AIInsights({ data, onAnalyze }) {
         type: 'info',
         icon: LightBulbIcon,
         title: 'Horário de Pico',
-        message: `O horário mais produtivo é às ${peakHour.hora}:00. Considere agendar tarefas importantes neste período.`,
+        message: `O horário mais produtivo é às ${peakHour.hour}:00. Considere agendar tarefas importantes neste período.`,
         action: null,
         priority: 'low'
       })

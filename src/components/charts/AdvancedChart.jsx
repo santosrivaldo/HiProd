@@ -43,6 +43,8 @@ export default function AdvancedChart({
   title,
   subtitle,
   formatTooltip,
+  formatXAxis,
+  formatYAxis,
   customTooltip
 }) {
   const renderChart = () => {
@@ -70,10 +72,12 @@ export default function AdvancedChart({
               dataKey={xKey} 
               stroke="#6B7280"
               tick={{ fill: '#6B7280', fontSize: 12 }}
+              tickFormatter={formatXAxis}
             />
             <YAxis 
               stroke="#6B7280"
               tick={{ fill: '#6B7280', fontSize: 12 }}
+              tickFormatter={formatYAxis}
             />
             <Tooltip {...tooltipProps} />
             {showLegend && <Legend />}
@@ -99,10 +103,12 @@ export default function AdvancedChart({
               dataKey={xKey} 
               stroke="#6B7280"
               tick={{ fill: '#6B7280', fontSize: 12 }}
+              tickFormatter={formatXAxis}
             />
             <YAxis 
               stroke="#6B7280"
               tick={{ fill: '#6B7280', fontSize: 12 }}
+              tickFormatter={formatYAxis}
             />
             <Tooltip {...tooltipProps} />
             {showLegend && <Legend />}
@@ -128,10 +134,12 @@ export default function AdvancedChart({
               dataKey={xKey} 
               stroke="#6B7280"
               tick={{ fill: '#6B7280', fontSize: 12 }}
+              tickFormatter={formatXAxis}
             />
             <YAxis 
               stroke="#6B7280"
               tick={{ fill: '#6B7280', fontSize: 12 }}
+              tickFormatter={formatYAxis}
             />
             <Tooltip {...tooltipProps} />
             {showLegend && <Legend />}

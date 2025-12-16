@@ -5,21 +5,6 @@ import api from '../services/api'
 import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns'
 import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
 import { PhotoIcon } from '@heroicons/react/24/outline'
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Area,
-  AreaChart
-} from 'recharts'
 import { 
   ChartBarIcon, 
   ArrowPathIcon, 
@@ -515,7 +500,9 @@ export default function Dashboard() {
 
   const formatPercentage = (value, total) => {
     if (!total || total === 0) return '0%'
-    return `${((value / total) * 100).toFixed(1)}%`
+    const percentage = ((value / total) * 100)
+    if (isNaN(percentage) || !isFinite(percentage)) return '0%'
+    return `${percentage.toFixed(1)}%`
   }
 
   const formatDuration = (seconds) => {
@@ -782,6 +769,7 @@ export default function Dashboard() {
                 stacked={true}
                 colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
                 formatTooltip={(value) => formatTime(value)}
+                formatXAxis={(hour) => formatHour(hour)}
               />
             </div>
 
@@ -965,19 +953,18 @@ export default function Dashboard() {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Atividade Diária por Produtividade</h2>
             </div>
             {timelineData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={timelineData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                  <XAxis dataKey="date" tickFormatter={(value) => format(parseISO(value), 'dd/MM')} stroke="#6B7280" />
-                  <YAxis tickFormatter={formatTime} stroke="#6B7280" />
-                  <Tooltip formatter={(value) => formatTime(value)} labelFormatter={(label) => format(parseISO(label), 'dd/MM/yyyy')} />
-                  <Legend />
-                  <Bar dataKey="productive" stackId="a" fill={COLORS.productive} name="Produtivo" />
-                  <Bar dataKey="nonproductive" stackId="a" fill={COLORS.nonproductive} name="Não Produtivo" />
-                  <Bar dataKey="neutral" stackId="a" fill={COLORS.neutral} name="Neutro" />
-                  <Bar dataKey="idle" stackId="a" fill={COLORS.idle} name="Ocioso" />
-                </BarChart>
-              </ResponsiveContainer>
+              <AdvancedChart
+                type="bar"
+                data={timelineData}
+                xKey="date"
+                yKeys={['productive', 'nonproductive', 'neutral', 'idle']}
+                height={400}
+                stacked={true}
+                colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral, COLORS.idle]}
+                formatTooltip={(value) => formatTime(value)}
+                formatXAxis={(value) => format(parseISO(value), 'dd/MM')}
+                formatYAxis={(value) => formatTime(value)}
+              />
             ) : (
               <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
                 <div className="text-center">
