@@ -1450,7 +1450,7 @@ class LockScreen:
                         # Notificação Windows
                         show_windows_notification(
                             "HiProd - Liberação Automática",
-                            f"Máquina liberada por 30 minutos. Coordenador {manager_name} foi notificado.",
+                            f"Máquina liberada por 60 minutos. Coordenador {manager_name} foi notificado.",
                             duration=10
                         )
                     else:
@@ -1792,7 +1792,7 @@ class LockScreen:
         
         countdown_label = tk.Label(
             countdown_frame,
-            text="01:00",
+            text="01:00:00",
             font=('Segoe UI', 28, 'bold'),
             fg='#fbbf24',
             bg='#252542'
@@ -1801,7 +1801,7 @@ class LockScreen:
         
         alert_label = tk.Label(
             countdown_frame,
-            text="⏰ 1 min teste - Sem API",
+            text="⏰ 1 hora de acesso",
             font=('Segoe UI', 9),
             fg='#4ade80',
             bg='#252542'
@@ -1809,14 +1809,20 @@ class LockScreen:
         alert_label.pack()
         
         # Variáveis para controle
-        post_countdown = [60]  # 1 minuto para teste
+        post_countdown = [3600]  # 1 hora (3600 segundos)
         notifications_sent = set()
         
         def update_post_countdown():
             if post_countdown[0] > 0:
-                minutes = post_countdown[0] // 60
-                seconds = post_countdown[0] % 60
-                countdown_label.config(text=f"{minutes:02d}:{seconds:02d}")
+                total_seconds = post_countdown[0]
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                seconds = total_seconds % 60
+                # Mostrar formato HH:MM:SS quando tiver horas, senão MM:SS
+                if hours > 0:
+                    countdown_label.config(text=f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+                else:
+                    countdown_label.config(text=f"{minutes:02d}:{seconds:02d}")
                 
                 # Alertas e notificações
                 total = post_countdown[0]
@@ -1855,7 +1861,7 @@ class LockScreen:
                 popup_root.after(1000, update_post_countdown)
             else:
                 # Tempo acabou - bloquear máquina
-                countdown_label.config(text="00:00", fg='#f85149')
+                countdown_label.config(text="00:00:00", fg='#f85149')
                 alert_label.config(text="🔒 Bloqueando...", fg='#f85149')
                 show_windows_notification("HiProd - Bloqueio", "Tempo esgotado! Máquina será bloqueada.", 5)
                 
@@ -1872,9 +1878,9 @@ class LockScreen:
             result = request_manager_approval(user_id=user_id, reason=reason, manager_id=manager_id)
             
             if result and result.get('success'):
-                post_countdown[0] = 60  # Reset para 1 min (teste)
+                post_countdown[0] = 1800  # Reset para 30 minutos (1800 segundos)
                 notifications_sent.clear()
-                countdown_label.config(text="01:00", fg='#fbbf24')
+                countdown_label.config(text="00:30:00", fg='#fbbf24')
                 alert_label.config(text=f"✓ +30 min! {manager_name} notificado", fg='#4ade80')
                 show_windows_notification("HiProd", f"Mais 30 minutos concedidos. {manager_name} notificado.", 10)
             else:
@@ -2304,11 +2310,14 @@ class FloatingButton:
         # Flag para indicar que o expediente foi finalizado
         self.workday_ended = False
         
-        # Dados do Bitrix24
+        # Dados do Bitrix24 (garantir formato correto desde o início)
         self.bitrix_duration = "00:00:00"
         self.bitrix_pause_duration = "00:00:00"
         self.bitrix_status = "CLOSED"
         self.last_bitrix_update = None
+        
+        # Flag para indicar se os dados já foram buscados
+        self._data_fetched = False
         
         # Labels para atualização
         self.work_time_label = None
@@ -2322,6 +2331,77 @@ class FloatingButton:
         
         # Agendar atualização do Bitrix a cada 30 minutos (1800000 ms)
         self._schedule_bitrix_update()
+    
+    def _format_time_safe(self, time_str):
+        """Formata string de tempo garantindo formato HH:MM:SS"""
+        if not time_str or not isinstance(time_str, str):
+            return "00:00:00"
+        # Remover espaços e caracteres inválidos
+        time_str = time_str.strip()
+        # Verificar se tem formato válido
+        if ':' not in time_str:
+            return "00:00:00"
+        parts = time_str.split(':')
+        if len(parts) != 3:
+            return "00:00:00"
+        # Validar que cada parte é numérica
+        try:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        except (ValueError, IndexError):
+            return "00:00:00"
+    
+    def _update_time_labels(self):
+        """Atualiza os labels de tempo no popup de forma centralizada"""
+        if not self.popup_visible or not self.popup:
+            return
+        
+        # Calcular tempo trabalhado e pausa em tempo real se possível
+        work_time_str = self.bitrix_duration
+        pause_time_str = self.bitrix_pause_duration
+        
+        # Se temos work_start_time, calcular em tempo real (mesmo em pausa)
+        if hasattr(self, 'work_start_time') and self.work_start_time:
+            try:
+                current_dt = datetime.now()
+                total_seconds = (current_dt - self.work_start_time).total_seconds()
+                
+                # Subtrair pausas
+                base_pause = self._parse_time_to_seconds(self.bitrix_pause_duration)
+                pause_seconds = base_pause
+                
+                # Se estiver em pausa local, adicionar tempo da pausa atual
+                if self.is_paused and self.pause_start_time:
+                    self.current_pause_seconds = (current_dt - self.pause_start_time).total_seconds()
+                    pause_seconds += self.current_pause_seconds
+                
+                work_seconds = max(0, total_seconds - pause_seconds)
+                work_time_str = self._format_time(work_seconds)
+                pause_time_str = self._format_time(pause_seconds)
+            except Exception as e:
+                # Se der erro, usar dados do Bitrix
+                pass
+        
+        # Formatar e atualizar tempo trabalhado
+        if self.work_time_label:
+            formatted_time = self._format_time_safe(work_time_str)
+            self.work_time_label.config(text=formatted_time)
+        
+        # Formatar e atualizar tempo de pausa
+        if self.pause_time_label:
+            formatted_time = self._format_time_safe(pause_time_str)
+            self.pause_time_label.config(text=formatted_time)
+        
+        # Atualizar label de última atualização
+        if hasattr(self, 'update_label') and self.update_label:
+            if self.last_bitrix_update:
+                self.update_label.config(
+                    text=f"Atualizado: {self.last_bitrix_update.strftime('%H:%M')}"
+                )
+            else:
+                self.update_label.config(text="Atualizado: --:--")
     
     def _fetch_bitrix_data(self, update_ui=True):
         """Busca dados atualizados do Bitrix24"""
@@ -2403,21 +2483,17 @@ class FloatingButton:
                     self.is_paused = False
                 
                 self.last_bitrix_update = datetime.now()
+                self._data_fetched = True
                 print(f"[BITRIX] ✓ Dados atualizados às {self.last_bitrix_update.strftime('%H:%M:%S')}")
+                
+                # Garantir que os valores estão no formato correto usando função centralizada
+                self.bitrix_duration = self._format_time_safe(self.bitrix_duration)
+                self.bitrix_pause_duration = self._format_time_safe(self.bitrix_pause_duration)
                 
                 # Atualizar UI se solicitado e popup estiver visível
                 if update_ui and self.popup_visible:
                     self._update_popup_ui()
-                    # Atualizar labels de tempo
-                    if self.work_time_label:
-                        self.work_time_label.config(text=self.bitrix_duration)
-                    if self.pause_time_label:
-                        self.pause_time_label.config(text=self.bitrix_pause_duration)
-                    # Atualizar label de última atualização
-                    if hasattr(self, 'update_label') and self.update_label:
-                        self.update_label.config(
-                            text=f"Atualizado: {self.last_bitrix_update.strftime('%H:%M')}"
-                        )
+                    self._update_time_labels()
                 
         except Exception as e:
             print(f"[BITRIX] Erro ao buscar dados: {e}")
@@ -2447,13 +2523,16 @@ class FloatingButton:
         self.root.attributes('-alpha', 0.95)  # Levemente transparente
         
         # Tamanho e posição (canto inferior direito)
-        btn_size = 50
+        btn_size = 50  # Tamanho fixo e consistente do botão
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x_pos = screen_width - btn_size - 20
         y_pos = screen_height - btn_size - 80
         
         self.root.geometry(f"{btn_size}x{btn_size}+{x_pos}+{y_pos}")
+        
+        # Armazenar tamanho do botão para uso em outras funções
+        self.btn_size = btn_size
         
         # Criar frame arredondado
         self.root.configure(bg='#1a1a2e')
@@ -2462,7 +2541,7 @@ class FloatingButton:
         self.main_btn = tk.Button(
             self.root,
             text="Hi",
-            font=('Segoe UI', 14, 'bold'),
+            font=('Segoe UI', 11, 'bold'),  # Fonte menor para botão de 50x50
             bg='#4361ee',
             fg='white',
             activebackground='#3f37c9',
@@ -2498,8 +2577,11 @@ class FloatingButton:
         
         # Se popup está visível, mover junto
         if self.popup_visible and self.popup:
-            popup_x = x - 260
-            popup_y = y - 200
+            btn_size = getattr(self, 'btn_size', 50)  # Usar tamanho do botão ou padrão
+            popup_width = 240
+            popup_height = 320
+            popup_x = x - popup_width - 10
+            popup_y = y - (popup_height - btn_size)  # Ajustar posição vertical considerando tamanho do botão
             self.popup.geometry(f"+{popup_x}+{popup_y}")
     
     def _toggle_popup(self):
@@ -2514,6 +2596,18 @@ class FloatingButton:
         if self.popup:
             self.popup.destroy()
         
+        # Buscar dados atualizados do Bitrix antes de criar o popup
+        # Isso garante que os valores estejam corretos desde o início
+        if not self._data_fetched:
+            self._fetch_bitrix_data(update_ui=False)
+            # Aguardar um pouco para garantir que os dados foram processados
+            self.root.update_idletasks()
+            self.root.update()
+        
+        # Garantir que os valores estão no formato correto antes de usar
+        self.bitrix_duration = self._format_time_safe(self.bitrix_duration)
+        self.bitrix_pause_duration = self._format_time_safe(self.bitrix_pause_duration)
+        
         self.popup = tk.Toplevel(self.root)
         self.popup.title("HiProd Agent")
         self.popup.overrideredirect(True)
@@ -2522,10 +2616,11 @@ class FloatingButton:
         # Posicionar à esquerda do botão
         btn_x = self.root.winfo_x()
         btn_y = self.root.winfo_y()
+        btn_size = getattr(self, 'btn_size', 50)  # Usar tamanho do botão ou padrão
         popup_width = 240
         popup_height = 320
         popup_x = btn_x - popup_width - 10
-        popup_y = btn_y - popup_height + 50
+        popup_y = btn_y - (popup_height - btn_size)  # Ajustar posição vertical considerando tamanho do botão
         
         self.popup.geometry(f"{popup_width}x{popup_height}+{popup_x}+{popup_y}")
         self.popup.configure(bg='#1a1a2e')
@@ -2577,9 +2672,34 @@ class FloatingButton:
             bg='#252542'
         ).pack(anchor='center')
         
+        # Calcular tempo trabalhado em tempo real se possível
+        work_time_display = self.bitrix_duration
+        if hasattr(self, 'work_start_time') and self.work_start_time:
+            try:
+                current_dt = datetime.now()
+                total_seconds = (current_dt - self.work_start_time).total_seconds()
+                
+                # Subtrair pausas
+                base_pause = self._parse_time_to_seconds(self.bitrix_pause_duration)
+                pause_seconds = base_pause
+                
+                # Se estiver em pausa local, adicionar tempo da pausa atual
+                if self.is_paused and self.pause_start_time:
+                    self.current_pause_seconds = (current_dt - self.pause_start_time).total_seconds()
+                    pause_seconds += self.current_pause_seconds
+                
+                work_seconds = max(0, total_seconds - pause_seconds)
+                work_time_display = self._format_time(work_seconds)
+            except Exception as e:
+                # Se der erro, usar dados do Bitrix
+                pass
+        
+        # Usar função centralizada para formatar tempo
+        work_time_display = self._format_time_safe(work_time_display)
+        
         self.work_time_label = tk.Label(
             work_frame,
-            text=self.bitrix_duration,
+            text=work_time_display,
             font=('Segoe UI', 16, 'bold'),
             fg='#4ade80',
             bg='#252542'
@@ -2598,9 +2718,25 @@ class FloatingButton:
             bg='#252542'
         ).pack(anchor='center')
         
+        # Calcular tempo de pausa em tempo real se possível
+        pause_time_display = self.bitrix_pause_duration
+        if self.is_paused and self.pause_start_time:
+            try:
+                current_dt = datetime.now()
+                self.current_pause_seconds = (current_dt - self.pause_start_time).total_seconds()
+                base_pause = self._parse_time_to_seconds(self.bitrix_pause_duration)
+                total_pause = base_pause + self.current_pause_seconds
+                pause_time_display = self._format_time(total_pause)
+            except Exception as e:
+                # Se der erro, usar dados do Bitrix
+                pass
+        
+        # Usar função centralizada para formatar tempo
+        pause_time_display = self._format_time_safe(pause_time_display)
+        
         self.pause_time_label = tk.Label(
             pause_frame,
-            text=self.bitrix_pause_duration,
+            text=pause_time_display,
             font=('Segoe UI', 16, 'bold'),
             fg='#fbbf24',
             bg='#252542'
@@ -2700,6 +2836,24 @@ class FloatingButton:
         
         self.popup_visible = True
         self.popup.focus_set()
+        
+        # Forçar atualização da UI após criar o popup
+        # Isso garante que os valores sejam atualizados mesmo se foram buscados após a criação
+        self.popup.after(100, lambda: self._update_popup_ui_after_open())
+    
+    def _update_popup_ui_after_open(self):
+        """Atualiza a UI do popup logo após abrir, garantindo valores corretos"""
+        if not self.popup_visible or not self.popup:
+            return
+        
+        # Buscar dados atualizados
+        self._fetch_bitrix_data(update_ui=False)
+        
+        # Atualizar labels usando função centralizada
+        self._update_time_labels()
+        
+        # Atualizar status
+        self._update_popup_ui()
     
     def _schedule_close_check(self):
         """Agenda verificação para fechar popup"""
@@ -3060,7 +3214,7 @@ class FloatingButton:
         # 5. Fechar popup do botão flutuante
         self._close_popup()
         
-        # 6. Mostrar popup de finalização com contador de 30 segundos (para teste)
+        # 6. Mostrar popup de finalização com contador de 1 hora
         countdown_popup = tk.Toplevel(self.root)
         countdown_popup.title("Expediente Finalizado" if not already_closed else "Solicitar Mais Tempo")
         countdown_popup.overrideredirect(True)
@@ -3068,16 +3222,16 @@ class FloatingButton:
         
         # Ajustar tamanho do popup baseado se já foi finalizado
         if already_closed:
-            popup_width = 450
-            popup_height = 350  # Menor para apenas o botão
+            popup_width = 480
+            popup_height = 600  # Menor para apenas o botão
         else:
             popup_width = 480
             popup_height = 600  # Maior para todos os elementos
         
         screen_width = countdown_popup.winfo_screenwidth()
         screen_height = countdown_popup.winfo_screenheight()
-        x = (screen_width - popup_width) // 2
-        y = (screen_height - popup_height) // 2
+        x = (screen_width - popup_width) // 3
+        y = (screen_height - popup_height) // 3
         
         countdown_popup.geometry(f"{popup_width}x{popup_height}+{x}+{y}")
         countdown_popup.configure(bg='#1a1a2e')
@@ -3107,7 +3261,7 @@ class FloatingButton:
             
             tk.Label(
                 main_frame,
-                text="Solicite 30 segundos adicionais\nao coordenador",
+                text="Solicite 30 minutos adicionais\nao coordenador",
                 font=('Segoe UI', 13),
                 fg='#8b8b9e',
                 bg='#1a1a2e',
@@ -3121,16 +3275,16 @@ class FloatingButton:
             manager_id = manager_info.get('manager_id') if manager_info else None
             
             if manager_info and manager_id:
-                button_text = f"📧 Informar {manager_name}\nsobre 30 segundos adicionais"
+                button_text = f"📧 Informar {manager_name}\nsobre 30 minutos adicionais"
             else:
-                button_text = "📧 Informar Coordenador\nsobre 30 segundos adicionais"
+                button_text = "📧 Informar Coordenador\nsobre 30 minutos adicionais"
             
             def request_extension():
                 if self.user_id:
                     if not manager_id:
                         print("[WARN] Coordenador não encontrado. Criando tarefa para o próprio usuário.")
                     
-                    reason = f"Solicitação de 30 segundos adicionais após expediente finalizado. Usuário precisa de tempo adicional para concluir atividades. Solicitação enviada para {manager_name if manager_info else 'administrador'}"
+                    reason = f"Solicitação de 30 minutos adicionais após expediente finalizado. Usuário precisa de tempo adicional para concluir atividades. Solicitação enviada para {manager_name if manager_info else 'administrador'}"
                     
                     result = request_manager_approval(
                         user_id=self.user_id,
@@ -3286,7 +3440,7 @@ class FloatingButton:
         
         countdown_label = tk.Label(
             countdown_frame,
-            text="01:00",
+            text="01:00:00",
             font=('Segoe UI', 28, 'bold'),
             fg='#fbbf24',
             bg='#252542'
@@ -3296,7 +3450,7 @@ class FloatingButton:
         # Label de alerta que será atualizado
         alert_label = tk.Label(
             countdown_frame,
-            text="⏰ 1 minuto para teste",
+            text="⏰ 1 hora de acesso",
             font=('Segoe UI', 10),
             fg='#4ade80',
             bg='#252542'
@@ -3304,7 +3458,7 @@ class FloatingButton:
         alert_label.pack(pady=(5, 0))
         
         # Variável para controlar o contador e se já enviou a API
-        countdown_seconds = [60]  # 1 minuto para teste
+        countdown_seconds = [3600]  # 1 hora (3600 segundos)
         notifications_sent = set()  # Controle de notificações já enviadas
         api_sent = [False]  # Flag para garantir que API só seja enviada uma vez
         
@@ -3374,9 +3528,15 @@ class FloatingButton:
         
         def update_countdown():
             if countdown_seconds[0] > 0:
-                minutes = countdown_seconds[0] // 60
-                seconds = countdown_seconds[0] % 60
-                countdown_label.config(text=f"{minutes:02d}:{seconds:02d}")
+                total_seconds = countdown_seconds[0]
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                seconds = total_seconds % 60
+                # Mostrar formato HH:MM:SS quando tiver horas, senão MM:SS
+                if hours > 0:
+                    countdown_label.config(text=f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+                else:
+                    countdown_label.config(text=f"{minutes:02d}:{seconds:02d}")
                 
                 # Alertas conforme o tempo vai passando (30 minutos) com notificações Windows
                 total_seconds = countdown_seconds[0]
@@ -3419,7 +3579,7 @@ class FloatingButton:
                 countdown_popup.after(1000, update_countdown)
             else:
                 # Tempo esgotado - bloquear máquina
-                countdown_label.config(text="00:00", fg='#f85149')
+                countdown_label.config(text="00:00:00", fg='#f85149')
                 alert_label.config(
                     text="🔒 Máquina será bloqueada agora!",
                     fg='#f85149',
@@ -3468,8 +3628,8 @@ class FloatingButton:
                     manager_id=manager_id
                 )
                 if result and result.get('success'):
-                    # Resetar contador para mais 1 minuto (teste)
-                    countdown_seconds[0] = 60  # Resetar para 1 minuto (teste)
+                    # Resetar contador para mais 30 minutos
+                    countdown_seconds[0] = 1800  # Resetar para 30 minutos (1800 segundos)
                     notifications_sent.clear()  # Limpar notificações já enviadas
                     countdown_label.config(fg='#fbbf24')  # Resetar cor do contador
                     alert_label.config(
@@ -3615,8 +3775,8 @@ class FloatingButton:
             work_time_str = self.bitrix_duration
             pause_time_str = self.bitrix_pause_duration
             
-            # Se expediente está aberto e temos work_start_time, calcular em tempo real
-            if self.bitrix_status == 'OPENED' and hasattr(self, 'work_start_time') and self.work_start_time:
+            # Se temos work_start_time, calcular em tempo real (mesmo em pausa)
+            if hasattr(self, 'work_start_time') and self.work_start_time:
                 try:
                     current_dt = datetime.now()
                     total_seconds = (current_dt - self.work_start_time).total_seconds()
@@ -3637,18 +3797,22 @@ class FloatingButton:
                     # Se der erro, usar dados do Bitrix
                     pass
             
-            # Se estiver em pausa local mas não calculando em tempo real, atualizar pausa
+            # Se estiver em pausa local mas não temos work_start_time, atualizar apenas pausa
             elif self.is_paused and self.pause_start_time:
                 self.current_pause_seconds = (datetime.now() - self.pause_start_time).total_seconds()
                 base_pause = self._parse_time_to_seconds(self.bitrix_pause_duration)
                 total_pause = base_pause + self.current_pause_seconds
                 pause_time_str = self._format_time(total_pause)
             
-            # Atualizar labels se popup está visível
-            if self.popup_visible and self.work_time_label:
-                self.work_time_label.config(text=work_time_str)
-            if self.popup_visible and self.pause_time_label:
-                self.pause_time_label.config(text=pause_time_str)
+            # Atualizar labels se popup está visível usando valores calculados
+            # Formatar os valores calculados antes de atualizar
+            if self.popup_visible:
+                formatted_work = self._format_time_safe(work_time_str)
+                formatted_pause = self._format_time_safe(pause_time_str)
+                if self.work_time_label:
+                    self.work_time_label.config(text=formatted_work)
+                if self.pause_time_label:
+                    self.pause_time_label.config(text=formatted_pause)
             
             # Atualizar cor do botão principal baseado no estado
             if self.is_paused:

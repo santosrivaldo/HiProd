@@ -8,8 +8,8 @@
     ],
     "first_seen": "2025-11-27T10:02:36.504770-03:00",
     "window_title_sample": "HiProd - Cursor",
-    "usage_count": 52,
-    "last_used": "2025-12-03T11:12:18.391747-03:00"
+    "usage_count": 68,
+    "last_used": "2025-12-17T14:20:29.491185-03:00"
   },
   "applicationframehost.exe": {
     "name": "ApplicationFrameHost",
@@ -20,8 +20,8 @@
     ],
     "first_seen": "2025-11-27T10:02:46.510487-03:00",
     "window_title_sample": "WhatsApp",
-    "usage_count": 39,
-    "last_used": "2025-12-03T11:19:11.582486-03:00"
+    "usage_count": 130,
+    "last_used": "2025-12-19T09:10:58.113862-03:00"
   },
   "python.exe": {
     "name": "python",
@@ -32,8 +32,8 @@
     ],
     "first_seen": "2025-11-27T12:50:33.169489-03:00",
     "window_title_sample": "HiProd Agent - Tela de Bloqueio",
-    "usage_count": 29,
-    "last_used": "2025-12-03T14:55:43.926595-03:00"
+    "usage_count": 51,
+    "last_used": "2026-01-29T15:03:51.678097-03:00"
   },
   "bitrix24.exe": {
     "name": "Bitrix24",
@@ -44,8 +44,8 @@
     ],
     "first_seen": "2025-11-27T13:00:27.875203-03:00",
     "window_title_sample": "Como estou me sentindo hoje?",
-    "usage_count": 304,
-    "last_used": "2025-12-03T16:36:45.398739-03:00"
+    "usage_count": 543,
+    "last_used": "2026-01-29T15:08:48.107618-03:00"
   },
   "lockapp.exe": {
     "name": "LockApp",
@@ -56,8 +56,8 @@
     ],
     "first_seen": "2025-11-27T13:21:37.704731-03:00",
     "window_title_sample": "Tela de Bloqueio padrão do Windows",
-    "usage_count": 212,
-    "last_used": "2025-12-03T15:55:12.305519-03:00"
+    "usage_count": 2380,
+    "last_used": "2025-12-19T08:01:44.161466-03:00"
   },
   "searchhost.exe": {
     "name": "SearchHost",
@@ -68,8 +68,8 @@
     ],
     "first_seen": "2025-11-27T13:31:47.608526-03:00",
     "window_title_sample": "Pesquisar",
-    "usage_count": 5,
-    "last_used": "2025-12-03T10:50:57.812661-03:00"
+    "usage_count": 9,
+    "last_used": "2025-12-17T15:07:03.046939-03:00"
   },
   "mobaxterm.exe": {
     "name": "MobaXterm",
@@ -80,8 +80,8 @@
     ],
     "first_seen": "2025-11-27T14:41:11.985150-03:00",
     "window_title_sample": null,
-    "usage_count": 233,
-    "last_used": "2025-12-03T16:25:09.519004-03:00"
+    "usage_count": 234,
+    "last_used": "2025-12-19T09:11:18.491820-03:00"
   },
   "startmenuexperiencehost.exe": {
     "name": "StartMenuExperienceHost",
@@ -104,8 +104,8 @@
     ],
     "first_seen": "2025-11-28T10:10:36.788623-03:00",
     "window_title_sample": "Segurança do Windows",
-    "usage_count": 2,
-    "last_used": "2025-11-28T10:10:36.791094-03:00"
+    "usage_count": 3,
+    "last_used": "2025-12-17T11:41:03.746166-03:00"
   },
   "mstsc.exe": {
     "name": "mstsc",
@@ -116,8 +116,8 @@
     ],
     "first_seen": "2025-11-28T10:10:46.795876-03:00",
     "window_title_sample": "10.10.10.2 - Conexão de Área de Trabalho Remota",
-    "usage_count": 40,
-    "last_used": "2025-11-28T11:58:30.010396-03:00"
+    "usage_count": 61,
+    "last_used": "2025-12-17T11:44:52.132161-03:00"
   },
   "shellhost.exe": {
     "name": "ShellHost",
@@ -128,8 +128,8 @@
     ],
     "first_seen": "2025-11-28T12:01:47.463002-03:00",
     "window_title_sample": "Configurações rápidas",
-    "usage_count": 7,
-    "last_used": "2025-12-03T14:51:17.412126-03:00"
+    "usage_count": 16,
+    "last_used": "2026-01-29T15:06:46.753067-03:00"
   },
   "keepassxc.exe": {
     "name": "KeePassXC",
@@ -140,8 +140,8 @@
     ],
     "first_seen": "2025-11-28T12:02:49.771558-03:00",
     "window_title_sample": "Senhas.kdbx [Bloqueada] - KeePassXC",
-    "usage_count": 10,
-    "last_used": "2025-11-28T12:04:12.496519-03:00"
+    "usage_count": 12,
+    "last_used": "2025-12-17T15:09:27.053014-03:00"
   },
   "postman.exe": {
     "name": "Postman",
@@ -212,5 +212,76 @@
     "first_seen": "2025-12-03T16:41:11.977249-03:00",
     "window_title_sample": "Wazuh Agent Setup",
     "usage_count": 1
+  },
+  "windowsdesktop-runtime-8.0.22-win-x64 (1).exe": {
+    "name": "windowsdesktop-runtime-8.0.22-win-x64 (1)",
+    "category": "sistema",
+    "keywords": [
+      "windowsdesktop-runtime-8.0.22-win-x64 (1)",
+      "windowsdesktop-runtime-8.0.22-win-x64 (1).exe"
+    ],
+    "first_seen": "2025-12-17T10:28:27.428541-03:00",
+    "window_title_sample": "Instalador do Microsoft Windows Desktop Runtime - 8.0.22 (x64)",
+    "usage_count": 2,
+    "last_used": "2025-12-17T10:28:27.430095-03:00"
+  },
+  "autotef.service.exe": {
+    "name": "AutoTEF.Service",
+    "category": "sistema",
+    "keywords": [
+      "autotef.service",
+      "autotef.service.exe"
+    ],
+    "first_seen": "2025-12-17T10:36:07.390536-03:00",
+    "window_title_sample": "AutoTEF.Service.exe",
+    "usage_count": 2,
+    "last_used": "2025-12-17T10:36:07.392422-03:00"
+  },
+  "aspnetcoresharedframeworkbundle-x64.exe": {
+    "name": "AspNetCoreSharedFrameworkBundle-x64",
+    "category": "sistema",
+    "keywords": [
+      "aspnetcoresharedframeworkbundle-x64",
+      "aspnetcoresharedframeworkbundle-x64.exe"
+    ],
+    "first_seen": "2025-12-17T10:36:32.648999-03:00",
+    "window_title_sample": null,
+    "usage_count": 2,
+    "last_used": "2025-12-17T10:36:32.650402-03:00"
+  },
+  "olk.exe": {
+    "name": "olk",
+    "category": "sistema",
+    "keywords": [
+      "olk",
+      "olk.exe"
+    ],
+    "first_seen": "2025-12-17T10:44:11.624258-03:00",
+    "window_title_sample": "Outlook",
+    "usage_count": 4,
+    "last_used": "2025-12-17T10:44:35.439146-03:00"
+  },
+  "gethelp.exe": {
+    "name": "GetHelp",
+    "category": "sistema",
+    "keywords": [
+      "gethelp",
+      "gethelp.exe"
+    ],
+    "first_seen": "2025-12-19T09:20:18.389222-03:00",
+    "window_title_sample": "Obter Ajuda",
+    "usage_count": 1
+  },
+  "burpsuitecommunity.exe": {
+    "name": "BurpSuiteCommunity",
+    "category": "sistema",
+    "keywords": [
+      "burpsuitecommunity",
+      "burpsuitecommunity.exe"
+    ],
+    "first_seen": "2026-01-29T15:04:01.680436-03:00",
+    "window_title_sample": "Exit Burp",
+    "usage_count": 23,
+    "last_used": "2026-01-29T15:08:27.127537-03:00"
   }
 }

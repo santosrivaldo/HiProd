@@ -53,6 +53,19 @@ def check_stop_flag():
     except:
         pass
     return AGENT_SHOULD_STOP
+
+def check_pause_flag():
+    """Verifica se existe flag de pausa (intervalo)"""
+    try:
+        flag_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.agent_pause_flag')
+        if os.path.exists(flag_file):
+            with open(flag_file, 'r') as f:
+                content = f.read().strip()
+                if content == 'PAUSED':
+                    return True
+    except:
+        pass
+    return False
 try:
     import pygetwindow as gw
     import pyperclip
@@ -1484,6 +1497,11 @@ def enviar_atividade(registro):
         safe_print("[AGENT] Agente deve parar - não enviando atividade")
         return False
     
+    # Verificar se agente está em pausa (intervalo)
+    if check_pause_flag():
+        safe_print("[AGENT] Agente em pausa (intervalo) - não enviando atividade")
+        return False
+    
     try:
         resp = requests.post(ATIVIDADE_URL,
                              json=registro,
@@ -1736,6 +1754,14 @@ def main():
             safe_print("[AGENT] Agente encerrado com sucesso.")
             return  # Encerrar o agente
         
+        # Verificar flag de pausa (intervalo)
+        if check_pause_flag():
+            # Agente está em pausa - aguardar sem capturar atividades
+            if not IS_EXECUTABLE:
+                safe_print("[AGENT] ⏸ Agente em pausa (intervalo) - aguardando retomada...")
+            time.sleep(MONITOR_INTERVAL)
+            continue  # Pular este ciclo e não capturar atividades
+        
         current_window_info = get_active_window_info()
         current_usuario_nome = get_logged_user()
 
@@ -1780,8 +1806,8 @@ def main():
                 usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
             verificacao_contador = 0
         
-        # Verificar presença facial a cada 1 minuto
-        if FACE_DETECTION_AVAILABLE and presence_tracker is not None:
+        # Verificar presença facial a cada 1 minuto (apenas se não estiver em pausa)
+        if FACE_DETECTION_AVAILABLE and presence_tracker is not None and not check_pause_flag():
             face_check_contador += 1
             if face_check_contador >= FACE_CHECK_INTERVAL:
                 try:
@@ -1814,11 +1840,16 @@ def main():
                         usuario_monitorado_id = get_usuario_monitorado_id(current_usuario_nome)
                     
                     if usuario_monitorado_id is not None and usuario_monitorado_id != 0:
-                        enviar_face_presence_check(
-                            usuario_monitorado_id=usuario_monitorado_id,
-                            face_detected=face_detected,
-                            presence_time=total_presence_time
-                        )
+                        # Verificar se não está em pausa antes de enviar verificação facial
+                        if not check_pause_flag():
+                            enviar_face_presence_check(
+                                usuario_monitorado_id=usuario_monitorado_id,
+                                face_detected=face_detected,
+                                presence_time=total_presence_time
+                            )
+                        else:
+                            if not IS_EXECUTABLE:
+                                safe_print("[FACE-CHECK] ⏸ Agente em pausa - não enviando verificação facial")
                     else:
                         if not IS_EXECUTABLE:
                             safe_print(f"[FACE-CHECK] ⚠ Não foi possível enviar verificação: usuário {current_usuario_nome} não encontrado ou ID inválido")
