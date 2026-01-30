@@ -13,6 +13,9 @@ const hmrConfig = IS_PROXY
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom'] // Garantir que há apenas uma cópia do React
+  },
   server: {
     host: '0.0.0.0',
     port: 5000,
