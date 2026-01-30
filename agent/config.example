@@ -1,6 +1,13 @@
 # Configuração do HiProd Agent
-# Copie este arquivo para .env e configure as variáveis
-# IMPORTANTE: Renomeie este arquivo para .env (sem o "example")
+# 
+# ⚠️ IMPORTANTE: Este arquivo é um TEMPLATE
+# 
+# Na primeira execução, o agente criará automaticamente um arquivo .env
+# baseado neste template. Você só precisa editar o arquivo .env criado.
+# 
+# Se preferir criar manualmente:
+# 1. Copie este arquivo para .env (renomeie removendo "example")
+# 2. Edite o arquivo .env com suas credenciais reais
 
 # ========================================
 # CONFIGURAÇÕES OBRIGATÓRIAS
@@ -12,12 +19,13 @@ API_URL=http://192.241.155.236:8010
 
 # Credenciais do agente para autenticação (obrigatório)
 # Estas credenciais são usadas para o agent se autenticar na API
-USER_NAME=connect
-USER_PASSWORD=L@undry60
+# ⚠️ IMPORTANTE: Substitua pelos seus valores reais!
+USER_NAME=SEU_USUARIO_AQUI
+USER_PASSWORD=SUA_SENHA_AQUI
 
 # Alternativamente, você pode usar:
-# AGENT_USER=connect
-# AGENT_PASS=L@undry60
+# AGENT_USER=SEU_USUARIO_AQUI
+# AGENT_PASS=SUA_SENHA_AQUI
 
 # ========================================
 # CONFIGURAÇÕES DE MONITORAMENTO

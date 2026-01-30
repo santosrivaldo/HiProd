@@ -12,8 +12,61 @@ import sys
 import logging
 from urllib.parse import urlparse
 
-# Detectar se está rodando como executável (precisa estar antes de safe_print)
+# Detectar se está rodando como executável (precisa estar antes de outras funções)
 IS_EXECUTABLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+def _get_base_directory():
+    """Retorna o diretório base (do executável ou do script)"""
+    if IS_EXECUTABLE:
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
+
+def _create_env_from_example():
+    """Cria arquivo .env automaticamente a partir do config.example se não existir"""
+    base_dir = _get_base_directory()
+    env_path = os.path.join(base_dir, '.env')
+    example_path = os.path.join(base_dir, 'config.example')
+    
+    # Se .env já existe, não fazer nada
+    if os.path.exists(env_path):
+        return env_path
+    
+    # Se config.example existe, copiar para .env
+    if os.path.exists(example_path):
+        try:
+            import shutil
+            shutil.copy2(example_path, env_path)
+            if not IS_EXECUTABLE:
+                print(f"[INFO] Arquivo .env criado automaticamente a partir de config.example")
+                print(f"[INFO] Localização: {env_path}")
+                print(f"[INFO] ⚠️  IMPORTANTE: Edite o arquivo .env e configure suas credenciais!")
+                print(f"[INFO]    - USER_NAME=seu_usuario")
+                print(f"[INFO]    - USER_PASSWORD=sua_senha")
+                print(f"[INFO]    - API_URL=http://seu-servidor:8010")
+            return env_path
+        except Exception as e:
+            if not IS_EXECUTABLE:
+                print(f"[WARN] Não foi possível criar .env automaticamente: {e}")
+    
+    return env_path
+
+# Carregar variáveis de ambiente
+try:
+    from dotenv import load_dotenv
+    
+    # Criar .env automaticamente se não existir
+    env_path = _create_env_from_example()
+    
+    # Carregar variáveis de ambiente
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+    else:
+        # Tentar carregar do diretório atual também
+        load_dotenv()
+except ImportError:
+    # Se python-dotenv não estiver disponível, usar apenas variáveis de ambiente do sistema
+    pass
 
 def safe_print(*args, **kwargs):
     """Print seguro - completamente silencioso quando executável"""
@@ -74,20 +127,15 @@ except ImportError:
     pyperclip = None
 
 # ========================================
-# CONFIGURAÇÕES HARDCODED - Para compilação em executável
+# CONFIGURAÇÕES - Carregadas de variáveis de ambiente
 # ========================================
-# IMPORTANTE: Estas configurações são hardcoded porque o agent será compilado
-# em executável. Altere os valores abaixo antes de compilar.
+# IMPORTANTE: Configure as variáveis de ambiente ou crie um arquivo .env
+# Veja config.example para exemplo de configuração
 
-# URL da API do HiProd
-API_BASE_URL = 'http://192.241.155.236:8010'
-LOGIN_URL = f"{API_BASE_URL}/login"
+# URL da API do HiProd (opcional - tem valor padrão)
+API_BASE_URL = os.getenv('API_URL', 'http://192.241.155.236:8010')
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
-
-# Credenciais do agente para autenticação na API
-AGENT_USER = "connect"
-AGENT_PASS = "L@undry60"
 
 # Configurações de monitoramento
 SCREENSHOT_ENABLED = True      # Habilitar captura de screenshots (futuro)
@@ -498,7 +546,7 @@ DOMAIN_DATABASE = {
     '10.0.': {'category': 'desenvolvimento'},     # Rede local
 }
 
-JWT_TOKEN = None
+# Não há mais autenticação - a API identifica pelo nome do usuário do Windows
 
 # Configurar logging baseado no modo de execução
 if IS_EXECUTABLE:
@@ -526,12 +574,20 @@ else:
     )
 
 
-def get_headers():
-    global JWT_TOKEN
-    return {
-        "Authorization": f"Bearer {JWT_TOKEN}" if JWT_TOKEN else "",
+def get_headers(usuario_nome=None):
+    """
+    Retorna headers para requisições HTTP.
+    Inclui o nome do usuário do Windows como identificação.
+    """
+    headers = {
         "Content-Type": "application/json"
     }
+    
+    # Adicionar nome do usuário como identificação (se fornecido)
+    if usuario_nome:
+        headers["X-User-Name"] = usuario_nome
+    
+    return headers
 
 def load_learned_applications():
     """Carrega aplicações aprendidas do arquivo JSON"""
@@ -703,24 +759,8 @@ def categorize_domain(domain):
     return {'category': 'web'}
 
 
-def login():
-    """Faz login e obtém o token JWT"""
-    global JWT_TOKEN
-    try:
-        resp = requests.post(LOGIN_URL,
-                             json={
-                                 "nome": AGENT_USER,
-                                 "senha": AGENT_PASS
-                             })
-        if resp.status_code == 200:
-            JWT_TOKEN = resp.json().get("token")
-            safe_print(f"[OK] Login bem-sucedido. Token obtido.")
-        else:
-            safe_print(f"[ERROR] Erro no login: {resp.status_code} {resp.text}")
-            JWT_TOKEN = None
-    except Exception as e:
-        safe_print(f"[ERROR] Falha ao conectar no login: {e}")
-        JWT_TOKEN = None
+# Função login() removida - não há mais autenticação necessária
+# A API identifica o usuário pelo nome do Windows enviado no header X-User-Name
 
 
 def get_logged_user():
@@ -1382,7 +1422,7 @@ def get_usuario_monitorado_id(usuario_nome):
     try:
         resp = requests.get(USUARIOS_MONITORADOS_URL,
                             params={'nome': usuario_nome},
-                            headers=get_headers())
+                            headers=get_headers(usuario_nome))
         if resp.status_code == 200:
             data = resp.json()
             user_id = data.get('id')
@@ -1393,9 +1433,8 @@ def get_usuario_monitorado_id(usuario_nome):
                 safe_print(f"[OK] Usuário monitorado encontrado: {usuario_nome} (ID: {user_id})")
             return user_id
         elif resp.status_code == 401:
-            safe_print("[WARN] Token expirado, renovando...")
-            login()
-            return get_usuario_monitorado_id(usuario_nome)
+            safe_print("[ERROR] Erro de autenticação na API. Verifique a configuração.")
+            return None
         else:
             safe_print(
                 f"[ERROR] Erro ao buscar usuário monitorado: {resp.status_code} {resp.text}"
@@ -1406,11 +1445,14 @@ def get_usuario_monitorado_id(usuario_nome):
         return None
 
 
-def verificar_usuario_ativo(usuario_id):
+def verificar_usuario_ativo(usuario_id, usuario_nome=None):
     """Verifica se o usuário monitorado ainda existe e está ativo"""
     try:
+        # Se não tiver nome, tentar obter do sistema
+        if not usuario_nome:
+            usuario_nome = get_logged_user()
         resp = requests.get(USUARIOS_MONITORADOS_URL,
-                            headers=get_headers())
+                            headers=get_headers(usuario_nome))
         if resp.status_code == 200:
             usuarios = resp.json()
             for usuario in usuarios:
@@ -1428,7 +1470,7 @@ def obter_configuracoes_horario_usuario(usuario_nome):
     try:
         resp = requests.get(USUARIOS_MONITORADOS_URL,
                             params={'nome': usuario_nome},
-                            headers=get_headers())
+                            headers=get_headers(usuario_nome))
         if resp.status_code == 200:
             data = resp.json()
             return {
@@ -1512,9 +1554,9 @@ def enviar_atividade(registro):
             url_info = f" | URL: {registro.get('url', 'N/A')}" if registro.get('url') else ""
             safe_print(f"[OK] Atividade enviada: {registro['active_window']}{domain_info}{page_info}{url_info}")
         elif resp.status_code == 401:
-            safe_print("[WARN] Token expirado, renovando...")
-            login()
-            enviar_atividade(registro)
+            safe_print("[ERROR] Erro de autenticação na API. Verifique a configuração.")
+            _save_offline(registro)
+            return False
         elif resp.status_code == 404 and "Usuário monitorado não encontrado" in resp.text:
             safe_print(f"[ERROR] Usuário monitorado ID {registro['usuario_monitorado_id']} não encontrado!")
             safe_print("[INFO] Tentando recriar usuário monitorado...")
@@ -1591,10 +1633,8 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
                 safe_print(f"[FACE-CHECK] {status} | Usuário ID: {usuario_monitorado_id} | Tempo: {presence_time/60:.1f}min | ✅ Enviado")
             return True
         elif resp.status_code == 401:
-            safe_print("[WARN] Token expirado ao enviar verificação facial, renovando...")
-            login()
-            # Tentar novamente
-            return enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_time)
+            safe_print("[ERROR] Erro de autenticação na API ao enviar verificação facial.")
+            return False
         elif resp.status_code == 404:
             if not IS_EXECUTABLE:
                 error_msg = resp.text if hasattr(resp, 'text') else 'N/A'
@@ -1690,13 +1730,12 @@ def main():
     
     # Mostrar configurações carregadas (sem senha)
     safe_print(f"[CONFIG] API_URL: {API_BASE_URL}")
-    safe_print(f"[CONFIG] USER_NAME: {AGENT_USER}")
+    safe_print(f"[CONFIG] USER_NAME: {AGENT_USER if AGENT_USER else 'NÃO CONFIGURADO'}")
     safe_print(f"[CONFIG] MONITOR_INTERVAL: {MONITOR_INTERVAL}s")
     safe_print(f"[CONFIG] IDLE_THRESHOLD: {IDLE_THRESHOLD}s")
     safe_print(f"[CONFIG] Aplicações aprendidas: {len(_LEARNED_APPLICATIONS)}")
     
-    # Primeiro login
-    login()
+    # Não há mais autenticação necessária - a API identifica pelo nome do usuário
 
     last_usuario_nome = get_logged_user()
     usuario_monitorado_id = get_usuario_monitorado_id(last_usuario_nome)

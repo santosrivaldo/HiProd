@@ -199,12 +199,14 @@ class AgentBuilder:
 
 ## Como usar:
 
-1. **Configuração:**
-   - Copie `config.example` para `.env`
-   - Edite `.env` com suas configurações:
-     - API_URL: URL da API do HiProd
-     - USER_NAME: Seu nome de usuário
-     - USER_PASSWORD: Sua senha
+1. **Configuração (PRIMEIRA VEZ):**
+   - Na primeira execução, o arquivo `.env` será criado automaticamente
+   - Abra o arquivo `.env` que foi criado
+   - Edite as seguintes linhas com suas credenciais:
+     - USER_NAME=SEU_USUARIO_AQUI → Substitua por seu usuário
+     - USER_PASSWORD=SUA_SENHA_AQUI → Substitua por sua senha
+     - API_URL=http://192.241.155.236:8010 → Ajuste se necessário
+   - Salve o arquivo e execute novamente
 
 2. **Execução:**
    - Execute `{exe_name}`

@@ -1105,6 +1105,319 @@ def get_all_monitors():
     
     return monitors
 
+class Popup:
+    """
+    Classe única para criar popups com layout consistente
+    Reutilizável para todos os tipos de popup no sistema
+    """
+    
+    # Cores padrão do tema
+    BG_COLOR = '#1a1a2e'
+    FRAME_COLOR = '#252542'
+    TEXT_PRIMARY = '#ffffff'
+    TEXT_SECONDARY = '#8b8b9e'
+    ACCENT_GREEN = '#4ade80'
+    ACCENT_YELLOW = '#fbbf24'
+    ACCENT_ORANGE = '#f59e0b'
+    ACCENT_RED = '#dc2626'
+    ACCENT_BLUE = '#4361ee'
+    SEPARATOR_COLOR = '#3d3d5c'
+    
+    def __init__(self, parent=None, title="HiProd", width=240, height=320, position='auto'):
+        """
+        Cria um popup com layout padrão
+        
+        Args:
+            parent: Janela pai (Tk ou Toplevel)
+            title: Título do popup
+            width: Largura do popup
+            height: Altura do popup
+            position: Posição ('auto', 'center', 'top-right', ou tupla (x, y))
+        """
+        # Criar janela
+        if parent:
+            self.root = tk.Toplevel(parent)
+        else:
+            self.root = tk.Toplevel() if tk._default_root else tk.Tk()
+        
+        self.root.title(title)
+        self.root.overrideredirect(True)
+        self.root.attributes('-topmost', True)
+        self.root.attributes('-alpha', 0.95)
+        self.root.configure(bg=self.BG_COLOR)
+        
+        # Configurar tamanho e posição
+        self.width = width
+        self.height = height
+        self._set_position(position)
+        
+        # Frame principal
+        self.main_frame = tk.Frame(self.root, bg=self.BG_COLOR)
+        self.main_frame.pack(fill='both', expand=True, padx=12, pady=12)
+        
+        # Componentes do popup
+        self.header_frame = None
+        self.content_frame = None
+        self.buttons_frame = None
+        self.widgets = {}  # Dicionário para armazenar widgets criados
+        
+    def _set_position(self, position):
+        """Define a posição do popup"""
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        if position == 'center':
+            x = (screen_width - self.width) // 2
+            y = (screen_height - self.height) // 2
+        elif position == 'top-right':
+            x = screen_width - self.width - 20
+            y = 100
+        elif isinstance(position, tuple):
+            x, y = position
+        else:  # 'auto' - posicionar baseado no parent
+            if hasattr(self.root, 'winfo_parent'):
+                try:
+                    parent = self.root.nametowidget(self.root.winfo_parent())
+                    btn_x = parent.winfo_x()
+                    btn_y = parent.winfo_y()
+                    btn_size = getattr(parent, 'btn_size', 70) if hasattr(parent, 'btn_size') else 70
+                    x = btn_x - self.width - 10
+                    y = btn_y - (self.height - btn_size)
+                except:
+                    x = screen_width - self.width - 20
+                    y = screen_height - self.height - 80
+            else:
+                x = screen_width - self.width - 20
+                y = screen_height - self.height - 80
+        
+        self.root.geometry(f"{self.width}x{self.height}+{x}+{y}")
+    
+    def add_header(self, title, subtitle=None, icon=None):
+        """Adiciona cabeçalho ao popup"""
+        if self.header_frame:
+            self.header_frame.destroy()
+        
+        self.header_frame = tk.Frame(self.main_frame, bg=self.BG_COLOR)
+        self.header_frame.pack(fill='x', pady=(0, 8))
+        
+        if icon:
+            tk.Label(
+                self.header_frame,
+                text=icon,
+                font=('Segoe UI', 28),
+                fg=self.ACCENT_ORANGE,
+                bg=self.BG_COLOR
+            ).pack()
+        
+        tk.Label(
+            self.header_frame,
+            text=title,
+            font=('Segoe UI', 12, 'bold'),
+            fg=self.TEXT_PRIMARY,
+            bg=self.BG_COLOR
+        ).pack()
+        
+        if subtitle:
+            tk.Label(
+                self.header_frame,
+                text=subtitle,
+                font=('Segoe UI', 9),
+                fg=self.TEXT_SECONDARY,
+                bg=self.BG_COLOR
+            ).pack(pady=(2, 0))
+        
+        return self.header_frame
+    
+    def add_separator(self):
+        """Adiciona separador visual"""
+        tk.Frame(self.main_frame, height=1, bg=self.SEPARATOR_COLOR).pack(fill='x', pady=6)
+    
+    def add_content_frame(self):
+        """Cria e retorna um frame de conteúdo"""
+        if self.content_frame:
+            self.content_frame.destroy()
+        
+        self.content_frame = tk.Frame(self.main_frame, bg=self.BG_COLOR)
+        self.content_frame.pack(fill='both', expand=True)
+        return self.content_frame
+    
+    def add_info_box(self, label, value, color=None):
+        """Adiciona uma caixa de informação (label + valor)"""
+        if not self.content_frame:
+            self.add_content_frame()
+        
+        info_frame = tk.Frame(self.content_frame, bg=self.FRAME_COLOR, padx=12, pady=8)
+        info_frame.pack(fill='x', pady=(0, 6))
+        
+        tk.Label(
+            info_frame,
+            text=label,
+            font=('Segoe UI', 9),
+            fg=self.TEXT_SECONDARY,
+            bg=self.FRAME_COLOR
+        ).pack(anchor='w')
+        
+        tk.Label(
+            info_frame,
+            text=value,
+            font=('Segoe UI', 16, 'bold'),
+            fg=color or self.ACCENT_GREEN,
+            bg=self.FRAME_COLOR
+        ).pack(anchor='w')
+        
+        return info_frame
+    
+    def add_button(self, text, command, bg_color=None, is_primary=True):
+        """Adiciona um botão ao popup"""
+        if not self.buttons_frame:
+            self.buttons_frame = tk.Frame(self.main_frame, bg=self.BG_COLOR)
+            self.buttons_frame.pack(fill='x', pady=(10, 0))
+        
+        if bg_color is None:
+            bg_color = self.ACCENT_RED if is_primary else self.ACCENT_ORANGE
+        
+        active_bg = self._darken_color(bg_color)
+        
+        btn = tk.Button(
+            self.buttons_frame,
+            text=text,
+            font=('Segoe UI', 12, 'bold'),
+            bg=bg_color,
+            fg='white',
+            activebackground=active_bg,
+            activeforeground='white',
+            relief='flat',
+            cursor='hand2',
+            command=command,
+            pady=12
+        )
+        btn.pack(fill='x', pady=(0, 8))
+        
+        # Hover effect
+        def on_enter(e):
+            btn.config(bg=active_bg)
+        def on_leave(e):
+            btn.config(bg=bg_color)
+        btn.bind('<Enter>', on_enter)
+        btn.bind('<Leave>', on_leave)
+        
+        return btn
+    
+    def add_label(self, text, font_size=9, color=None, bg=None):
+        """Adiciona um label ao conteúdo"""
+        if not self.content_frame:
+            self.add_content_frame()
+        
+        label = tk.Label(
+            self.content_frame,
+            text=text,
+            font=('Segoe UI', font_size),
+            fg=color or self.TEXT_SECONDARY,
+            bg=bg or self.BG_COLOR
+        )
+        label.pack(pady=4)
+        return label
+    
+    def add_countdown(self, initial_seconds, on_finish=None, update_callback=None):
+        """Adiciona um contador regressivo"""
+        if not self.content_frame:
+            self.add_content_frame()
+        
+        countdown_frame = tk.Frame(self.content_frame, bg=self.FRAME_COLOR, padx=15, pady=10)
+        countdown_frame.pack(fill='x', pady=(0, 10))
+        
+        tk.Label(
+            countdown_frame,
+            text="Tempo restante:",
+            font=('Segoe UI', 9),
+            fg=self.TEXT_SECONDARY,
+            bg=self.FRAME_COLOR
+        ).pack()
+        
+        countdown_label = tk.Label(
+            countdown_frame,
+            text="00:00:00",
+            font=('Segoe UI', 28, 'bold'),
+            fg=self.ACCENT_YELLOW,
+            bg=self.FRAME_COLOR
+        )
+        countdown_label.pack()
+        
+        alert_label = tk.Label(
+            countdown_frame,
+            text="",
+            font=('Segoe UI', 9),
+            fg=self.ACCENT_GREEN,
+            bg=self.FRAME_COLOR
+        )
+        alert_label.pack()
+        
+        # Armazenar referências
+        self.widgets['countdown_label'] = countdown_label
+        self.widgets['alert_label'] = alert_label
+        self.widgets['countdown_seconds'] = [initial_seconds]
+        
+        def update_countdown():
+            if self.widgets['countdown_seconds'][0] > 0:
+                total_seconds = self.widgets['countdown_seconds'][0]
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                seconds = total_seconds % 60
+                
+                if hours > 0:
+                    time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    time_str = f"{minutes:02d}:{seconds:02d}"
+                
+                countdown_label.config(text=time_str)
+                
+                if update_callback:
+                    update_callback(total_seconds, countdown_label, alert_label)
+                
+                self.widgets['countdown_seconds'][0] -= 1
+                self.root.after(1000, update_countdown)
+            else:
+                countdown_label.config(text="00:00:00", fg=self.ACCENT_RED)
+                if on_finish:
+                    on_finish()
+        
+        self.root.after(1000, update_countdown)
+        return countdown_label, alert_label
+    
+    def _darken_color(self, color):
+        """Escurece uma cor hex para efeito hover"""
+        # Simplificado - retorna uma cor mais escura
+        color_map = {
+            '#dc2626': '#b91c1c',  # Red
+            '#f59e0b': '#d97706',  # Orange
+            '#22c55e': '#16a34a',  # Green
+            '#4361ee': '#3f37c9',  # Blue
+        }
+        return color_map.get(color, color)
+    
+    def show(self):
+        """Mostra o popup"""
+        self.root.update_idletasks()
+        self.root.update()
+        self.root.focus_force()
+        self.root.lift()
+        try:
+            self.root.deiconify()
+        except:
+            pass
+    
+    def destroy(self):
+        """Destrói o popup"""
+        if self.root:
+            try:
+                self.root.destroy()
+            except:
+                pass
+    
+    def close(self):
+        """Alias para destroy"""
+        self.destroy()
+
 class LockScreen:
     """Tela de bloqueio estilo Windows para um monitor específico"""
     
@@ -1678,8 +1991,19 @@ class LockScreen:
         
         print("[INFO] Telas de bloqueio ocultadas - Expediente iniciado")
         
-        # Criar botão flutuante
+        # Criar ou reutilizar botão flutuante
         user_id = self.shared_state.get('bitrix_user_id')
+        
+        # Verificar se já existe um botão no shared_state
+        existing_button = self.shared_state.get('floating_button')
+        if existing_button and hasattr(existing_button, 'root') and existing_button.root:
+            try:
+                existing_button.root.winfo_exists()
+                print("[INFO] Botão flutuante já existe no shared_state, reutilizando...")
+                return  # Já existe, não criar novo
+            except:
+                pass  # Botão inválido, criar novo
+        
         print("[INFO] Criando botão flutuante do HiProd Agent...")
         self.shared_state['floating_button'] = create_floating_button(user_id=user_id)
         print("[INFO] ✓ Botão flutuante criado!")
@@ -1687,6 +2011,14 @@ class LockScreen:
     def show_all_lock_screens(self):
         """Mostra todas as telas de bloqueio novamente"""
         self.shared_state['lock_screen_active'] = True
+        
+        # Fechar popup do botão flutuante se estiver aberto (mas manter o botão)
+        floating_button = self.shared_state.get('floating_button')
+        if floating_button and hasattr(floating_button, 'popup_visible') and floating_button.popup_visible:
+            try:
+                floating_button._close_popup()
+            except:
+                pass
         
         for window in self.shared_state.get('windows', []):
             try:
@@ -2514,6 +2846,31 @@ class FloatingButton:
     
     def _create_floating_button(self):
         """Cria o botão flutuante"""
+        # Verificar se já existe um root válido
+        if hasattr(self, 'root') and self.root:
+            try:
+                # Verificar se o root ainda é válido
+                self.root.winfo_exists()
+                # Verificar se já tem o tamanho correto
+                current_geometry = self.root.geometry()
+                if '70x70' in current_geometry:
+                    print("[INFO] Botão flutuante já existe com tamanho correto, reutilizando...")
+                    return
+                else:
+                    # Tamanho incorreto, corrigir
+                    print(f"[INFO] Botão flutuante existe mas com tamanho incorreto ({current_geometry}), corrigindo...")
+                    btn_size = 70
+                    screen_width = self.root.winfo_screenwidth()
+                    screen_height = self.root.winfo_screenheight()
+                    x_pos = screen_width - btn_size - 20
+                    y_pos = screen_height - btn_size - 80
+                    self.root.geometry(f"{btn_size}x{btn_size}+{x_pos}+{y_pos}")
+                    self.btn_size = btn_size
+                    return
+            except:
+                # Root foi destruído, criar novo
+                self.root = None
+        
         self.root = tk.Toplevel() if tk._default_root else tk.Tk()
         
         # Configurar janela flutuante
@@ -2523,7 +2880,7 @@ class FloatingButton:
         self.root.attributes('-alpha', 0.95)  # Levemente transparente
         
         # Tamanho e posição (canto inferior direito)
-        btn_size = 50  # Tamanho fixo e consistente do botão
+        btn_size = 70  # Tamanho maior e mais visível do botão
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x_pos = screen_width - btn_size - 20
@@ -2537,29 +2894,31 @@ class FloatingButton:
         # Criar frame arredondado
         self.root.configure(bg='#1a1a2e')
         
-        # Botão principal
-        self.main_btn = tk.Button(
-            self.root,
-            text="Hi",
-            font=('Segoe UI', 11, 'bold'),  # Fonte menor para botão de 50x50
-            bg='#4361ee',
-            fg='white',
-            activebackground='#3f37c9',
-            activeforeground='white',
-            relief='flat',
-            cursor='hand2',
-            command=self._toggle_popup,
-            bd=0
-        )
-        self.main_btn.pack(expand=True, fill='both', padx=2, pady=2)
-        
-        # Permitir arrastar o botão
-        self.main_btn.bind('<Button-1>', self._start_drag)
-        self.main_btn.bind('<B1-Motion>', self._drag)
-        
-        # Variáveis para arrastar
-        self._drag_x = 0
-        self._drag_y = 0
+        # Verificar se o botão principal já existe
+        if not hasattr(self, 'main_btn') or not self.main_btn:
+            # Botão principal
+            self.main_btn = tk.Button(
+                self.root,
+                text="Hi",
+                font=('Segoe UI', 14, 'bold'),  # Fonte maior para botão de 70x70
+                bg='#4361ee',
+                fg='white',
+                activebackground='#3f37c9',
+                activeforeground='white',
+                relief='flat',
+                cursor='hand2',
+                command=self._toggle_popup,
+                bd=0
+            )
+            self.main_btn.pack(expand=True, fill='both', padx=2, pady=2)
+            
+            # Permitir arrastar o botão
+            self.main_btn.bind('<Button-1>', self._start_drag)
+            self.main_btn.bind('<B1-Motion>', self._drag)
+            
+            # Variáveis para arrastar
+            self._drag_x = 0
+            self._drag_y = 0
         
         # Iniciar atualização do cronômetro
         self._update_timer()
@@ -2576,13 +2935,13 @@ class FloatingButton:
         self.root.geometry(f"+{x}+{y}")
         
         # Se popup está visível, mover junto
-        if self.popup_visible and self.popup:
-            btn_size = getattr(self, 'btn_size', 50)  # Usar tamanho do botão ou padrão
-            popup_width = 240
-            popup_height = 320
+        if self.popup_visible and self.popup and hasattr(self.popup, 'root'):
+            btn_size = getattr(self, 'btn_size', 70)
+            popup_width = self.popup.width
+            popup_height = self.popup.height
             popup_x = x - popup_width - 10
-            popup_y = y - (popup_height - btn_size)  # Ajustar posição vertical considerando tamanho do botão
-            self.popup.geometry(f"+{popup_x}+{popup_y}")
+            popup_y = y - (popup_height - btn_size)
+            self.popup.root.geometry(f"+{popup_x}+{popup_y}")
     
     def _toggle_popup(self):
         """Abre ou fecha o popup"""
@@ -2592,15 +2951,17 @@ class FloatingButton:
             self._open_popup()
     
     def _open_popup(self):
-        """Abre o popup com informações e controles"""
+        """Abre o popup com informações e controles usando a classe Popup unificada"""
         if self.popup:
-            self.popup.destroy()
+            try:
+                if hasattr(self.popup, 'destroy'):
+                    self.popup.destroy()
+            except:
+                pass
         
         # Buscar dados atualizados do Bitrix antes de criar o popup
-        # Isso garante que os valores estejam corretos desde o início
         if not self._data_fetched:
             self._fetch_bitrix_data(update_ui=False)
-            # Aguardar um pouco para garantir que os dados foram processados
             self.root.update_idletasks()
             self.root.update()
         
@@ -2608,26 +2969,17 @@ class FloatingButton:
         self.bitrix_duration = self._format_time_safe(self.bitrix_duration)
         self.bitrix_pause_duration = self._format_time_safe(self.bitrix_pause_duration)
         
-        self.popup = tk.Toplevel(self.root)
-        self.popup.title("HiProd Agent")
-        self.popup.overrideredirect(True)
-        self.popup.attributes('-topmost', True)
+        # Usar a classe Popup unificada
+        self.popup = Popup(
+            parent=self.root,
+            title="HiProd Agent",
+            width=320,  # Largura maior
+            height=420,  # Altura maior
+            position='auto'
+        )
         
-        # Posicionar à esquerda do botão
-        btn_x = self.root.winfo_x()
-        btn_y = self.root.winfo_y()
-        btn_size = getattr(self, 'btn_size', 50)  # Usar tamanho do botão ou padrão
-        popup_width = 240
-        popup_height = 320
-        popup_x = btn_x - popup_width - 10
-        popup_y = btn_y - (popup_height - btn_size)  # Ajustar posição vertical considerando tamanho do botão
-        
-        self.popup.geometry(f"{popup_width}x{popup_height}+{popup_x}+{popup_y}")
-        self.popup.configure(bg='#1a1a2e')
-        
-        # Frame principal com borda arredondada visual
-        main_frame = tk.Frame(self.popup, bg='#1a1a2e')
-        main_frame.pack(fill='both', expand=True, padx=12, pady=12)
+        # Acessar o frame principal da classe Popup
+        main_frame = self.popup.main_frame
         
         # Cabeçalho com título e status
         header_frame = tk.Frame(main_frame, bg='#1a1a2e')
@@ -2656,70 +3008,26 @@ class FloatingButton:
         # Separador
         tk.Frame(main_frame, height=1, bg='#3d3d5c').pack(fill='x', pady=6)
         
-        # Container dos tempos (lado a lado, iguais)
-        times_frame = tk.Frame(main_frame, bg='#1a1a2e')
-        times_frame.pack(fill='x', pady=8)
-        
-        # Tempo trabalhado (esquerda)
-        work_frame = tk.Frame(times_frame, bg='#252542', padx=8, pady=6)
-        work_frame.pack(side='left', expand=True, fill='both', padx=(0, 4))
-        
-        tk.Label(
-            work_frame,
-            text="⏱ Trabalhado",
-            font=('Segoe UI', 9),
-            fg='#8b8b9e',
-            bg='#252542'
-        ).pack(anchor='center')
-        
-        # Calcular tempo trabalhado em tempo real se possível
+        # Calcular tempos em tempo real
         work_time_display = self.bitrix_duration
+        pause_time_display = self.bitrix_pause_duration
+        
         if hasattr(self, 'work_start_time') and self.work_start_time:
             try:
                 current_dt = datetime.now()
                 total_seconds = (current_dt - self.work_start_time).total_seconds()
-                
-                # Subtrair pausas
                 base_pause = self._parse_time_to_seconds(self.bitrix_pause_duration)
                 pause_seconds = base_pause
                 
-                # Se estiver em pausa local, adicionar tempo da pausa atual
                 if self.is_paused and self.pause_start_time:
                     self.current_pause_seconds = (current_dt - self.pause_start_time).total_seconds()
                     pause_seconds += self.current_pause_seconds
                 
                 work_seconds = max(0, total_seconds - pause_seconds)
                 work_time_display = self._format_time(work_seconds)
-            except Exception as e:
-                # Se der erro, usar dados do Bitrix
+            except:
                 pass
         
-        # Usar função centralizada para formatar tempo
-        work_time_display = self._format_time_safe(work_time_display)
-        
-        self.work_time_label = tk.Label(
-            work_frame,
-            text=work_time_display,
-            font=('Segoe UI', 16, 'bold'),
-            fg='#4ade80',
-            bg='#252542'
-        )
-        self.work_time_label.pack(anchor='center')
-        
-        # Tempo em pausa (direita)
-        pause_frame = tk.Frame(times_frame, bg='#252542', padx=8, pady=6)
-        pause_frame.pack(side='right', expand=True, fill='both', padx=(4, 0))
-        
-        tk.Label(
-            pause_frame,
-            text="☕ Pausas",
-            font=('Segoe UI', 9),
-            fg='#8b8b9e',
-            bg='#252542'
-        ).pack(anchor='center')
-        
-        # Calcular tempo de pausa em tempo real se possível
-        pause_time_display = self.bitrix_pause_duration
         if self.is_paused and self.pause_start_time:
             try:
                 current_dt = datetime.now()
@@ -2727,19 +3035,55 @@ class FloatingButton:
                 base_pause = self._parse_time_to_seconds(self.bitrix_pause_duration)
                 total_pause = base_pause + self.current_pause_seconds
                 pause_time_display = self._format_time(total_pause)
-            except Exception as e:
-                # Se der erro, usar dados do Bitrix
+            except:
                 pass
         
-        # Usar função centralizada para formatar tempo
+        work_time_display = self._format_time_safe(work_time_display)
         pause_time_display = self._format_time_safe(pause_time_display)
+        
+        # Container dos tempos (lado a lado)
+        times_frame = tk.Frame(main_frame, bg=Popup.BG_COLOR)
+        times_frame.pack(fill='x', pady=8)
+        
+        # Tempo trabalhado (esquerda)
+        work_frame = tk.Frame(times_frame, bg=Popup.FRAME_COLOR, padx=8, pady=6)
+        work_frame.pack(side='left', expand=True, fill='both', padx=(0, 4))
+        
+        tk.Label(
+            work_frame,
+            text="⏱ Trabalhado",
+            font=('Segoe UI', 9),
+            fg=Popup.TEXT_SECONDARY,
+            bg=Popup.FRAME_COLOR
+        ).pack(anchor='center')
+        
+        self.work_time_label = tk.Label(
+            work_frame,
+            text=work_time_display,
+            font=('Segoe UI', 16, 'bold'),
+            fg=Popup.ACCENT_GREEN,
+            bg=Popup.FRAME_COLOR
+        )
+        self.work_time_label.pack(anchor='center')
+        
+        # Tempo em pausa (direita)
+        pause_frame = tk.Frame(times_frame, bg=Popup.FRAME_COLOR, padx=8, pady=6)
+        pause_frame.pack(side='right', expand=True, fill='both', padx=(4, 0))
+        
+        tk.Label(
+            pause_frame,
+            text="☕ Pausas",
+            font=('Segoe UI', 9),
+            fg=Popup.TEXT_SECONDARY,
+            bg=Popup.FRAME_COLOR
+        ).pack(anchor='center')
         
         self.pause_time_label = tk.Label(
             pause_frame,
             text=pause_time_display,
             font=('Segoe UI', 16, 'bold'),
-            fg='#fbbf24',
-            bg='#252542'
+            fg=Popup.ACCENT_YELLOW,
+            bg=Popup.FRAME_COLOR
         )
         self.pause_time_label.pack(anchor='center')
         
@@ -2832,14 +3176,14 @@ class FloatingButton:
             ).pack(fill='x', pady=(0, 5))
         
         # Fechar ao clicar fora
-        self.popup.bind('<FocusOut>', lambda e: self._schedule_close_check())
+        self.popup.root.bind('<FocusOut>', lambda e: self._schedule_close_check())
         
         self.popup_visible = True
-        self.popup.focus_set()
+        self.popup.root.focus_set()
         
         # Forçar atualização da UI após criar o popup
         # Isso garante que os valores sejam atualizados mesmo se foram buscados após a criação
-        self.popup.after(100, lambda: self._update_popup_ui_after_open())
+        self.popup.root.after(100, lambda: self._update_popup_ui_after_open())
     
     def _update_popup_ui_after_open(self):
         """Atualiza a UI do popup logo após abrir, garantindo valores corretos"""
@@ -2858,12 +3202,15 @@ class FloatingButton:
     def _schedule_close_check(self):
         """Agenda verificação para fechar popup"""
         if self.popup:
-            self.popup.after(200, self._check_close_popup)
+            popup_root = self.popup.root if hasattr(self.popup, 'root') else self.popup
+            if popup_root:
+                popup_root.after(200, self._check_close_popup)
     
     def _check_close_popup(self):
         """Verifica se deve fechar o popup"""
         try:
-            if self.popup and not self.popup.focus_get():
+            popup_root = self.popup.root if hasattr(self.popup, 'root') else self.popup
+            if popup_root and not popup_root.focus_get():
                 # Verificar se o foco está no botão principal
                 focused = self.root.focus_get()
                 if focused != self.main_btn:
@@ -2874,7 +3221,13 @@ class FloatingButton:
     def _close_popup(self):
         """Fecha o popup"""
         if self.popup:
-            self.popup.destroy()
+            try:
+                if hasattr(self.popup, 'destroy'):
+                    self.popup.destroy()
+                elif hasattr(self.popup, 'root'):
+                    self.popup.root.destroy()
+            except:
+                pass
             self.popup = None
         self.popup_visible = False
     
@@ -3759,13 +4112,13 @@ class FloatingButton:
         # Atualizar status
         if self.status_label:
             status_text = "● Trabalhando" if not self.is_paused else "● Em Pausa"
-            status_color = '#4ade80' if not self.is_paused else '#fbbf24'
+            status_color = Popup.ACCENT_GREEN if not self.is_paused else Popup.ACCENT_YELLOW
             self.status_label.config(text=status_text, fg=status_color)
         
         # Atualizar botão de pausa
-        if hasattr(self, 'pause_btn'):
+        if hasattr(self, 'pause_btn') and self.pause_btn:
             btn_text = "☕  INICIAR INTERVALO" if not self.is_paused else "▶  RETOMAR TRABALHO"
-            btn_bg = '#f59e0b' if not self.is_paused else '#22c55e'
+            btn_bg = Popup.ACCENT_ORANGE if not self.is_paused else Popup.ACCENT_GREEN
             self.pause_btn.config(text=btn_text, bg=btn_bg)
     
     def _update_timer(self):
@@ -4084,15 +4437,38 @@ _floating_button = None
 
 
 def create_floating_button(user_id=None, start_time=None):
-    """Cria e retorna o botão flutuante"""
+    """Cria e retorna o botão flutuante (reutiliza se já existir)"""
     global _floating_button
     
+    # Verificar se já existe um botão válido e reutilizá-lo
     if _floating_button:
         try:
-            _floating_button.destroy()
+            # Verificar se o botão ainda está válido (root existe e não foi destruído)
+            if hasattr(_floating_button, 'root') and _floating_button.root:
+                try:
+                    # Tentar acessar uma propriedade do root para verificar se ainda está válido
+                    _floating_button.root.winfo_exists()
+                    print("[INFO] Botão flutuante já existe, reutilizando...")
+                    
+                    # Atualizar user_id se fornecido e diferente
+                    if user_id and _floating_button.user_id != user_id:
+                        _floating_button.user_id = user_id
+                    
+                    # Atualizar start_time se fornecido
+                    if start_time:
+                        _floating_button.set_start_time(start_time)
+                    
+                    return _floating_button
+                except:
+                    # Root foi destruído, criar novo
+                    print("[INFO] Botão flutuante anterior foi destruído, criando novo...")
+                    _floating_button = None
         except:
-            pass
+            # Erro ao verificar, criar novo
+            _floating_button = None
     
+    # Criar novo botão
+    print("[INFO] Criando novo botão flutuante...")
     _floating_button = FloatingButton(user_id=user_id)
     
     if start_time:
@@ -4230,10 +4606,10 @@ def main():
                 
                 print("[INFO] ✓ Expediente está aberto. Iniciando agente de atividades...")
                 
-                # Criar botão flutuante
-                print("[INFO] Criando botão flutuante do HiProd Agent...")
+                # Criar ou reutilizar botão flutuante
+                print("[INFO] Verificando se botão flutuante já existe...")
                 floating_btn = create_floating_button(user_id=user_id, start_time=start_time)
-                print("[INFO] ✓ Botão flutuante criado!")
+                print("[INFO] ✓ Botão flutuante pronto!")
                 
                 # Importar o módulo agent
                 agent_module = import_agent_module()

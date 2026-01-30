@@ -126,24 +126,43 @@ def get_haarcascade_path():
     # Lista de possíveis locais
     possible_paths = []
     
-    # Se for executável, procurar no diretório do executável
+    # Se for executável, procurar primeiro em sys._MEIPASS (onde PyInstaller coloca os dados)
     if IS_EXECUTABLE:
+        try:
+            meipass = sys._MEIPASS
+            possible_paths.extend([
+                os.path.join(meipass, 'haarcascade_frontalface_default.xml'),
+                os.path.join(meipass, 'data', 'haarcascade_frontalface_default.xml'),
+                # Procurar no caminho do OpenCV dentro do _MEIPASS
+                os.path.join(meipass, 'cv2', 'data', 'haarcascades', 'haarcascade_frontalface_default.xml'),
+            ])
+            
+            # Tentar usar cv2.data mesmo quando executável (pode funcionar se PyInstaller incluiu corretamente)
+            try:
+                possible_paths.append(os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml'))
+            except:
+                pass
+        except:
+            pass
+        
+        # Também procurar no diretório do executável
         base_dir = os.path.dirname(sys.executable)
         possible_paths.extend([
             os.path.join(base_dir, 'haarcascade_frontalface_default.xml'),
             os.path.join(base_dir, 'data', 'haarcascade_frontalface_default.xml'),
         ])
     
-    # Procurar no diretório do script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_paths.extend([
-        os.path.join(script_dir, 'haarcascade_frontalface_default.xml'),
-        os.path.join(script_dir, 'data', 'haarcascade_frontalface_default.xml'),
-    ])
+    # Procurar no diretório do script (quando rodando como script Python)
+    if not IS_EXECUTABLE:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths.extend([
+            os.path.join(script_dir, 'haarcascade_frontalface_default.xml'),
+            os.path.join(script_dir, 'data', 'haarcascade_frontalface_default.xml'),
+        ])
     
     # Procurar no diretório de dados do OpenCV (instalação padrão)
+    # cv2 já está importado no topo do arquivo
     try:
-        import cv2.data
         possible_paths.append(os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml'))
     except:
         pass
@@ -151,7 +170,20 @@ def get_haarcascade_path():
     # Verificar cada caminho
     for path in possible_paths:
         if os.path.exists(path):
+            if IS_EXECUTABLE:
+                print(f"[FACE] Haarcascade encontrado em: {path}")
             return path
+    
+    # Se não encontrou, mostrar informações de debug quando executável
+    if IS_EXECUTABLE:
+        print(f"[FACE] AVISO: Haarcascade não encontrado em nenhum dos caminhos:")
+        for i, path in enumerate(possible_paths, 1):
+            print(f"  {i}. {path} (existe: {os.path.exists(path)})")
+        try:
+            print(f"[FACE] sys._MEIPASS: {sys._MEIPASS}")
+            print(f"[FACE] sys.executable: {sys.executable}")
+        except:
+            pass
     
     # Se não encontrou, retornar None (será tratado no código)
     return None
@@ -170,20 +202,33 @@ def check_face_presence(timeout=5, camera_index=0):
     try:
         # Obter caminho do classificador
         cascade_path = get_haarcascade_path()
+        face_cascade = None
         
         if cascade_path is None:
             # Tentar usar o caminho padrão do OpenCV
             try:
-                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            except:
-                print("[FACE] Erro: Não foi possível encontrar o classificador de faces")
+                # cv2 já está importado no topo do arquivo, apenas acessar cv2.data
+                default_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+                if IS_EXECUTABLE:
+                    print(f"[FACE] Procurando haarcascade em: {default_path}")
+                face_cascade = cv2.CascadeClassifier(default_path)
+                if face_cascade.empty():
+                    if IS_EXECUTABLE:
+                        print(f"[FACE] Erro: Classificador vazio em {default_path}")
+                    return False
+            except Exception as e:
+                if IS_EXECUTABLE:
+                    print(f"[FACE] Erro ao usar caminho padrão do OpenCV: {e}")
                 return False
         else:
+            if IS_EXECUTABLE:
+                print(f"[FACE] Usando haarcascade encontrado em: {cascade_path}")
             face_cascade = cv2.CascadeClassifier(cascade_path)
         
         # Verificar se o classificador foi carregado corretamente
-        if face_cascade.empty():
-            print("[FACE] Erro: Classificador de faces vazio ou inválido")
+        if face_cascade is None or face_cascade.empty():
+            if IS_EXECUTABLE:
+                print(f"[FACE] Erro: Classificador de faces vazio ou inválido em: {cascade_path}")
             return False
         
         # Tentar abrir a câmera
@@ -259,14 +304,17 @@ def check_face_presence_silent(timeout=5, camera_index=0):
         
         if cascade_path is None:
             try:
-                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+                # cv2 já está importado no topo do arquivo
+                default_path = os.path.join(cv2.data.haarcascades, 'haarcascade_frontalface_default.xml')
+                face_cascade = cv2.CascadeClassifier(default_path)
+                if face_cascade.empty():
+                    return False
             except:
                 return False
         else:
             face_cascade = cv2.CascadeClassifier(cascade_path)
-        
-        if face_cascade.empty():
-            return False
+            if face_cascade.empty():
+                return False
         
         cap = cv2.VideoCapture(camera_index)
         
