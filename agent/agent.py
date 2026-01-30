@@ -41,8 +41,7 @@ def _create_env_from_example():
                 print(f"[INFO] Arquivo .env criado automaticamente a partir de config.example")
                 print(f"[INFO] Localização: {env_path}")
                 print(f"[INFO] ⚠️  IMPORTANTE: Edite o arquivo .env e configure suas credenciais!")
-                print(f"[INFO]    - USER_NAME=seu_usuario")
-                print(f"[INFO]    - USER_PASSWORD=sua_senha")
+                print(f"[INFO]    - API_URL=http://seu-servidor:8010 (opcional)")
                 print(f"[INFO]    - API_URL=http://seu-servidor:8010")
             return env_path
         except Exception as e:
@@ -1545,9 +1544,11 @@ def enviar_atividade(registro):
         return False
     
     try:
+        # Obter nome do usuário do registro ou do sistema
+        usuario_nome = registro.get('usuario_nome') or get_logged_user()
         resp = requests.post(ATIVIDADE_URL,
                              json=registro,
-                             headers=get_headers())
+                             headers=get_headers(usuario_nome))
         if resp.status_code == 201:
             domain_info = f" | Domínio: {registro.get('domain', 'N/A')}" if registro.get('domain') else ""
             page_info = f" | Página: {registro.get('page_title', 'N/A')}" if registro.get('page_title') else ""
@@ -1621,10 +1622,13 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
             'presence_time': int(presence_time)
         }
         
+        # Obter nome do usuário do sistema
+        usuario_nome = get_logged_user()
+        
         face_check_url = f"{API_BASE_URL}/face-presence-check"
         resp = requests.post(face_check_url,
                              json=check_data,
-                             headers=get_headers(),
+                             headers=get_headers(usuario_nome),
                              timeout=10)
         
         if resp.status_code == 201:
@@ -1728,9 +1732,10 @@ def main():
     # Carregar aplicações aprendidas na inicialização
     load_learned_applications()
     
-    # Mostrar configurações carregadas (sem senha)
+    # Mostrar configurações carregadas
+    usuario_windows = get_logged_user()
     safe_print(f"[CONFIG] API_URL: {API_BASE_URL}")
-    safe_print(f"[CONFIG] USER_NAME: {AGENT_USER if AGENT_USER else 'NÃO CONFIGURADO'}")
+    safe_print(f"[CONFIG] Usuário Windows: {usuario_windows if usuario_windows else 'NÃO IDENTIFICADO'}")
     safe_print(f"[CONFIG] MONITOR_INTERVAL: {MONITOR_INTERVAL}s")
     safe_print(f"[CONFIG] IDLE_THRESHOLD: {IDLE_THRESHOLD}s")
     safe_print(f"[CONFIG] Aplicações aprendidas: {len(_LEARNED_APPLICATIONS)}")

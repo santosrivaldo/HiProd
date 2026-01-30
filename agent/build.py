@@ -202,10 +202,10 @@ class AgentBuilder:
 1. **Configuração (PRIMEIRA VEZ):**
    - Na primeira execução, o arquivo `.env` será criado automaticamente
    - Abra o arquivo `.env` que foi criado
-   - Edite as seguintes linhas com suas credenciais:
-     - USER_NAME=SEU_USUARIO_AQUI → Substitua por seu usuário
-     - USER_PASSWORD=SUA_SENHA_AQUI → Substitua por sua senha
+   - Edite apenas a URL da API se necessário:
      - API_URL=http://192.241.155.236:8010 → Ajuste se necessário
+   - ⚠️ NÃO é mais necessário configurar credenciais!
+   - A API identifica o usuário automaticamente pelo nome do usuário do Windows
    - Salve o arquivo e execute novamente
 
 2. **Execução:**

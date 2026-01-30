@@ -17,15 +17,9 @@
 # Exemplo: http://192.241.155.236:8010 ou http://localhost:8010
 API_URL=http://192.241.155.236:8010
 
-# Credenciais do agente para autenticação (obrigatório)
-# Estas credenciais são usadas para o agent se autenticar na API
-# ⚠️ IMPORTANTE: Substitua pelos seus valores reais!
-USER_NAME=SEU_USUARIO_AQUI
-USER_PASSWORD=SUA_SENHA_AQUI
-
-# Alternativamente, você pode usar:
-# AGENT_USER=SEU_USUARIO_AQUI
-# AGENT_PASS=SUA_SENHA_AQUI
+# ⚠️ NOTA: Não é mais necessário configurar credenciais!
+# A API identifica o usuário automaticamente pelo nome do usuário do Windows.
+# O agente usa o nome do usuário logado no sistema como identificação.
 
 # ========================================
 # CONFIGURAÇÕES DE MONITORAMENTO
