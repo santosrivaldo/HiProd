@@ -4497,33 +4497,88 @@ class MultiMonitorLockScreen:
         
     def create_windows(self):
         """Cria uma janela de bloqueio para cada monitor"""
-        monitors = get_all_monitors()
-        
-        print(f"[INFO] Detectados {len(monitors)} monitor(es)")
-        for i, mon in enumerate(monitors):
-            print(f"  Monitor {i+1}: {mon['width']}x{mon['height']} em ({mon['x']}, {mon['y']})")
-        
-        # Associar a lista de janelas ao estado compartilhado ANTES de criar janelas
-        self.shared_state['windows'] = self.windows
-        
-        # Criar janela principal (primeira) - usa Tk()
-        first_window = LockScreen(monitors[0], self.shared_state)
-        self.windows.append(first_window)
-        
-        # Criar janelas adicionais para outros monitores - usam Toplevel()
-        for i, monitor in enumerate(monitors[1:], start=2):
-            print(f"[INFO] Criando janela de bloqueio para monitor {i}...")
-            window = LockScreen(monitor, self.shared_state)
-            self.windows.append(window)
-        
-        print(f"[INFO] Criadas {len(self.windows)} janela(s) de bloqueio")
+        try:
+            monitors = get_all_monitors()
+            
+            if not monitors or len(monitors) == 0:
+                print("[ERROR] Nenhum monitor detectado! Usando configuração padrão...")
+                # Criar monitor padrão se nenhum for detectado
+                import tkinter as tk
+                root = tk.Tk()
+                screen_width = root.winfo_screenwidth()
+                screen_height = root.winfo_screenheight()
+                root.destroy()
+                monitors = [{'width': screen_width, 'height': screen_height, 'x': 0, 'y': 0}]
+            
+            print(f"[INFO] Detectados {len(monitors)} monitor(es)")
+            for i, mon in enumerate(monitors):
+                print(f"  Monitor {i+1}: {mon['width']}x{mon['height']} em ({mon['x']}, {mon['y']})")
+            
+            # Associar a lista de janelas ao estado compartilhado ANTES de criar janelas
+            self.shared_state['windows'] = self.windows
+            
+            # Criar janela principal (primeira) - usa Tk()
+            print("[INFO] Criando janela principal de bloqueio...")
+            try:
+                first_window = LockScreen(monitors[0], self.shared_state)
+                self.windows.append(first_window)
+                print("[INFO] ✓ Janela principal criada com sucesso")
+            except Exception as e:
+                print(f"[ERROR] Erro ao criar janela principal: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+            
+            # Criar janelas adicionais para outros monitores - usam Toplevel()
+            for i, monitor in enumerate(monitors[1:], start=2):
+                print(f"[INFO] Criando janela de bloqueio para monitor {i}...")
+                try:
+                    window = LockScreen(monitor, self.shared_state)
+                    self.windows.append(window)
+                    print(f"[INFO] ✓ Janela do monitor {i} criada com sucesso")
+                except Exception as e:
+                    print(f"[ERROR] Erro ao criar janela do monitor {i}: {e}")
+                    # Continuar mesmo se uma janela falhar
+                    import traceback
+                    traceback.print_exc()
+            
+            print(f"[INFO] Criadas {len(self.windows)} janela(s) de bloqueio")
+            
+            # Verificar se pelo menos uma janela foi criada
+            if len(self.windows) == 0:
+                raise Exception("Nenhuma janela de bloqueio foi criada!")
+                
+        except Exception as e:
+            print(f"[ERROR] Erro crítico ao criar janelas: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def run(self):
         """Inicia o loop principal de todas as janelas"""
         # Executar loop principal da primeira janela
         # As outras janelas são Toplevel e compartilham o mesmo loop
-        if self.windows:
+        if not self.windows or len(self.windows) == 0:
+            print("[ERROR] Nenhuma janela disponível para executar!")
+            raise Exception("Nenhuma janela de bloqueio foi criada")
+        
+        print(f"[INFO] Iniciando loop principal com {len(self.windows)} janela(s)...")
+        try:
+            # Garantir que a primeira janela está visível
+            if self.windows[0].root:
+                self.windows[0].root.deiconify()
+                self.windows[0].root.lift()
+                self.windows[0].root.focus_force()
+                self.windows[0].root.update()
+                print("[INFO] ✓ Janela principal exibida")
+            
+            # Executar loop principal
             self.windows[0].root.mainloop()
+        except Exception as e:
+            print(f"[ERROR] Erro ao executar loop principal: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 def main():

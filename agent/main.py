@@ -51,25 +51,73 @@ def main():
     Tudo integrado em um único executável!
     """
     try:
+        # Garantir que o Tkinter está disponível
+        try:
+            import tkinter as tk
+            # Testar se Tkinter funciona
+            test_root = tk.Tk()
+            test_root.withdraw()  # Esconder janela de teste
+            test_root.destroy()
+        except Exception as tk_error:
+            error_msg = f"[ERROR] Tkinter não está disponível: {tk_error}"
+            print(error_msg)
+            # Tentar mostrar mensagem de erro mesmo sem Tkinter
+            try:
+                import tkinter.messagebox as msgbox
+                msgbox.showerror("Erro", f"Tkinter não está disponível:\n{tk_error}")
+            except:
+                pass
+            sys.exit(1)
+        
         # Importar lock_screen (que gerencia tudo)
-        from lock_screen import main as lock_screen_main
+        try:
+            from lock_screen import main as lock_screen_main
+        except ImportError as import_error:
+            error_msg = f"[ERROR] Erro ao importar lock_screen: {import_error}"
+            print(error_msg)
+            print("[ERROR] Verifique se todos os arquivos estão presentes:")
+            print("  - lock_screen.py")
+            print("  - agent.py")
+            print("  - face_detection.py")
+            
+            # Tentar mostrar erro em janela
+            try:
+                import tkinter.messagebox as msgbox
+                msgbox.showerror("Erro de Importação", 
+                    f"Não foi possível importar lock_screen:\n{import_error}\n\n"
+                    "Verifique se todos os arquivos estão presentes.")
+            except:
+                pass
+            sys.exit(1)
         
         # Iniciar a tela de bloqueio
         # Ela automaticamente iniciará o agent quando necessário
         # O agent automaticamente usará face_detection se disponível
+        print("[INFO] Iniciando tela de bloqueio...")
         lock_screen_main()
         
-    except ImportError as e:
-        print(f"[ERROR] Erro ao importar módulos: {e}")
-        print("[ERROR] Verifique se todos os arquivos estão presentes:")
-        print("  - lock_screen.py")
-        print("  - agent.py")
-        print("  - face_detection.py")
-        sys.exit(1)
+    except KeyboardInterrupt:
+        print("[INFO] Interrompido pelo usuário")
+        sys.exit(0)
     except Exception as e:
-        print(f"[ERROR] Erro ao iniciar HiProd Agent: {e}")
+        error_msg = f"[ERROR] Erro ao iniciar HiProd Agent: {e}"
+        print(error_msg)
         import traceback
         traceback.print_exc()
+        
+        # Tentar mostrar erro em janela mesmo em caso de falha
+        try:
+            import tkinter as tk
+            import tkinter.messagebox as msgbox
+            root = tk.Tk()
+            root.withdraw()
+            msgbox.showerror("Erro Fatal", 
+                f"Erro ao iniciar HiProd Agent:\n\n{str(e)}\n\n"
+                "Verifique os logs para mais detalhes.")
+            root.destroy()
+        except:
+            pass
+        
         sys.exit(1)
 
 if __name__ == '__main__':

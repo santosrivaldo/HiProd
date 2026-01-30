@@ -7,13 +7,13 @@
 # 
 # Se preferir criar manualmente:
 # 1. Copie este arquivo para .env (renomeie removendo "example")
-# 2. Edite o arquivo .env com suas credenciais reais
+# 2. Edite o arquivo .env com suas configurações
 
 # ========================================
 # CONFIGURAÇÕES OBRIGATÓRIAS
 # ========================================
 
-# URL da API do HiProd (obrigatório)
+# URL da API do HiProd (opcional - tem valor padrão)
 # Exemplo: http://192.241.155.236:8010 ou http://localhost:8010
 API_URL=http://192.241.155.236:8010
 
@@ -86,3 +86,4 @@ ENCRYPT_OFFLINE_DATA=false
 
 # Iniciar automaticamente com o sistema
 AUTO_START_WITH_SYSTEM=false
+
