@@ -1,7 +1,7 @@
 
 from flask import Blueprint, request, jsonify, Response
 from datetime import datetime, timezone, timedelta
-from ..auth import token_required
+from ..auth import token_required, agent_required
 from ..database import DatabaseConnection
 from ..utils import classify_activity_with_tags, get_brasilia_now, format_datetime_brasilia
 import re
@@ -108,7 +108,7 @@ def extract_application_from_window(active_window):
     return 'Sistema Local'
 
 @activity_bp.route('/atividade', methods=['POST'])
-@token_required
+@agent_required  # Aceita token OU nome do usuário no header X-User-Name
 def add_activity(current_user):
     try:
         data = request.json
@@ -723,7 +723,7 @@ def get_screenshots_batch(current_user):
         return jsonify({'error': 'Erro interno do servidor'}), 500
 
 @activity_bp.route('/face-presence-check', methods=['POST'])
-@token_required
+@agent_required  # Aceita token OU nome do usuário no header X-User-Name
 def add_face_presence_check(current_user):
     """
     Endpoint para receber pontos de verificação facial a cada 1 minuto.

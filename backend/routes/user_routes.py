@@ -2,7 +2,7 @@ import uuid
 import psycopg2
 import bcrypt
 from flask import Blueprint, request, jsonify
-from ..auth import token_required
+from ..auth import token_required, agent_required
 from ..database import DatabaseConnection
 from ..utils import format_datetime_brasilia
 
@@ -49,7 +49,7 @@ def get_users(current_user):
         return jsonify([]), 200
 
 @user_bp.route('/usuarios-monitorados', methods=['GET'])
-@token_required
+@agent_required  # Aceita token OU nome do usuário no header X-User-Name
 def get_monitored_users(current_user):
     # Verificar se foi passado um nome para buscar/criar usuário específico
     nome_usuario = request.args.get('nome')
