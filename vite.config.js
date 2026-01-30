@@ -12,9 +12,20 @@ const hmrConfig = IS_PROXY
   : undefined
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      jsxRuntime: 'automatic' // Usar JSX transform automático
+    })
+  ],
   resolve: {
-    dedupe: ['react', 'react-dom'] // Garantir que há apenas uma cópia do React
+    dedupe: ['react', 'react-dom'], // Garantir que há apenas uma cópia do React
+    alias: {
+      'react': require.resolve('react'),
+      'react-dom': require.resolve('react-dom')
+    }
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-runtime']
   },
   server: {
     host: '0.0.0.0',
