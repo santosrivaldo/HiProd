@@ -68,9 +68,24 @@ except ImportError:
     pass
 
 def safe_print(*args, **kwargs):
-    """Print seguro - agora também funciona em executável para debug"""
-    # Sempre imprimir - console está habilitado para debug
-    print(*args, **kwargs)
+    """Print seguro - em executável vai para log, em script vai para console"""
+    if IS_EXECUTABLE:
+        # Quando executável, usar logging em vez de print
+        try:
+            import logging
+            message = ' '.join(str(arg) for arg in args)
+            logging.info(message)
+        except:
+            # Fallback: tentar escrever em arquivo de log diretamente
+            try:
+                log_file = os.path.join(os.path.dirname(sys.executable), 'hiprod-agent.log')
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(' '.join(str(arg) for arg in args) + '\n')
+            except:
+                pass  # Silencioso se falhar
+    else:
+        # Quando script Python, imprimir normalmente
+        print(*args, **kwargs)
 
 # ========================================
 # MÓDULO DE DETECÇÃO FACIAL (INTEGRADO)
@@ -936,7 +951,7 @@ DOMAIN_DATABASE = {
 
 # Configurar logging baseado no modo de execução
 if IS_EXECUTABLE:
-    # Quando executável, logar em arquivo E manter console para debug
+    # Quando executável, logar apenas em arquivo (sem console)
     try:
         log_file = os.path.join(os.path.dirname(sys.executable), 'hiprod-agent.log')
         logging.basicConfig(
@@ -944,14 +959,18 @@ if IS_EXECUTABLE:
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(log_file, encoding='utf-8', errors='ignore'),
-                logging.StreamHandler(sys.stdout)  # Manter console também
             ]
         )
-        # NÃO redirecionar stdout/stderr - manter console visível para debug
-        # sys.stdout e sys.stderr permanecem ativos
+        # Console está desabilitado no .spec (console=False)
+        # Todos os logs vão apenas para o arquivo hiprod-agent.log
     except Exception as e:
-        # Se logging falhar, pelo menos manter stdout/stderr ativos
-        print(f"[WARN] Erro ao configurar logging: {e}")
+        # Se logging falhar, tentar criar arquivo de log simples
+        try:
+            log_file = os.path.join(os.path.dirname(sys.executable), 'hiprod-agent.log')
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(f"[ERROR] Erro ao configurar logging: {e}\n")
+        except:
+            pass
 else:
     # Quando script Python, usar console normal
     logging.basicConfig(
