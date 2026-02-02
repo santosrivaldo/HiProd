@@ -39,6 +39,10 @@ X-API-Token: SEU_TOKEN_DE_API
 
 **Descrição:** Health check da API (não requer autenticação)
 
+**⚠️ URL CORRETA:** `https://hiprod.grupohi.com.br/api/v1/health`
+- ✅ Use `/api/v1/health` (minúsculas, com barras)
+- ❌ NÃO use `API/v1?health` (maiúsculas, com `?`)
+
 **Headers:**
 ```
 Nenhum requerido
@@ -67,6 +71,11 @@ Nenhum requerido
 ```bash
 curl -X GET https://hiprod.grupohi.com.br/api/v1/health
 ```
+
+**⚠️ Se receber 404:**
+1. Verifique se a URL está exatamente: `/api/v1/health` (minúsculas, com barras)
+2. Reinicie o servidor Flask após adicionar os endpoints
+3. Verifique os logs do servidor para ver se a requisição está chegando
 
 ---
 

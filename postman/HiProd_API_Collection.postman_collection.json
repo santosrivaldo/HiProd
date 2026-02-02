@@ -1,13 +1,14 @@
 {
   "info": {
     "name": "HiProd API - Collection Completa",
-    "description": "Collection completa com todos os endpoints da API HiProd",
+    "description": "Collection completa com todos os endpoints da API HiProd, incluindo endpoints V1 para integrações externas",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "_exporter_id": "hiprod-api"
+    "_exporter_id": "hiprod-api",
+    "version": "2.0.0"
   },
   "item": [
     {
-      "name": "Autenticação",
+      "name": "🔐 Autenticação",
       "item": [
         {
           "name": "Login",
@@ -33,7 +34,7 @@
               "host": ["{{base_url}}"],
               "path": ["login"]
             },
-            "description": "Autentica um usuário e retorna um token JWT"
+            "description": "Autentica um usuário e retorna um token JWT. Use este token no header Authorization para outros endpoints."
           },
           "response": []
         },
@@ -61,7 +62,7 @@
               "host": ["{{base_url}}"],
               "path": ["verify-token"]
             },
-            "description": "Verifica se um token JWT é válido"
+            "description": "Verifica se um token JWT é válido e retorna informações do usuário"
           },
           "response": []
         },
@@ -87,7 +88,113 @@
       ]
     },
     {
-      "name": "Atividades",
+      "name": "🌐 API V1 - Externa",
+      "description": "Endpoints V1 para integrações externas usando Token de API (não JWT)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Verifica o status da API. Não requer autenticação.\n\n**URL Correta:** `/api/v1/health` (minúsculas, com barras)"
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Atividades",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (obtido na página Tokens API)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/atividades",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "atividades"]
+            },
+            "description": "V1 - Busca atividades de um usuário em um período específico.\n\n**Requer:** Token de API com permissão para `/api/v1/atividades` (POST)\n\n**Parâmetros:**\n- `usuario`: Nome ou ID do usuário monitorado\n- `time.inicio`: Data/hora de início (ISO 8601)\n- `time.fim`: Data/hora de fim (ISO 8601)"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Usuários Monitorados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (obtido na página Tokens API)"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/usuarios",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "usuarios"]
+            },
+            "description": "V1 - Lista todos os usuários monitorados ativos.\n\n**Requer:** Token de API com permissão para `/api/v1/usuarios` (GET)"
+          },
+          "response": []
+        },
+        {
+          "name": "Obter Estatísticas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (obtido na página Tokens API)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/estatisticas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "estatisticas"]
+            },
+            "description": "V1 - Obtém estatísticas de atividades de um usuário.\n\n**Requer:** Token de API com permissão para `/api/v1/estatisticas` (POST)\n\n**Parâmetros:**\n- `usuario`: Nome ou ID do usuário monitorado (obrigatório)\n- `time.inicio`: Data/hora de início (opcional)\n- `time.fim`: Data/hora de fim (opcional)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📊 Atividades",
       "item": [
         {
           "name": "Listar Atividades",
@@ -106,44 +213,51 @@
               "query": [
                 {
                   "key": "limite",
-                  "value": "50"
+                  "value": "50",
+                  "description": "Número de resultados (máximo 100)"
                 },
                 {
                   "key": "pagina",
-                  "value": "1"
+                  "value": "1",
+                  "description": "Número da página"
                 },
                 {
                   "key": "agrupar",
-                  "value": "false"
+                  "value": "false",
+                  "description": "Agrupar por dia/usuário/janela"
                 },
                 {
                   "key": "data_inicio",
                   "value": "2024-01-01T00:00:00Z",
-                  "disabled": true
+                  "disabled": true,
+                  "description": "Data de início (ISO 8601)"
                 },
                 {
                   "key": "data_fim",
                   "value": "2024-01-31T23:59:59Z",
-                  "disabled": true
+                  "disabled": true,
+                  "description": "Data de fim (ISO 8601)"
                 },
                 {
                   "key": "usuario_monitorado_id",
                   "value": "1",
-                  "disabled": true
+                  "disabled": true,
+                  "description": "ID do usuário monitorado"
                 },
                 {
                   "key": "categoria",
                   "value": "productive",
-                  "disabled": true
+                  "disabled": true,
+                  "description": "Filtrar por categoria"
                 }
               ]
             },
-            "description": "Lista todas as atividades com filtros opcionais"
+            "description": "Lista todas as atividades com filtros opcionais. Requer token JWT."
           },
           "response": []
         },
         {
-          "name": "Buscar Atividades por Usuário e Período (API Externa)",
+          "name": "Buscar Atividades (Legado - Token API)",
           "request": {
             "method": "POST",
             "header": [
@@ -171,7 +285,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "atividades"]
             },
-            "description": "Endpoint EXTERNO - Busca atividades por usuário e período usando token de API"
+            "description": "⚠️ LEGADO - Use `/api/v1/atividades` para novas integrações.\n\nBusca atividades por usuário e período usando token de API."
           },
           "response": []
         },
@@ -191,6 +305,7 @@
               {
                 "key": "X-User-Name",
                 "value": "UsuarioWindows",
+                "disabled": true,
                 "description": "Alternativa: usar nome do usuário do Windows (para agente)"
               }
             ],
@@ -208,7 +323,7 @@
               "host": ["{{base_url}}"],
               "path": ["atividade"]
             },
-            "description": "Cria uma nova atividade (aceita token JWT ou X-User-Name para agente)"
+            "description": "Cria uma nova atividade. Aceita token JWT ou X-User-Name (para agente)."
           },
           "response": []
         },
@@ -278,7 +393,7 @@
               "host": ["{{base_url}}"],
               "path": ["screenshot", "1"]
             },
-            "description": "Retorna o screenshot de uma atividade"
+            "description": "Retorna o screenshot de uma atividade (se disponível)"
           },
           "response": []
         },
@@ -299,7 +414,8 @@
               "query": [
                 {
                   "key": "usuario_monitorado_id",
-                  "value": "1"
+                  "value": "1",
+                  "description": "ID do usuário monitorado (obrigatório)"
                 }
               ]
             },
@@ -310,7 +426,7 @@
       ]
     },
     {
-      "name": "Usuários",
+      "name": "👥 Usuários",
       "item": [
         {
           "name": "Listar Usuários do Sistema",
@@ -394,6 +510,7 @@
               {
                 "key": "X-User-Name",
                 "value": "UsuarioWindows",
+                "disabled": true,
                 "description": "Alternativa: usar nome do usuário do Windows"
               }
             ],
@@ -404,11 +521,12 @@
               "query": [
                 {
                   "key": "nome",
-                  "value": "UsuarioWindows"
+                  "value": "UsuarioWindows",
+                  "description": "Nome do usuário monitorado"
                 }
               ]
             },
-            "description": "Busca ou cria um usuário monitorado pelo nome (aceita X-User-Name para agente)"
+            "description": "Busca ou cria um usuário monitorado pelo nome. Aceita X-User-Name para agente."
           },
           "response": []
         },
@@ -447,7 +565,7 @@
       ]
     },
     {
-      "name": "Departamentos",
+      "name": "🏢 Departamentos",
       "item": [
         {
           "name": "Listar Departamentos",
@@ -503,7 +621,7 @@
       ]
     },
     {
-      "name": "Tags",
+      "name": "🏷️ Tags",
       "item": [
         {
           "name": "Listar Tags",
@@ -559,7 +677,7 @@
       ]
     },
     {
-      "name": "Categorias",
+      "name": "📁 Categorias",
       "item": [
         {
           "name": "Listar Categorias",
@@ -615,7 +733,7 @@
       ]
     },
     {
-      "name": "Escalas",
+      "name": "⏰ Escalas",
       "item": [
         {
           "name": "Listar Escalas",
@@ -671,7 +789,7 @@
       ]
     },
     {
-      "name": "Tokens de API",
+      "name": "🔑 Tokens de API",
       "item": [
         {
           "name": "Listar Tokens de API",
@@ -688,7 +806,7 @@
               "host": ["{{base_url}}"],
               "path": ["api-tokens"]
             },
-            "description": "Lista todos os tokens de API"
+            "description": "Lista todos os tokens de API criados"
           },
           "response": []
         },
@@ -708,7 +826,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"Token para Integração\",\n  \"descricao\": \"Token para integração externa\",\n  \"expires_days\": null,\n  \"permissions\": [\n    {\n      \"endpoint\": \"/api/atividades\",\n      \"method\": \"POST\"\n    }\n  ]\n}",
+              "raw": "{\n  \"nome\": \"Token para Integração V1\",\n  \"descricao\": \"Token para integração externa usando API V1\",\n  \"expires_days\": null,\n  \"permissions\": [\n    {\n      \"endpoint\": \"/api/v1/atividades\",\n      \"method\": \"POST\"\n    },\n    {\n      \"endpoint\": \"/api/v1/usuarios\",\n      \"method\": \"GET\"\n    },\n    {\n      \"endpoint\": \"/api/v1/estatisticas\",\n      \"method\": \"POST\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -720,7 +838,7 @@
               "host": ["{{base_url}}"],
               "path": ["api-tokens"]
             },
-            "description": "Cria um novo token de API com permissões específicas"
+            "description": "Cria um novo token de API com permissões específicas.\n\n⚠️ O token será exibido apenas UMA VEZ na resposta! Copie imediatamente."
           },
           "response": []
         },
@@ -740,7 +858,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nome\": \"Token Atualizado\",\n  \"descricao\": \"Nova descrição\",\n  \"ativo\": true,\n  \"permissions\": [\n    {\n      \"endpoint\": \"/api/atividades\",\n      \"method\": \"POST\"\n    }\n  ]\n}",
+              "raw": "{\n  \"nome\": \"Token Atualizado\",\n  \"descricao\": \"Nova descrição\",\n  \"ativo\": true,\n  \"permissions\": [\n    {\n      \"endpoint\": \"/api/v1/atividades\",\n      \"method\": \"POST\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -752,7 +870,7 @@
               "host": ["{{base_url}}"],
               "path": ["api-tokens", "1"]
             },
-            "description": "Atualiza um token de API"
+            "description": "Atualiza um token de API existente"
           },
           "response": []
         },
@@ -790,7 +908,7 @@
               "host": ["{{base_url}}"],
               "path": ["api-tokens", "1"]
             },
-            "description": "Exclui um token de API"
+            "description": "Exclui um token de API permanentemente"
           },
           "response": []
         },
@@ -816,112 +934,7 @@
       ]
     },
     {
-      "name": "API V1 - Externa",
-      "item": [
-        {
-          "name": "Health Check",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/health",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "health"]
-            },
-            "description": "Verifica o status da API (não requer autenticação)"
-          },
-          "response": []
-        },
-        {
-          "name": "Buscar Atividades",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{api_token}}",
-                "description": "Token de API (não JWT!)"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/atividades",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "atividades"]
-            },
-            "description": "V1 - Busca atividades por usuário e período usando token de API"
-          },
-          "response": []
-        },
-        {
-          "name": "Listar Usuários Monitorados",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{api_token}}",
-                "description": "Token de API (não JWT!)"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/usuarios",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "usuarios"]
-            },
-            "description": "V1 - Lista todos os usuários monitorados usando token de API"
-          },
-          "response": []
-        },
-        {
-          "name": "Obter Estatísticas",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{api_token}}",
-                "description": "Token de API (não JWT!)"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/estatisticas",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "estatisticas"]
-            },
-            "description": "V1 - Obtém estatísticas de um usuário usando token de API"
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Presença Facial",
+      "name": "👤 Presença Facial",
       "item": [
         {
           "name": "Verificar Presença Facial",
@@ -935,6 +948,7 @@
               {
                 "key": "X-User-Name",
                 "value": "UsuarioWindows",
+                "disabled": true,
                 "description": "Alternativa: usar nome do usuário do Windows"
               },
               {
@@ -956,7 +970,7 @@
               "host": ["{{base_url}}"],
               "path": ["face-presence-check"]
             },
-            "description": "Registra verificação de presença facial (aceita token JWT ou X-User-Name)"
+            "description": "Registra verificação de presença facial. Aceita token JWT ou X-User-Name (para agente)."
           },
           "response": []
         },
@@ -977,15 +991,18 @@
               "query": [
                 {
                   "key": "usuario_monitorado_id",
-                  "value": "1"
+                  "value": "1",
+                  "description": "ID do usuário monitorado (obrigatório)"
                 },
                 {
                   "key": "data_inicio",
-                  "value": "2024-01-01"
+                  "value": "2024-01-01",
+                  "description": "Data de início (YYYY-MM-DD)"
                 },
                 {
                   "key": "data_fim",
-                  "value": "2024-01-31"
+                  "value": "2024-01-31",
+                  "description": "Data de fim (YYYY-MM-DD)"
                 }
               ]
             },
@@ -1000,20 +1017,26 @@
     {
       "key": "base_url",
       "value": "https://hiprod.grupohi.com.br",
-      "type": "string"
+      "type": "string",
+      "description": "URL base da API"
+    },
+    {
+      "key": "base_url_local",
+      "value": "http://localhost:8000",
+      "type": "string",
+      "description": "URL base para desenvolvimento local"
     },
     {
       "key": "jwt_token",
       "value": "",
       "type": "string",
-      "description": "Token JWT obtido do login"
+      "description": "Token JWT obtido do endpoint /login"
     },
     {
       "key": "api_token",
       "value": "",
       "type": "string",
-      "description": "Token de API (criado na página Tokens API)"
+      "description": "Token de API obtido na página Tokens API do sistema"
     }
   ]
 }
-

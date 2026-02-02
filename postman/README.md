@@ -4,8 +4,12 @@ Esta pasta contém a collection completa do Postman com todos os endpoints da AP
 
 ## 📁 Arquivos
 
-- **HiProd_API_Collection.postman_collection.json** - Collection completa com todos os endpoints
+- **HiProd_API_Collection.postman_collection.json** - Collection completa com todos os endpoints (ATUALIZADA)
 - **HiProd_API_Environment.postman_environment.json** - Variáveis de ambiente
+- **API_V1_DOCUMENTACAO.md** - Documentação completa dos endpoints V1
+- **EXEMPLOS_ENDPOINTS.md** - Exemplos detalhados de todos os endpoints
+- **URLS_CORRETAS_V1.md** - Guia de URLs corretas para endpoints V1
+- **TROUBLESHOOTING_404_V1.md** - Solução de problemas com endpoints V1
 - **README.md** - Este arquivo
 
 ## 🚀 Como Importar
@@ -183,9 +187,12 @@ A API V1 (`/api/v1/`) é dedicada para integrações externas usando tokens de A
 - **GET /api/v1/usuarios** - Listar usuários monitorados
 - **POST /api/v1/estatisticas** - Obter estatísticas de usuário
 
-Todos os endpoints V1 requerem **Token de API** (não JWT).
-
-Consulte `API_V1_DOCUMENTACAO.md` para documentação completa.
+**⚠️ IMPORTANTE:** 
+- Todos os endpoints V1 requerem **Token de API** (não JWT)
+- URL correta: `/api/v1/health` (minúsculas, com barras, sem `?`)
+- Consulte `API_V1_DOCUMENTACAO.md` para documentação completa
+- Consulte `URLS_CORRETAS_V1.md` se receber erro 404
+- Consulte `COMO_IMPORTAR.md` para guia completo de importação
 
 ## 🐛 Troubleshooting
 
