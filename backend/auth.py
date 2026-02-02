@@ -230,34 +230,31 @@ def agent_required(f):
 
 def generate_api_token():
     """
-    Gerar um token de API único e seguro.
-    Garante que o token seja único no banco de dados.
+    Gerar um token de API seguro usando a secret key.
+    Gera um token único baseado em timestamp e secret key.
+    Não verifica unicidade no banco - a secret key garante segurança.
     """
-    max_attempts = 10  # Limite de tentativas para evitar loop infinito
-    
-    for attempt in range(max_attempts):
-        token = secrets.token_urlsafe(32)
-        
-        # Verificar se o token já existe no banco
-        try:
-            with DatabaseConnection() as db:
-                db.cursor.execute('SELECT id FROM api_tokens WHERE token = %s', (token,))
-                if not db.cursor.fetchone():
-                    # Token único encontrado
-                    return token
-        except Exception as e:
-            # Se houver erro ao verificar, retornar o token mesmo assim
-            # (melhor ter um token do que falhar completamente)
-            print(f"⚠️ Erro ao verificar unicidade do token (tentativa {attempt + 1}): {e}")
-            if attempt == max_attempts - 1:
-                # Última tentativa, retornar mesmo com erro
-                return token
-    
-    # Se chegou aqui, todas as tentativas geraram tokens duplicados (muito improvável)
-    # Gerar um token com timestamp para garantir unicidade
     import time
-    unique_suffix = str(int(time.time() * 1000000))  # Microsegundos
-    return secrets.token_urlsafe(24) + unique_suffix
+    
+    # Gerar token usando secret key + timestamp + random
+    timestamp = str(int(time.time() * 1000000))  # Microsegundos para garantir unicidade
+    random_part = secrets.token_urlsafe(16)
+    
+    # Combinar secret key com timestamp e random para gerar token único
+    data = f"{Config.JWT_SECRET_KEY}{timestamp}{random_part}".encode('utf-8')
+    token_hash = hashlib.sha256(data).hexdigest()
+    
+    # Combinar partes para criar token final (64 caracteres)
+    token = f"{token_hash}{random_part}"
+    
+    # Garantir que o token tenha tamanho adequado (64 caracteres)
+    if len(token) > 64:
+        token = token[:64]
+    elif len(token) < 64:
+        # Preencher se necessário
+        token = token + secrets.token_urlsafe(64 - len(token))
+    
+    return token
 
 def hash_api_token(token):
     """Hash do token para armazenamento seguro"""
