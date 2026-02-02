@@ -927,40 +927,127 @@ def get_face_presence_stats(current_user):
         traceback.print_exc()
         return jsonify({'message': 'Erro interno do servidor!'}), 500
 
-@activity_bp.route('/api/atividades', methods=['POST'])
-@api_token_required
-def get_atividades_by_token(token_data):
+@activity_bp.route('/api/atividades', methods=['POST', 'OPTIONS'])
+def get_atividades_by_token():
     """
     Endpoint para buscar atividades por usuário e período usando token de API.
     Aceita: { usuario: nome ou id, time: { inicio, fim } }
     Retorna: lista de atividades do usuário no período especificado
     """
+    # Tratar requisições OPTIONS (CORS preflight)
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-Token')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+    
+    # Verificar método
+    if request.method != 'POST':
+        return jsonify({'message': f'Método {request.method} não permitido. Use POST.'}), 405
+    
+    # Validar token de API
+    token = request.headers.get('Authorization') or request.headers.get('X-API-Token')
+    
+    if not token:
+        return jsonify({'message': 'Token de API não fornecido!'}), 401
+
+    # Remover 'Bearer ' se presente
     try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'message': 'Dados não fornecidos!'}), 400
-        
-        usuario = data.get('usuario')
-        time_data = data.get('time', {})
-        inicio = time_data.get('inicio')
-        fim = time_data.get('fim')
-        
-        if not usuario:
-            return jsonify({'message': 'Campo "usuario" é obrigatório!'}), 400
-        
-        if not inicio or not fim:
-            return jsonify({'message': 'Campos "time.inicio" e "time.fim" são obrigatórios!'}), 400
-        
-        # Validar formato das datas
-        try:
-            from datetime import datetime
-            inicio_dt = datetime.fromisoformat(inicio.replace('Z', '+00:00'))
-            fim_dt = datetime.fromisoformat(fim.replace('Z', '+00:00'))
-        except (ValueError, AttributeError) as e:
-            return jsonify({'message': f'Formato de data inválido: {str(e)}'}), 400
-        
+        if token.startswith('Bearer '):
+            token = token.split(' ')[1]
+    except (IndexError, AttributeError):
+        return jsonify({'message': 'Formato de token inválido!'}), 401
+
+    try:
         with DatabaseConnection() as db:
+            # Buscar token no banco
+            db.cursor.execute('''
+                SELECT id, nome, ativo, expires_at, created_by
+                FROM api_tokens
+                WHERE token = %s
+            ''', (token,))
+            
+            token_data = db.cursor.fetchone()
+            
+            if not token_data:
+                return jsonify({'message': 'Token de API inválido!'}), 401
+            
+            token_id, token_nome, ativo, expires_at, created_by = token_data
+            
+            # Verificar se token está ativo
+            if not ativo:
+                return jsonify({'message': 'Token de API desativado!'}), 403
+            
+            # Verificar expiração
+            if expires_at:
+                expires_at_utc = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
+                if datetime.now(timezone.utc) > expires_at_utc:
+                    return jsonify({'message': 'Token de API expirado!'}), 403
+            
+            # Verificar permissões
+            endpoint = request.path
+            method = request.method
+            
+            db.cursor.execute('''
+                SELECT endpoint, method
+                FROM api_token_permissions
+                WHERE token_id = %s
+            ''', (token_id,))
+            
+            permissions = db.cursor.fetchall()
+            
+            if not permissions:
+                return jsonify({'message': 'Token sem permissões configuradas!'}), 403
+            
+            has_permission = False
+            for perm_endpoint, perm_method in permissions:
+                if perm_endpoint.endswith('*'):
+                    base_path = perm_endpoint[:-1]
+                    if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
+                        has_permission = True
+                        break
+                elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
+                    has_permission = True
+                    break
+            
+            if not has_permission:
+                return jsonify({
+                    'message': 'Token sem permissão para este endpoint!',
+                    'endpoint': endpoint,
+                    'method': method
+                }), 403
+            
+            # Atualizar último uso
+            db.cursor.execute('''
+                UPDATE api_tokens
+                SET last_used_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            ''', (token_id,))
+            
+            # Processar requisição
+            data = request.get_json()
+            
+            if not data:
+                return jsonify({'message': 'Dados não fornecidos!'}), 400
+            
+            usuario = data.get('usuario')
+            time_data = data.get('time', {})
+            inicio = time_data.get('inicio')
+            fim = time_data.get('fim')
+            
+            if not usuario:
+                return jsonify({'message': 'Campo "usuario" é obrigatório!'}), 400
+            
+            if not inicio or not fim:
+                return jsonify({'message': 'Campos "time.inicio" e "time.fim" são obrigatórios!'}), 400
+            
+            # Validar formato das datas
+            try:
+                inicio_dt = datetime.fromisoformat(inicio.replace('Z', '+00:00'))
+                fim_dt = datetime.fromisoformat(fim.replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                return jsonify({'message': f'Formato de data inválido: {str(e)}'}), 400
             # Buscar usuário monitorado por nome ou ID
             usuario_monitorado_id = None
             
