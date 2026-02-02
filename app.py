@@ -15,6 +15,7 @@ from backend.routes.category_routes import category_bp
 from backend.routes.escala_routes import escala_bp
 from backend.routes.legacy_routes import legacy_bp
 from backend.routes.token_routes import token_bp
+from backend.routes.api_v1_routes import api_v1_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -55,6 +56,7 @@ app.register_blueprint(category_bp)
 app.register_blueprint(escala_bp)
 app.register_blueprint(legacy_bp)
 app.register_blueprint(token_bp)
+app.register_blueprint(api_v1_bp)
 
 if __name__ == '__main__':
     try:

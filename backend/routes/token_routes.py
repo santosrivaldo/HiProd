@@ -270,6 +270,11 @@ def get_available_endpoints(current_user):
         {'endpoint': '/categorias', 'method': 'POST', 'description': 'Criar categoria'},
         {'endpoint': '/escalas', 'method': 'GET', 'description': 'Listar escalas'},
         {'endpoint': '/escalas', 'method': 'POST', 'description': 'Criar escala'},
+        # Endpoints V1 para API Externa
+        {'endpoint': '/api/v1/atividades', 'method': 'POST', 'description': 'V1 - Buscar atividades por usuário e período'},
+        {'endpoint': '/api/v1/usuarios', 'method': 'GET', 'description': 'V1 - Listar usuários monitorados'},
+        {'endpoint': '/api/v1/estatisticas', 'method': 'POST', 'description': 'V1 - Obter estatísticas de usuário'},
+        {'endpoint': '/api/v1/health', 'method': 'GET', 'description': 'V1 - Health check (sem autenticação)'},
     ]
     
     return jsonify(endpoints), 200

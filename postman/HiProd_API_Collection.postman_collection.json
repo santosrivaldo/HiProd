@@ -1,0 +1,1019 @@
+{
+  "info": {
+    "name": "HiProd API - Collection Completa",
+    "description": "Collection completa com todos os endpoints da API HiProd",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "hiprod-api"
+  },
+  "item": [
+    {
+      "name": "Autenticação",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"admin\",\n  \"senha\": \"Brasil@1402\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": ["{{base_url}}"],
+              "path": ["login"]
+            },
+            "description": "Autentica um usuário e retorna um token JWT"
+          },
+          "response": []
+        },
+        {
+          "name": "Verificar Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{jwt_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/verify-token",
+              "host": ["{{base_url}}"],
+              "path": ["verify-token"]
+            },
+            "description": "Verifica se um token JWT é válido"
+          },
+          "response": []
+        },
+        {
+          "name": "Perfil do Usuário",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile",
+              "host": ["{{base_url}}"],
+              "path": ["profile"]
+            },
+            "description": "Retorna o perfil do usuário autenticado"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Atividades",
+      "item": [
+        {
+          "name": "Listar Atividades",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/atividades?limite=50&pagina=1&agrupar=false",
+              "host": ["{{base_url}}"],
+              "path": ["atividades"],
+              "query": [
+                {
+                  "key": "limite",
+                  "value": "50"
+                },
+                {
+                  "key": "pagina",
+                  "value": "1"
+                },
+                {
+                  "key": "agrupar",
+                  "value": "false"
+                },
+                {
+                  "key": "data_inicio",
+                  "value": "2024-01-01T00:00:00Z",
+                  "disabled": true
+                },
+                {
+                  "key": "data_fim",
+                  "value": "2024-01-31T23:59:59Z",
+                  "disabled": true
+                },
+                {
+                  "key": "usuario_monitorado_id",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "categoria",
+                  "value": "productive",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista todas as atividades com filtros opcionais"
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Atividades por Usuário e Período (API Externa)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (não JWT!)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/atividades",
+              "host": ["{{base_url}}"],
+              "path": ["api", "atividades"]
+            },
+            "description": "Endpoint EXTERNO - Busca atividades por usuário e período usando token de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Atividade",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Name",
+                "value": "UsuarioWindows",
+                "description": "Alternativa: usar nome do usuário do Windows (para agente)"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_monitorado_id\": 1,\n  \"ociosidade\": 0,\n  \"active_window\": \"Visual Studio Code\",\n  \"titulo_janela\": \"app.py - Visual Studio Code\",\n  \"categoria\": \"productive\",\n  \"produtividade\": \"productive\",\n  \"duracao\": 300,\n  \"domain\": null,\n  \"application\": \"VS Code\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/atividade",
+              "host": ["{{base_url}}"],
+              "path": ["atividade"]
+            },
+            "description": "Cria uma nova atividade (aceita token JWT ou X-User-Name para agente)"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Atividade",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoria\": \"productive\",\n  \"produtividade\": \"productive\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/atividades/1",
+              "host": ["{{base_url}}"],
+              "path": ["atividades", "1"]
+            },
+            "description": "Atualiza uma atividade específica"
+          },
+          "response": []
+        },
+        {
+          "name": "Excluir Atividade",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/atividades/1",
+              "host": ["{{base_url}}"],
+              "path": ["atividades", "1"]
+            },
+            "description": "Exclui uma atividade específica"
+          },
+          "response": []
+        },
+        {
+          "name": "Obter Screenshot",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/screenshot/1",
+              "host": ["{{base_url}}"],
+              "path": ["screenshot", "1"]
+            },
+            "description": "Retorna o screenshot de uma atividade"
+          },
+          "response": []
+        },
+        {
+          "name": "Estatísticas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/estatisticas?usuario_monitorado_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["estatisticas"],
+              "query": [
+                {
+                  "key": "usuario_monitorado_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Retorna estatísticas de atividades de um usuário"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Usuários",
+      "item": [
+        {
+          "name": "Listar Usuários do Sistema",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usuarios",
+              "host": ["{{base_url}}"],
+              "path": ["usuarios"]
+            },
+            "description": "Lista todos os usuários do sistema"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Usuário do Sistema",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"novo.usuario\",\n  \"senha\": \"SenhaSegura123!\",\n  \"email\": \"novo.usuario@empresa.com\",\n  \"departamento_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/usuarios",
+              "host": ["{{base_url}}"],
+              "path": ["usuarios"]
+            },
+            "description": "Cria um novo usuário do sistema"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Usuários Monitorados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usuarios-monitorados",
+              "host": ["{{base_url}}"],
+              "path": ["usuarios-monitorados"]
+            },
+            "description": "Lista todos os usuários monitorados"
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar/Criar Usuário Monitorado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-User-Name",
+                "value": "UsuarioWindows",
+                "description": "Alternativa: usar nome do usuário do Windows"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/usuarios-monitorados?nome=UsuarioWindows",
+              "host": ["{{base_url}}"],
+              "path": ["usuarios-monitorados"],
+              "query": [
+                {
+                  "key": "nome",
+                  "value": "UsuarioWindows"
+                }
+              ]
+            },
+            "description": "Busca ou cria um usuário monitorado pelo nome (aceita X-User-Name para agente)"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Usuário Monitorado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"novo.usuario\",\n  \"cargo\": \"Desenvolvedor\",\n  \"departamento_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/usuarios-monitorados",
+              "host": ["{{base_url}}"],
+              "path": ["usuarios-monitorados"]
+            },
+            "description": "Cria um novo usuário monitorado"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Departamentos",
+      "item": [
+        {
+          "name": "Listar Departamentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/departamentos",
+              "host": ["{{base_url}}"],
+              "path": ["departamentos"]
+            },
+            "description": "Lista todos os departamentos"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Departamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Novo Departamento\",\n  \"descricao\": \"Descrição do departamento\",\n  \"cor\": \"#3B82F6\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/departamentos",
+              "host": ["{{base_url}}"],
+              "path": ["departamentos"]
+            },
+            "description": "Cria um novo departamento"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "Listar Tags",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/tags",
+              "host": ["{{base_url}}"],
+              "path": ["tags"]
+            },
+            "description": "Lista todas as tags"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Tag",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Nova Tag\",\n  \"descricao\": \"Descrição da tag\",\n  \"produtividade\": \"productive\",\n  \"departamento_id\": 1,\n  \"cor\": \"#10B981\",\n  \"tier\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/tags",
+              "host": ["{{base_url}}"],
+              "path": ["tags"]
+            },
+            "description": "Cria uma nova tag"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Categorias",
+      "item": [
+        {
+          "name": "Listar Categorias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/categorias",
+              "host": ["{{base_url}}"],
+              "path": ["categorias"]
+            },
+            "description": "Lista todas as categorias de aplicações"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Categoria",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Nova Categoria\",\n  \"departamento_id\": 1,\n  \"tipo_produtividade\": \"productive\",\n  \"cor\": \"#10B981\",\n  \"descricao\": \"Descrição da categoria\",\n  \"is_global\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/categorias",
+              "host": ["{{base_url}}"],
+              "path": ["categorias"]
+            },
+            "description": "Cria uma nova categoria de aplicação"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Escalas",
+      "item": [
+        {
+          "name": "Listar Escalas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/escalas",
+              "host": ["{{base_url}}"],
+              "path": ["escalas"]
+            },
+            "description": "Lista todas as escalas de trabalho"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Escala",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Nova Escala\",\n  \"descricao\": \"Descrição da escala\",\n  \"horario_inicio_trabalho\": \"08:00:00\",\n  \"horario_fim_trabalho\": \"18:00:00\",\n  \"dias_trabalho\": \"1,2,3,4,5\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/escalas",
+              "host": ["{{base_url}}"],
+              "path": ["escalas"]
+            },
+            "description": "Cria uma nova escala de trabalho"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tokens de API",
+      "item": [
+        {
+          "name": "Listar Tokens de API",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api-tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api-tokens"]
+            },
+            "description": "Lista todos os tokens de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Token de API",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Token para Integração\",\n  \"descricao\": \"Token para integração externa\",\n  \"expires_days\": null,\n  \"permissions\": [\n    {\n      \"endpoint\": \"/api/atividades\",\n      \"method\": \"POST\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api-tokens",
+              "host": ["{{base_url}}"],
+              "path": ["api-tokens"]
+            },
+            "description": "Cria um novo token de API com permissões específicas"
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Token de API",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Token Atualizado\",\n  \"descricao\": \"Nova descrição\",\n  \"ativo\": true,\n  \"permissions\": [\n    {\n      \"endpoint\": \"/api/atividades\",\n      \"method\": \"POST\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api-tokens/1",
+              "host": ["{{base_url}}"],
+              "path": ["api-tokens", "1"]
+            },
+            "description": "Atualiza um token de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Ativar/Desativar Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api-tokens/1/toggle",
+              "host": ["{{base_url}}"],
+              "path": ["api-tokens", "1", "toggle"]
+            },
+            "description": "Ativa ou desativa um token de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Excluir Token de API",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api-tokens/1",
+              "host": ["{{base_url}}"],
+              "path": ["api-tokens", "1"]
+            },
+            "description": "Exclui um token de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Endpoints Disponíveis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api-tokens/endpoints",
+              "host": ["{{base_url}}"],
+              "path": ["api-tokens", "endpoints"]
+            },
+            "description": "Lista todos os endpoints disponíveis para configuração de permissões"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API V1 - Externa",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Verifica o status da API (não requer autenticação)"
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Atividades",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (não JWT!)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/atividades",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "atividades"]
+            },
+            "description": "V1 - Busca atividades por usuário e período usando token de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Usuários Monitorados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (não JWT!)"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/usuarios",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "usuarios"]
+            },
+            "description": "V1 - Lista todos os usuários monitorados usando token de API"
+          },
+          "response": []
+        },
+        {
+          "name": "Obter Estatísticas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{api_token}}",
+                "description": "Token de API (não JWT!)"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": \"rivaldo.santos\",\n  \"time\": {\n    \"inicio\": \"2024-01-01T00:00:00Z\",\n    \"fim\": \"2024-01-31T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/estatisticas",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "estatisticas"]
+            },
+            "description": "V1 - Obtém estatísticas de um usuário usando token de API"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Presença Facial",
+      "item": [
+        {
+          "name": "Verificar Presença Facial",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "X-User-Name",
+                "value": "UsuarioWindows",
+                "description": "Alternativa: usar nome do usuário do Windows"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_monitorado_id\": 1,\n  \"face_detected\": true,\n  \"presence_time\": 300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/face-presence-check",
+              "host": ["{{base_url}}"],
+              "path": ["face-presence-check"]
+            },
+            "description": "Registra verificação de presença facial (aceita token JWT ou X-User-Name)"
+          },
+          "response": []
+        },
+        {
+          "name": "Estatísticas de Presença Facial",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/face-presence-stats?usuario_monitorado_id=1&data_inicio=2024-01-01&data_fim=2024-01-31",
+              "host": ["{{base_url}}"],
+              "path": ["face-presence-stats"],
+              "query": [
+                {
+                  "key": "usuario_monitorado_id",
+                  "value": "1"
+                },
+                {
+                  "key": "data_inicio",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "data_fim",
+                  "value": "2024-01-31"
+                }
+              ]
+            },
+            "description": "Retorna estatísticas de presença facial de um usuário"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://hiprod.grupohi.com.br",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "Token JWT obtido do login"
+    },
+    {
+      "key": "api_token",
+      "value": "",
+      "type": "string",
+      "description": "Token de API (criado na página Tokens API)"
+    }
+  ]
+}
+
