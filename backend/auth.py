@@ -256,6 +256,75 @@ def generate_api_token():
     
     return token
 
+def get_or_create_system_token():
+    """
+    Obtém ou cria o token padrão do sistema.
+    Este token é usado automaticamente para validações internas.
+    """
+    try:
+        with DatabaseConnection() as db:
+            # Buscar token do sistema (nome especial)
+            db.cursor.execute('''
+                SELECT id, token, ativo
+                FROM api_tokens
+                WHERE nome = 'Sistema - Token Padrão'
+                ORDER BY created_at DESC
+                LIMIT 1
+            ''')
+            
+            system_token = db.cursor.fetchone()
+            
+            if system_token and system_token[2]:  # Se existe e está ativo
+                return system_token[1]  # Retornar o token
+            
+            # Se não existe ou está inativo, criar novo
+            token_value = generate_api_token()
+            user_id = None  # Token do sistema não tem criador
+            
+            # Criar token do sistema
+            db.cursor.execute('''
+                INSERT INTO api_tokens (nome, descricao, token, created_by, ativo, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            ''', (
+                'Sistema - Token Padrão',
+                'Token padrão do sistema gerado automaticamente',
+                token_value,
+                user_id,
+                True,  # Sempre ativo
+                None   # Sem expiração
+            ))
+            
+            token_id = db.cursor.fetchone()[0]
+            
+            # Adicionar permissões padrão para todos os endpoints V1
+            default_permissions = [
+                ('/api/v1/atividades', 'POST'),
+                ('/api/v1/usuarios', 'GET'),
+                ('/api/v1/estatisticas', 'POST'),
+                ('/api/v1/health', 'GET'),
+                ('/api/v1/*', '*'),  # Wildcard para todos os endpoints V1
+            ]
+            
+            for endpoint, method in default_permissions:
+                try:
+                    db.cursor.execute('''
+                        INSERT INTO api_token_permissions (token_id, endpoint, method)
+                        VALUES (%s, %s, %s)
+                    ''', (token_id, endpoint, method))
+                except Exception as perm_error:
+                    print(f"⚠️ Erro ao inserir permissão padrão {endpoint} ({method}): {perm_error}")
+            
+            print(f"✅ Token padrão do sistema criado: {token_value[:20]}...")
+            return token_value
+            
+    except Exception as e:
+        print(f"❌ Erro ao obter/criar token do sistema: {e}")
+        import traceback
+        traceback.print_exc()
+        # Em caso de erro, retornar None (validação falhará)
+        return None
+
 def hash_api_token(token):
     """Hash do token para armazenamento seguro"""
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
@@ -264,20 +333,26 @@ def api_token_required(f):
     """
     Decorator para rotas protegidas por token de API.
     Valida o token e verifica permissões por endpoint.
+    Se não houver token fornecido, usa o token padrão do sistema automaticamente.
     """
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get('Authorization') or request.headers.get('X-API-Token')
         
+        # Se não forneceu token, usar token padrão do sistema
         if not token:
-            return jsonify({'message': 'Token de API não fornecido!'}), 401
-
-        try:
-            # Remover 'Bearer ' se presente
-            if token.startswith('Bearer '):
-                token = token.split(' ')[1]
-        except (IndexError, AttributeError):
-            return jsonify({'message': 'Formato de token inválido!'}), 401
+            print("🔑 Token não fornecido - usando token padrão do sistema")
+            system_token = get_or_create_system_token()
+            if not system_token:
+                return jsonify({'message': 'Erro ao obter token do sistema!'}), 500
+            token = system_token
+        else:
+            try:
+                # Remover 'Bearer ' se presente
+                if token.startswith('Bearer '):
+                    token = token.split(' ')[1]
+            except (IndexError, AttributeError):
+                return jsonify({'message': 'Formato de token inválido!'}), 401
 
         try:
             # Limpar token (remover espaços, tabs, quebras de linha)
@@ -377,11 +452,23 @@ def api_token_required(f):
                     }), 401
                 
                 # Validar que token_data tem os campos esperados
-                if not token_data or len(token_data) < 5:
-                    print(f"❌ token_data inválido: {token_data}")
+                if not token_data:
+                    print(f"❌ token_data é None")
+                    return jsonify({'message': 'Token de API não encontrado!'}), 401
+                
+                if not isinstance(token_data, tuple):
+                    print(f"❌ token_data não é uma tupla: {type(token_data)}")
                     return jsonify({'message': 'Erro ao validar token de API!'}), 500
                 
-                token_id, token_nome, ativo, expires_at, created_by = token_data
+                if len(token_data) < 5:
+                    print(f"❌ token_data tem apenas {len(token_data)} elementos, esperado 5: {token_data}")
+                    return jsonify({'message': 'Erro ao validar token de API!'}), 500
+                
+                try:
+                    token_id, token_nome, ativo, expires_at, created_by = token_data
+                except ValueError as e:
+                    print(f"❌ Erro ao desempacotar token_data: {e}, token_data: {token_data}")
+                    return jsonify({'message': 'Erro ao validar token de API!'}), 500
                 
                 # Verificar se token está ativo
                 if not ativo:

@@ -30,3 +30,6 @@ class Config:
     # Pool de conexões
     MIN_CONNECTIONS = int(os.getenv('DB_MIN_CONNECTIONS', 2))
     MAX_CONNECTIONS = int(os.getenv('DB_MAX_CONNECTIONS', 20))
+    
+    # Token de API padrão do sistema (gerado automaticamente)
+    SYSTEM_API_TOKEN = None  # Será gerado na primeira inicialização
