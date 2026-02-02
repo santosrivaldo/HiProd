@@ -1,0 +1,12 @@
+nome,descricao,cor,produtividade,departamento_nome,tier,palavras_chave,ativo
+Google,Google Search e serviços,#4285F4,productive,TI,1,"google,search,busca,chrome",true
+Facebook,Redes Sociais Facebook,#1877F2,nonproductive,Geral,3,"facebook,rede social,fb",true
+YouTube,Plataforma de vídeos,#FF0000,neutral,Geral,2,"youtube,video,yt",true
+Microsoft Teams,Comunicação corporativa,#6264A7,productive,TI,1,"teams,microsoft,comunicação",true
+WhatsApp Web,Mensagens instantâneas,#25D366,neutral,Geral,3,"whatsapp,chat,mensagem",true
+LinkedIn,Rede profissional,#0077B5,productive,RH,2,"linkedin,profissional,carreira",true
+Instagram,Redes sociais,#E4405F,nonproductive,Geral,4,"instagram,rede social,ig",true
+GitHub,Repositório de código,#181717,productive,TI,1,"github,git,código,programação",true
+Stack Overflow,Comunidade de desenvolvedores,#F48024,productive,TI,2,"stackoverflow,programação,ajuda",true
+Netflix,Streaming de vídeos,#E50914,nonproductive,Geral,5,"netflix,streaming,entretenimento",false
+

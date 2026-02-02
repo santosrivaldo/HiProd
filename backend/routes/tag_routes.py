@@ -1,5 +1,7 @@
 
 import psycopg2
+import csv
+import io
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
@@ -256,3 +258,214 @@ def delete_tag(current_user, tag_id):
     except Exception as e:
         print(f"Erro ao deletar tag: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@tag_bp.route('/tags/import-csv', methods=['POST'])
+@token_required
+def import_tags_csv(current_user):
+    """
+    Importa tags a partir de um arquivo CSV.
+    
+    Formato esperado do CSV:
+    - nome (obrigatório): Nome da tag
+    - descricao (opcional): Descrição da tag
+    - cor (opcional): Cor em hexadecimal (ex: #6B7280)
+    - produtividade (obrigatório): productive, nonproductive ou neutral
+    - departamento_id (opcional): ID do departamento
+    - departamento_nome (opcional): Nome do departamento (alternativa a departamento_id)
+    - tier (opcional): Nível de prioridade (1-5, padrão: 3)
+    - palavras_chave (opcional): Palavras-chave separadas por vírgula ou ponto-e-vírgula
+    - ativo (opcional): true ou false (padrão: true)
+    
+    Exemplo de CSV:
+    nome,descricao,cor,produtividade,departamento_nome,tier,palavras_chave
+    Google,Google Search,#4285F4,productive,TI,1,"google,search,busca"
+    Facebook,Redes Sociais,#1877F2,nonproductive,Geral,3,"facebook,rede social"
+    """
+    try:
+        # Verificar se arquivo foi enviado
+        if 'file' not in request.files:
+            return jsonify({'message': 'Arquivo CSV não fornecido!'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'message': 'Nenhum arquivo selecionado!'}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({'message': 'Arquivo deve ser um CSV (.csv)!'}), 400
+        
+        # Ler conteúdo do arquivo
+        file_content = file.read().decode('utf-8-sig')  # utf-8-sig remove BOM se presente
+        csv_reader = csv.DictReader(io.StringIO(file_content))
+        
+        # Validar colunas obrigatórias
+        required_columns = ['nome', 'produtividade']
+        rows = list(csv_reader)
+        
+        if not rows:
+            return jsonify({'message': 'Arquivo CSV está vazio!'}), 400
+        
+        # Verificar se tem as colunas obrigatórias
+        if not all(col in csv_reader.fieldnames for col in required_columns):
+            return jsonify({
+                'message': f'CSV deve conter as colunas: {", ".join(required_columns)}',
+                'colunas_encontradas': list(csv_reader.fieldnames)
+            }), 400
+        
+        # Processar linhas
+        tags_criadas = 0
+        tags_atualizadas = 0
+        tags_ignoradas = 0
+        erros = []
+        
+        with DatabaseConnection() as db:
+            for row_num, row in enumerate(rows, start=2):  # Começa em 2 (linha 1 é cabeçalho)
+                try:
+                    # Validar e processar dados
+                    nome = row.get('nome', '').strip()
+                    if not nome:
+                        erros.append(f'Linha {row_num}: Nome é obrigatório')
+                        tags_ignoradas += 1
+                        continue
+                    
+                    descricao = row.get('descricao', '').strip()
+                    cor = row.get('cor', '#6B7280').strip()
+                    if not cor.startswith('#'):
+                        cor = '#6B7280'
+                    
+                    produtividade = row.get('produtividade', '').strip().lower()
+                    if produtividade not in ['productive', 'nonproductive', 'neutral']:
+                        erros.append(f'Linha {row_num}: Produtividade inválida (deve ser: productive, nonproductive ou neutral)')
+                        tags_ignoradas += 1
+                        continue
+                    
+                    # Processar departamento
+                    departamento_id = None
+                    departamento_nome = row.get('departamento_nome', '').strip()
+                    dept_id_str = row.get('departamento_id', '').strip()
+                    
+                    if dept_id_str:
+                        try:
+                            departamento_id = int(dept_id_str)
+                        except ValueError:
+                            erros.append(f'Linha {row_num}: departamento_id inválido')
+                    elif departamento_nome:
+                        # Buscar departamento por nome
+                        db.cursor.execute('SELECT id FROM departamentos WHERE nome = %s', (departamento_nome,))
+                        dept_result = db.cursor.fetchone()
+                        if dept_result:
+                            departamento_id = dept_result[0]
+                        else:
+                            erros.append(f'Linha {row_num}: Departamento "{departamento_nome}" não encontrado')
+                    
+                    # Processar tier
+                    tier = 3
+                    tier_str = row.get('tier', '').strip()
+                    if tier_str:
+                        try:
+                            tier = int(tier_str)
+                            if tier < 1 or tier > 5:
+                                tier = 3
+                        except ValueError:
+                            tier = 3
+                    
+                    # Processar ativo
+                    ativo = True
+                    ativo_str = row.get('ativo', 'true').strip().lower()
+                    if ativo_str in ['false', '0', 'n', 'no']:
+                        ativo = False
+                    
+                    # Verificar se tag já existe
+                    db.cursor.execute('''
+                        SELECT id FROM tags 
+                        WHERE nome = %s AND (departamento_id = %s OR (departamento_id IS NULL AND %s IS NULL))
+                    ''', (nome, departamento_id, departamento_id))
+                    
+                    existing_tag = db.cursor.fetchone()
+                    
+                    if existing_tag:
+                        # Atualizar tag existente
+                        tag_id = existing_tag[0]
+                        db.cursor.execute('''
+                            UPDATE tags 
+                            SET descricao = %s, cor = %s, produtividade = %s, 
+                                departamento_id = %s, tier = %s, ativo = %s,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        ''', (descricao, cor, produtividade, departamento_id, tier, ativo, tag_id))
+                        tags_atualizadas += 1
+                    else:
+                        # Criar nova tag
+                        db.cursor.execute('''
+                            INSERT INTO tags (nome, descricao, cor, produtividade, departamento_id, tier, ativo)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            RETURNING id
+                        ''', (nome, descricao, cor, produtividade, departamento_id, tier, ativo))
+                        tag_id = db.cursor.fetchone()[0]
+                        tags_criadas += 1
+                    
+                    # Processar palavras-chave
+                    palavras_chave_str = row.get('palavras_chave', '').strip()
+                    if palavras_chave_str:
+                        # Remover palavras-chave existentes
+                        db.cursor.execute('DELETE FROM tag_palavras_chave WHERE tag_id = %s', (tag_id,))
+                        
+                        # Separar por vírgula ou ponto-e-vírgula
+                        separadores = [',', ';']
+                        palavras = palavras_chave_str
+                        for sep in separadores:
+                            if sep in palavras:
+                                palavras = palavras.split(sep)
+                                break
+                        else:
+                            palavras = [palavras]
+                        
+                        palavras_adicionadas = set()
+                        for palavra in palavras:
+                            palavra = palavra.strip()
+                            if palavra and palavra not in palavras_adicionadas:
+                                try:
+                                    db.cursor.execute('''
+                                        INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
+                                        VALUES (%s, %s, 1)
+                                        ON CONFLICT (tag_id, palavra_chave) DO NOTHING
+                                    ''', (tag_id, palavra))
+                                    palavras_adicionadas.add(palavra)
+                                except Exception as e:
+                                    print(f"Erro ao inserir palavra-chave '{palavra}': {e}")
+                
+                except Exception as e:
+                    erros.append(f'Linha {row_num}: Erro ao processar - {str(e)}')
+                    tags_ignoradas += 1
+                    print(f"Erro ao processar linha {row_num}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+        
+        # Preparar resposta
+        resultado = {
+            'message': 'Importação concluída!',
+            'tags_criadas': tags_criadas,
+            'tags_atualizadas': tags_atualizadas,
+            'tags_ignoradas': tags_ignoradas,
+            'total_processadas': len(rows)
+        }
+        
+        if erros:
+            resultado['erros'] = erros[:50]  # Limitar a 50 erros
+            if len(erros) > 50:
+                resultado['erros_total'] = len(erros)
+                resultado['message'] += f' ({len(erros)} erros encontrados)'
+        
+        status_code = 200 if tags_criadas > 0 or tags_atualizadas > 0 else 400
+        
+        return jsonify(resultado), status_code
+    
+    except Exception as e:
+        print(f"Erro ao importar tags CSV: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro ao processar arquivo CSV!',
+            'error': str(e)
+        }), 500
