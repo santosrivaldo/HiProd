@@ -25,20 +25,30 @@ def buscar_atividades_wrapper():
     
     try:
         # Chamar função protegida pelo decorator
+        # O decorator api_token_required já valida o token e chama a função
         return buscar_atividades_impl()
     except Exception as e:
         print(f"❌ Erro no wrapper de buscar_atividades: {e}")
         import traceback
         traceback.print_exc()
+        error_type = type(e).__name__
+        error_message = str(e)
         return jsonify({
             'message': 'Erro interno do servidor!',
-            'error': str(e)
+            'error': error_message,
+            'error_type': error_type,
+            'endpoint': '/api/v1/atividades',
+            'method': 'POST'
         }), 500
 
 @api_token_required
-def buscar_atividades_impl(token_data):
+def buscar_atividades_impl(token_data=None, *args, **kwargs):
     """Implementação do endpoint de atividades (protegida por token)"""
     print(f"📥 [V1] POST /api/v1/atividades - Iniciando busca de atividades")
+    # token_data é uma tupla: (token_id, token_nome, ativo, expires_at, created_by)
+    if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
+        token_id, token_nome = token_data[0], token_data[1]
+        print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
     try:
         with DatabaseConnection() as db:
             # Processar requisição
@@ -227,13 +237,29 @@ def listar_usuarios_wrapper():
         response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
         return response
     
-    # Chamar função protegida pelo decorator
-    return listar_usuarios_impl()
+    try:
+        # Chamar função protegida pelo decorator
+        return listar_usuarios_impl()
+    except Exception as e:
+        print(f"❌ Erro no wrapper de listar_usuarios: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro interno do servidor!',
+            'error': str(e),
+            'error_type': type(e).__name__,
+            'endpoint': '/api/v1/usuarios',
+            'method': 'GET'
+        }), 500
 
 @api_token_required
-def listar_usuarios_impl(token_data):
+def listar_usuarios_impl(token_data=None, *args, **kwargs):
     """Implementação do endpoint de listar usuários (protegida por token)"""
     print(f"📥 [V1] GET /api/v1/usuarios - Listando usuários monitorados")
+    # token_data é uma tupla: (token_id, token_nome, ativo, expires_at, created_by)
+    if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
+        token_id, token_nome = token_data[0], token_data[1]
+        print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
     try:
         with DatabaseConnection() as db:
             # Buscar usuários monitorados
@@ -296,13 +322,29 @@ def obter_estatisticas_wrapper():
     if request.method != 'POST':
         return jsonify({'message': f'Método {request.method} não permitido. Use POST.'}), 405
     
-    # Chamar função protegida pelo decorator
-    return obter_estatisticas_impl()
+    try:
+        # Chamar função protegida pelo decorator
+        return obter_estatisticas_impl()
+    except Exception as e:
+        print(f"❌ Erro no wrapper de obter_estatisticas: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro interno do servidor!',
+            'error': str(e),
+            'error_type': type(e).__name__,
+            'endpoint': '/api/v1/estatisticas',
+            'method': 'POST'
+        }), 500
 
 @api_token_required
-def obter_estatisticas_impl(token_data):
+def obter_estatisticas_impl(token_data=None, *args, **kwargs):
     """Implementação do endpoint de estatísticas (protegida por token)"""
     print(f"📥 [V1] POST /api/v1/estatisticas - Obtendo estatísticas")
+    # token_data é uma tupla: (token_id, token_nome, ativo, expires_at, created_by)
+    if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
+        token_id, token_nome = token_data[0], token_data[1]
+        print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
     try:
         with DatabaseConnection() as db:
             # Processar requisição

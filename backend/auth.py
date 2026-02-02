@@ -485,7 +485,17 @@ def api_token_required(f):
                 return f(token_data, *args, **kwargs)
                 
         except Exception as e:
-            print(f"Erro ao verificar token de API: {e}")
-            return jsonify({'message': 'Erro interno do servidor!'}), 500
+            print(f"❌ Erro ao verificar token de API: {e}")
+            import traceback
+            traceback.print_exc()
+            error_type = type(e).__name__
+            error_message = str(e)
+            return jsonify({
+                'message': 'Erro interno do servidor!',
+                'error': error_message,
+                'error_type': error_type,
+                'endpoint': request.path,
+                'method': request.method
+            }), 500
 
     return decorated
