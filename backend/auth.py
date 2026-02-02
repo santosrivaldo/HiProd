@@ -178,10 +178,26 @@ def api_token_required(f):
                         print(f"   Token no banco (primeiros 20 chars): {similar_token[5][:20]}...")
                         print(f"   Token recebido (primeiros 20 chars): {token[:20]}...")
                 
-                # Se ainda não encontrou, listar alguns tokens para debug (sem expor tokens completos)
+                # Se ainda não encontrou, fazer diagnósticos mais detalhados
                 if not token_data:
+                    # Verificar se há tokens que começam com os mesmos caracteres
                     db.cursor.execute('''
-                        SELECT id, nome, ativo, LEFT(token, 20) as token_preview, LENGTH(token) as token_length
+                        SELECT id, nome, ativo, LEFT(token, 30) as token_preview, LENGTH(token) as token_length
+                        FROM api_tokens
+                        WHERE token LIKE %s || '%'
+                        ORDER BY created_at DESC
+                        LIMIT 5
+                    ''', (token[:10],))
+                    
+                    similar_tokens = db.cursor.fetchall()
+                    if similar_tokens:
+                        print(f"   ⚠️ Tokens encontrados que começam com '{token[:10]}...':")
+                        for similar in similar_tokens:
+                            print(f"     - ID: {similar[0]}, Nome: {similar[1]}, Ativo: {similar[2]}, Preview: {similar[3]}..., Length: {similar[4]}")
+                    
+                    # Listar alguns tokens ativos para comparação
+                    db.cursor.execute('''
+                        SELECT id, nome, ativo, LEFT(token, 30) as token_preview, LENGTH(token) as token_length
                         FROM api_tokens
                         WHERE ativo = TRUE
                         ORDER BY created_at DESC
@@ -196,13 +212,29 @@ def api_token_required(f):
                     total_tokens = db.cursor.fetchone()[0]
                     print(f"   Total de tokens ativos no banco: {total_tokens}")
                     
+                    # Verificar se há diferença de case
+                    db.cursor.execute('''
+                        SELECT id, nome, ativo, token
+                        FROM api_tokens
+                        WHERE LOWER(TRIM(token)) = LOWER(TRIM(%s))
+                    ''', (token,))
+                    
+                    case_insensitive_match = db.cursor.fetchone()
+                    if case_insensitive_match:
+                        print(f"   ⚠️ Token encontrado com case diferente!")
+                        print(f"     Token no banco: {case_insensitive_match[3][:30]}...")
+                        print(f"     Token recebido: {token[:30]}...")
+                        print(f"     Diferença de case detectada!")
+                    
                     return jsonify({
                         'message': 'Token de API inválido!',
                         'debug': {
                             'token_length': len(token),
-                            'token_preview': token[:10] + '...',
+                            'token_preview': token[:20] + '...',
                             'endpoint': request.path,
-                            'method': request.method
+                            'method': request.method,
+                            'total_tokens_ativos': total_tokens,
+                            'sugestao': 'Verifique se o token está correto e se existe no banco de dados. Use o script verificar_token.sql para diagnosticar.'
                         }
                     }), 401
                 
