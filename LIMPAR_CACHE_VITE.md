@@ -1,83 +1,83 @@
-# Limpar Cache do Vite - Resolver Problemas de React
+# Limpar Cache do Vite - Resolver Erro de Múltiplas Cópias do React
 
-## 🔧 Problema: Múltiplas Cópias do React
+## 🐛 Problema
 
-Se você está vendo erros como "Invalid hook call" ou "Cannot read properties of null (reading 'useState')", pode ser devido a múltiplas cópias do React ou cache corrompido do Vite.
+Erro: `Invalid hook call. Hooks can only be called inside of the body of a function component.`
 
-## ✅ Solução: Limpar Cache e Reinstalar
+Este erro geralmente ocorre quando há múltiplas cópias do React sendo carregadas.
 
-### Passo 1: Parar o servidor Vite
+## ✅ Solução
 
-Pressione `Ctrl+C` no terminal onde o Vite está rodando.
+### 1. Limpar Cache do Vite
 
-### Passo 2: Limpar cache do Vite
-
-```bash
-# Windows
-rmdir /s /q node_modules\.vite
-rmdir /s /q dist
-
-# Linux/Mac
-rm -rf node_modules/.vite
-rm -rf dist
+**Windows (PowerShell):**
+```powershell
+cd C:\Projetos\HiProd
+Remove-Item -Recurse -Force node_modules\.vite
 ```
 
-### Passo 3: Limpar node_modules e reinstalar
-
+**Linux/Mac:**
 ```bash
-# Windows
-rmdir /s /q node_modules
-del package-lock.json
+cd /caminho/para/HiProd
+rm -rf node_modules/.vite
+```
 
-# Linux/Mac
-rm -rf node_modules
-rm package-lock.json
+### 2. Limpar node_modules (se necessário)
 
-# Reinstalar
+**Windows (PowerShell):**
+```powershell
+Remove-Item -Recurse -Force node_modules
 npm install
 ```
 
-### Passo 4: Verificar versões do React
-
+**Linux/Mac:**
 ```bash
-npm list react react-dom
+rm -rf node_modules
+npm install
 ```
 
-Certifique-se de que há apenas uma versão de cada.
-
-### Passo 5: Reiniciar o servidor
+### 3. Reiniciar o Servidor de Desenvolvimento
 
 ```bash
+# Parar o servidor (Ctrl+C)
+# Iniciar novamente
 npm run dev
 ```
 
-## 🔍 Verificações Adicionais
+## 🔍 Verificações
 
-### Verificar se há múltiplas instalações do React
+### Verificar se há múltiplas cópias do React
 
 ```bash
-# Windows PowerShell
-Get-ChildItem -Path node_modules -Filter react -Recurse -Directory | Select-Object FullName
+# Verificar versões instaladas
+npm list react react-dom
 
-# Linux/Mac
-find node_modules -name react -type d
+# Deve mostrar apenas uma versão de cada
 ```
 
-Deve haver apenas:
-- `node_modules/react`
-- `node_modules/react-dom/node_modules/react` (se houver)
+### Verificar configuração do Vite
 
-### Verificar package-lock.json
+O arquivo `vite.config.js` já está configurado com:
+- `dedupe: ['react', 'react-dom', 'react/jsx-runtime']`
+- `alias` para forçar resolução única do React
+- `optimizeDeps.force: true`
 
-Certifique-se de que `package-lock.json` tem apenas uma versão do React listada.
+## 📝 Alterações Realizadas
 
-## 🚨 Se o Problema Persistir
+1. ✅ Hook `useIntersectionObserver` agora usa importações diretas:
+   ```javascript
+   import { useState, useEffect, useRef } from 'react'
+   ```
 
-1. **Verificar vite.config.js**: Certifique-se de que `dedupe` está configurado corretamente
-2. **Verificar imports**: Todos os arquivos devem importar React da mesma forma
-3. **Verificar node_modules**: Pode ser necessário deletar e reinstalar completamente
+2. ✅ Componente `ActivityManagement` não importa `React` explicitamente:
+   ```javascript
+   import { useState, useEffect, useCallback } from 'react'
+   ```
 
-## 📝 Nota
+3. ✅ Cache do Vite foi limpo
 
-Após limpar o cache, o primeiro build pode demorar mais, pois o Vite precisa reconstruir tudo.
+## 🚀 Próximos Passos
 
+1. Reiniciar o servidor de desenvolvimento
+2. Verificar se o erro foi resolvido
+3. Se o erro persistir, limpar `node_modules` e reinstalar dependências
