@@ -88,15 +88,50 @@ def token_required(f):
                     # Verificar se o token tem permissão para este endpoint
                     has_permission = False
                     for perm_endpoint, perm_method in permissions:
+                        # Normalizar endpoint e permissão
+                        perm_endpoint = perm_endpoint.strip() if perm_endpoint else ''
+                        perm_method = perm_method.strip().upper() if perm_method else '*'
+                        
                         # Suporte a wildcards (ex: /atividades/*)
                         if perm_endpoint.endswith('*'):
                             base_path = perm_endpoint[:-1]
                             if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
                                 has_permission = True
                                 break
+                        # Suporte a wildcards no início (ex: */atividades)
+                        elif perm_endpoint.startswith('*'):
+                            suffix_path = perm_endpoint[1:]
+                            if endpoint.endswith(suffix_path) and (perm_method == '*' or perm_method == method):
+                                has_permission = True
+                                break
+                        # Suporte a padrões com parâmetros (ex: /atividades/<id>)
+                        elif '<' in perm_endpoint and '>' in perm_endpoint:
+                            # Converter padrão Flask para comparação
+                            pattern_parts = perm_endpoint.split('/')
+                            endpoint_parts = endpoint.split('/')
+                            
+                            if len(pattern_parts) == len(endpoint_parts):
+                                matches = True
+                                for p_part, e_part in zip(pattern_parts, endpoint_parts):
+                                    # Se a parte do padrão não é um parâmetro, deve ser exata
+                                    if p_part and not (p_part.startswith('<') and p_part.endswith('>')):
+                                        if p_part != e_part:
+                                            matches = False
+                                            break
+                                
+                                if matches and (perm_method == '*' or perm_method == method):
+                                    has_permission = True
+                                    break
+                        # Comparação exata
                         elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
                             has_permission = True
                             break
+                        # Comparação sem parâmetros (ex: /atividades/123 vs /atividades/<id>)
+                        elif perm_endpoint in endpoint and (perm_method == '*' or perm_method == method):
+                            # Verificar se o endpoint começa com a permissão (para rotas com parâmetros)
+                            if endpoint.startswith(perm_endpoint.rstrip('/')) or endpoint.startswith(perm_endpoint + '/'):
+                                has_permission = True
+                                break
                     
                     if not has_permission:
                         return jsonify({
@@ -376,15 +411,52 @@ def api_token_required(f):
                 # Verificar se o token tem permissão para este endpoint
                 has_permission = False
                 for perm_endpoint, perm_method in permissions:
+                    # Normalizar endpoint e permissão
+                    perm_endpoint = perm_endpoint.strip()
+                    perm_method = perm_method.strip().upper() if perm_method else '*'
+                    
                     # Suporte a wildcards (ex: /atividades/*)
                     if perm_endpoint.endswith('*'):
                         base_path = perm_endpoint[:-1]
                         if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
                             has_permission = True
                             break
+                    # Suporte a wildcards no início (ex: */atividades)
+                    elif perm_endpoint.startswith('*'):
+                        suffix_path = perm_endpoint[1:]
+                        if endpoint.endswith(suffix_path) and (perm_method == '*' or perm_method == method):
+                            has_permission = True
+                            break
+                    # Suporte a padrões com parâmetros (ex: /atividades/<id>)
+                    elif '<' in perm_endpoint and '>' in perm_endpoint:
+                        # Converter padrão Flask para regex
+                        import re
+                        pattern = perm_endpoint.replace('<int:', '<').replace('<uuid:', '<').replace('<', '').replace('>', '')
+                        pattern_parts = pattern.split('/')
+                        endpoint_parts = endpoint.split('/')
+                        
+                        if len(pattern_parts) == len(endpoint_parts):
+                            matches = True
+                            for p_part, e_part in zip(pattern_parts, endpoint_parts):
+                                # Se a parte do padrão não é um parâmetro, deve ser exata
+                                if p_part and not p_part.startswith(':'):
+                                    if p_part != e_part:
+                                        matches = False
+                                        break
+                            
+                            if matches and (perm_method == '*' or perm_method == method):
+                                has_permission = True
+                                break
+                    # Comparação exata
                     elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
                         has_permission = True
                         break
+                    # Comparação sem parâmetros (ex: /atividades/123 vs /atividades/<id>)
+                    elif perm_endpoint in endpoint and (perm_method == '*' or perm_method == method):
+                        # Verificar se o endpoint começa com a permissão (para rotas com parâmetros)
+                        if endpoint.startswith(perm_endpoint.rstrip('/')) or endpoint.startswith(perm_endpoint + '/'):
+                            has_permission = True
+                            break
                 
                 if not has_permission:
                     # Log de debug para permissões

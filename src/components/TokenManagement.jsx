@@ -136,6 +136,18 @@ const TokenManagement = () => {
     })
   }
 
+  const addQuickPermission = (endpoint, method = 'GET') => {
+    // Verificar se já existe
+    if (formData.permissions.some(p => p.endpoint === endpoint && p.method === method)) {
+      return
+    }
+    
+    setFormData({
+      ...formData,
+      permissions: [...formData.permissions, { endpoint, method }]
+    })
+  }
+
   const removePermission = (index) => {
     setFormData({
       ...formData,
@@ -287,13 +299,31 @@ const TokenManagement = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Permissões por Endpoint *
                   </label>
-                  <button
-                    type="button"
-                    onClick={addPermission}
-                    className="text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
-                  >
-                    + Adicionar Permissão
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => addQuickPermission('/atividades/*', '*')}
+                      className="text-xs bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-300 px-2 py-1 rounded hover:bg-blue-300 dark:hover:bg-blue-700"
+                      title="Adicionar acesso a todas as atividades"
+                    >
+                      + Atividades
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addQuickPermission('/api/v1/*', '*')}
+                      className="text-xs bg-green-200 dark:bg-green-800 text-green-700 dark:text-green-300 px-2 py-1 rounded hover:bg-green-300 dark:hover:bg-green-700"
+                      title="Adicionar acesso a todos os endpoints V1"
+                    >
+                      + V1 API
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addPermission}
+                      className="text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                    >
+                      + Adicionar
+                    </button>
+                  </div>
                 </div>
 
                 {formData.permissions.length === 0 && (
@@ -303,32 +333,53 @@ const TokenManagement = () => {
                 )}
 
                 {formData.permissions.map((perm, index) => (
-                  <div key={index} className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={perm.endpoint}
-                      onChange={(e) => updatePermission(index, 'endpoint', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      placeholder="/endpoint ou /endpoint/*"
-                      required
-                    />
-                    <select
-                      value={perm.method}
-                      onChange={(e) => updatePermission(index, 'method', e.target.value)}
-                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    >
-                      <option value="GET">GET</option>
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="DELETE">DELETE</option>
-                      <option value="*">TODOS</option>
-                    </select>
+                  <div key={index} className="flex gap-2 mb-2 items-start">
+                    <div className="flex-1">
+                      <select
+                        value={perm.endpoint}
+                        onChange={(e) => updatePermission(index, 'endpoint', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        required
+                      >
+                        <option value="">Selecione um endpoint...</option>
+                        <optgroup label="Endpoints Específicos">
+                          {endpoints.filter(ep => !ep.endpoint.includes('*')).map((ep) => (
+                            <option key={`${ep.endpoint}-${ep.method}`} value={ep.endpoint}>
+                              {ep.endpoint} ({ep.method}) - {ep.description}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Wildcards (Acesso a Múltiplos Endpoints)">
+                          {endpoints.filter(ep => ep.endpoint.includes('*')).map((ep) => (
+                            <option key={`${ep.endpoint}-${ep.method}`} value={ep.endpoint}>
+                              {ep.endpoint} ({ep.method}) - {ep.description}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+                    <div className="w-32">
+                      <select
+                        value={perm.method}
+                        onChange={(e) => updatePermission(index, 'method', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        required
+                      >
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="*">TODOS (*)</option>
+                      </select>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removePermission(index)}
                       className="px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                      title="Remover permissão"
                     >
-                      Remover
+                      ✕
                     </button>
                   </div>
                 ))}

@@ -341,6 +341,7 @@ def get_available_endpoints(current_user):
         
         # Usuários
         {'endpoint': '/usuarios', 'method': 'GET', 'description': 'Listar usuários do sistema (aceita JWT ou Token API)'},
+        {'endpoint': '/usuarios/*', 'method': '*', 'description': 'Todos os endpoints de usuários (wildcard)'},
         {'endpoint': '/usuarios/<id>', 'method': 'GET', 'description': 'Buscar usuário específico'},
         {'endpoint': '/usuarios', 'method': 'POST', 'description': 'Criar usuário'},
         {'endpoint': '/usuarios/<id>', 'method': 'PUT', 'description': 'Atualizar usuário'},
@@ -355,22 +356,26 @@ def get_available_endpoints(current_user):
         
         # Departamentos
         {'endpoint': '/departamentos', 'method': 'GET', 'description': 'Listar departamentos (aceita JWT ou Token API)'},
+        {'endpoint': '/departamentos/*', 'method': '*', 'description': 'Todos os endpoints de departamentos (wildcard)'},
         {'endpoint': '/departamentos', 'method': 'POST', 'description': 'Criar departamento'},
         {'endpoint': '/departamentos/<id>/configuracoes', 'method': 'GET', 'description': 'Obter configurações do departamento'},
         {'endpoint': '/departamentos/<id>/configuracoes', 'method': 'POST', 'description': 'Atualizar configurações do departamento'},
         
         # Tags
         {'endpoint': '/tags', 'method': 'GET', 'description': 'Listar tags (aceita JWT ou Token API)'},
+        {'endpoint': '/tags/*', 'method': '*', 'description': 'Todos os endpoints de tags (wildcard)'},
         {'endpoint': '/tags', 'method': 'POST', 'description': 'Criar tag'},
         {'endpoint': '/tags/<id>', 'method': 'PUT', 'description': 'Atualizar tag'},
         {'endpoint': '/tags/<id>', 'method': 'DELETE', 'description': 'Excluir tag'},
         
         # Categorias
         {'endpoint': '/categorias', 'method': 'GET', 'description': 'Listar categorias (aceita JWT ou Token API)'},
+        {'endpoint': '/categorias/*', 'method': '*', 'description': 'Todos os endpoints de categorias (wildcard)'},
         {'endpoint': '/categorias', 'method': 'POST', 'description': 'Criar categoria'},
         
         # Escalas
         {'endpoint': '/escalas', 'method': 'GET', 'description': 'Listar escalas (aceita JWT ou Token API)'},
+        {'endpoint': '/escalas/*', 'method': '*', 'description': 'Todos os endpoints de escalas (wildcard)'},
         {'endpoint': '/escalas', 'method': 'POST', 'description': 'Criar escala'},
         {'endpoint': '/escalas/<id>', 'method': 'PUT', 'description': 'Atualizar escala'},
         {'endpoint': '/escalas/<id>', 'method': 'DELETE', 'description': 'Excluir escala'},
