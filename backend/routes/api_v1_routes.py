@@ -23,8 +23,17 @@ def buscar_atividades_wrapper():
     if request.method != 'POST':
         return jsonify({'message': f'Método {request.method} não permitido. Use POST.'}), 405
     
-    # Chamar função protegida pelo decorator
-    return buscar_atividades_impl()
+    try:
+        # Chamar função protegida pelo decorator
+        return buscar_atividades_impl()
+    except Exception as e:
+        print(f"❌ Erro no wrapper de buscar_atividades: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro interno do servidor!',
+            'error': str(e)
+        }), 500
 
 @api_token_required
 def buscar_atividades_impl(token_data):
@@ -50,10 +59,31 @@ def buscar_atividades_impl(token_data):
             
             # Validar formato das datas
             try:
-                inicio_dt = datetime.fromisoformat(inicio.replace('Z', '+00:00'))
-                fim_dt = datetime.fromisoformat(fim.replace('Z', '+00:00'))
+                if not isinstance(inicio, str) or not isinstance(fim, str):
+                    return jsonify({'message': 'Datas devem ser strings no formato ISO 8601!'}), 400
+                
+                # Normalizar formato de data
+                inicio_normalized = inicio.replace('Z', '+00:00') if 'Z' in inicio else inicio
+                fim_normalized = fim.replace('Z', '+00:00') if 'Z' in fim else fim
+                
+                inicio_dt = datetime.fromisoformat(inicio_normalized)
+                fim_dt = datetime.fromisoformat(fim_normalized)
+                
+                # Garantir timezone UTC
+                if inicio_dt.tzinfo is None:
+                    inicio_dt = inicio_dt.replace(tzinfo=timezone.utc)
+                if fim_dt.tzinfo is None:
+                    fim_dt = fim_dt.replace(tzinfo=timezone.utc)
+                
+                # Validar que início é antes do fim
+                if inicio_dt > fim_dt:
+                    return jsonify({'message': 'Data de início deve ser anterior à data de fim!'}), 400
+                    
             except (ValueError, AttributeError) as e:
-                return jsonify({'message': f'Formato de data inválido: {str(e)}'}), 400
+                return jsonify({
+                    'message': f'Formato de data inválido: {str(e)}',
+                    'exemplo': 'Use formato ISO 8601: 2024-01-01T00:00:00Z'
+                }), 400
             
             # Buscar usuário monitorado por nome ou ID
             usuario_monitorado_id = None
@@ -83,62 +113,72 @@ def buscar_atividades_impl(token_data):
                 return jsonify({'message': f'Usuário "{usuario}" não encontrado!'}), 404
             
             # Buscar atividades no período
-            db.cursor.execute('''
-                SELECT
-                    a.id,
-                    a.usuario_monitorado_id,
-                    um.nome as usuario_monitorado_nome,
-                    um.cargo,
-                    a.active_window,
-                    a.titulo_janela,
-                    a.categoria,
-                    a.produtividade,
-                    a.horario,
-                    a.ociosidade,
-                    COALESCE(a.duracao, 10) as duracao,
-                    a.domain,
-                    a.application,
-                    a.ip_address,
-                    a.user_agent,
-                    CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
-                    a.screenshot_size,
-                    a.face_presence_time,
-                    a.created_at,
-                    a.updated_at
-                FROM atividades a
-                LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
-                WHERE a.usuario_monitorado_id = %s
-                AND a.horario >= %s
-                AND a.horario <= %s
-                ORDER BY a.horario DESC
-            ''', (usuario_monitorado_id, inicio_dt, fim_dt))
+            try:
+                db.cursor.execute('''
+                    SELECT
+                        a.id,
+                        a.usuario_monitorado_id,
+                        um.nome as usuario_monitorado_nome,
+                        um.cargo,
+                        a.active_window,
+                        a.titulo_janela,
+                        a.categoria,
+                        a.produtividade,
+                        a.horario,
+                        a.ociosidade,
+                        COALESCE(a.duracao, 10) as duracao,
+                        a.domain,
+                        a.application,
+                        a.ip_address,
+                        a.user_agent,
+                        CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
+                        a.screenshot_size,
+                        a.face_presence_time,
+                        a.created_at,
+                        a.updated_at
+                    FROM atividades a
+                    LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                    WHERE a.usuario_monitorado_id = %s
+                    AND a.horario >= %s
+                    AND a.horario <= %s
+                    ORDER BY a.horario DESC
+                ''', (usuario_monitorado_id, inicio_dt, fim_dt))
+            except Exception as db_error:
+                print(f"❌ Erro na query SQL: {db_error}")
+                raise
             
             rows = db.cursor.fetchall()
             
             result = []
             for row in rows:
-                result.append({
-                    'id': row[0],
-                    'usuario_monitorado_id': row[1],
-                    'usuario_monitorado_nome': row[2],
-                    'cargo': row[3],
-                    'active_window': row[4],
-                    'titulo_janela': row[5],
-                    'categoria': row[6] or 'unclassified',
-                    'produtividade': row[7] or 'neutral',
-                    'horario': row[8].isoformat() if row[8] else None,
-                    'ociosidade': row[9] or 0,
-                    'duracao': row[10] or 10,
-                    'domain': row[11],
-                    'application': row[12],
-                    'ip_address': row[13],
-                    'user_agent': row[14],
-                    'has_screenshot': row[15] if row[15] else False,
-                    'screenshot_size': row[16],
-                    'face_presence_time': row[17],
-                    'created_at': row[18].isoformat() if row[18] else None,
-                    'updated_at': row[19].isoformat() if row[19] else None
-                })
+                try:
+                    result.append({
+                        'id': row[0],
+                        'usuario_monitorado_id': row[1],
+                        'usuario_monitorado_nome': row[2],
+                        'cargo': row[3],
+                        'active_window': row[4],
+                        'titulo_janela': row[5],
+                        'categoria': row[6] or 'unclassified',
+                        'produtividade': row[7] or 'neutral',
+                        'horario': row[8].isoformat() if row[8] else None,
+                        'ociosidade': int(row[9]) if row[9] is not None else 0,
+                        'duracao': int(row[10]) if row[10] is not None else 10,
+                        'domain': row[11],
+                        'application': row[12],
+                        'ip_address': row[13],
+                        'user_agent': row[14],
+                        'has_screenshot': bool(row[15]) if row[15] is not None else False,
+                        'screenshot_size': int(row[16]) if row[16] is not None else None,
+                        'face_presence_time': int(row[17]) if row[17] is not None else None,
+                        'created_at': row[18].isoformat() if row[18] else None,
+                        'updated_at': row[19].isoformat() if row[19] else None
+                    })
+                except (IndexError, TypeError, AttributeError) as row_error:
+                    print(f"⚠️ Erro ao processar linha: {row_error}")
+                    print(f"   Linha: {row}")
+                    # Continuar com outras linhas mesmo se uma falhar
+                    continue
             
             return jsonify({
                 'version': 'v1',
@@ -155,7 +195,15 @@ def buscar_atividades_impl(token_data):
         print(f"❌ Erro ao buscar atividades por token: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'message': 'Erro interno do servidor!', 'error': str(e)}), 500
+        error_type = type(e).__name__
+        error_message = str(e)
+        
+        # Retornar erro mais detalhado em desenvolvimento, mas genérico em produção
+        return jsonify({
+            'message': 'Erro interno do servidor!',
+            'error': error_message,
+            'error_type': error_type
+        }), 500
 
 @api_v1_bp.route('/usuarios', methods=['GET', 'OPTIONS'])
 def listar_usuarios_wrapper():
