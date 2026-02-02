@@ -1,12 +1,12 @@
-
 from flask import Blueprint, request, jsonify
 from ..database import DatabaseConnection
+from ..auth import api_token_required
 from datetime import datetime, timezone
 
 api_v1_bp = Blueprint('api_v1', __name__, url_prefix='/api/v1')
 
 @api_v1_bp.route('/atividades', methods=['POST', 'OPTIONS'])
-def buscar_atividades():
+def buscar_atividades_wrapper():
     """
     Endpoint V1 - Buscar atividades por usuário e período
     Requer: Token de API com permissão para /api/v1/atividades (POST)
@@ -23,85 +23,14 @@ def buscar_atividades():
     if request.method != 'POST':
         return jsonify({'message': f'Método {request.method} não permitido. Use POST.'}), 405
     
-    # Validar token de API
-    token = request.headers.get('Authorization') or request.headers.get('X-API-Token')
-    
-    if not token:
-        return jsonify({'message': 'Token de API não fornecido!'}), 401
+    # Chamar função protegida pelo decorator
+    return buscar_atividades_impl()
 
-    try:
-        # Remover 'Bearer ' se presente
-        if token.startswith('Bearer '):
-            token = token.split(' ')[1]
-    except (IndexError, AttributeError):
-        return jsonify({'message': 'Formato de token inválido!'}), 401
-
+@api_token_required
+def buscar_atividades_impl(token_data):
+    """Implementação do endpoint de atividades (protegida por token)"""
     try:
         with DatabaseConnection() as db:
-            # Buscar token no banco
-            db.cursor.execute('''
-                SELECT id, nome, ativo, expires_at, created_by
-                FROM api_tokens
-                WHERE token = %s
-            ''', (token,))
-            
-            token_data = db.cursor.fetchone()
-            
-            if not token_data:
-                return jsonify({'message': 'Token de API inválido!'}), 401
-            
-            token_id, token_nome, ativo, expires_at, created_by = token_data
-            
-            # Verificar se token está ativo
-            if not ativo:
-                return jsonify({'message': 'Token de API desativado!'}), 403
-            
-            # Verificar expiração
-            if expires_at:
-                expires_at_utc = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
-                if datetime.now(timezone.utc) > expires_at_utc:
-                    return jsonify({'message': 'Token de API expirado!'}), 403
-            
-            # Verificar permissões
-            endpoint = request.path
-            method = request.method
-            
-            db.cursor.execute('''
-                SELECT endpoint, method
-                FROM api_token_permissions
-                WHERE token_id = %s
-            ''', (token_id,))
-            
-            permissions = db.cursor.fetchall()
-            
-            if not permissions:
-                return jsonify({'message': 'Token sem permissões configuradas!'}), 403
-            
-            has_permission = False
-            for perm_endpoint, perm_method in permissions:
-                if perm_endpoint.endswith('*'):
-                    base_path = perm_endpoint[:-1]
-                    if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
-                        has_permission = True
-                        break
-                elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
-                    has_permission = True
-                    break
-            
-            if not has_permission:
-                return jsonify({
-                    'message': 'Token sem permissão para este endpoint!',
-                    'endpoint': endpoint,
-                    'method': method
-                }), 403
-            
-            # Atualizar último uso
-            db.cursor.execute('''
-                UPDATE api_tokens
-                SET last_used_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            ''', (token_id,))
-            
             # Processar requisição
             data = request.get_json()
             
@@ -229,7 +158,7 @@ def buscar_atividades():
         return jsonify({'message': 'Erro interno do servidor!', 'error': str(e)}), 500
 
 @api_v1_bp.route('/usuarios', methods=['GET', 'OPTIONS'])
-def listar_usuarios():
+def listar_usuarios_wrapper():
     """
     Endpoint V1 - Listar usuários monitorados
     Requer: Token de API com permissão para /api/v1/usuarios (GET)
@@ -242,82 +171,14 @@ def listar_usuarios():
         response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
         return response
     
-    # Validar token de API
-    token = request.headers.get('Authorization') or request.headers.get('X-API-Token')
-    
-    if not token:
-        return jsonify({'message': 'Token de API não fornecido!'}), 401
+    # Chamar função protegida pelo decorator
+    return listar_usuarios_impl()
 
-    try:
-        if token.startswith('Bearer '):
-            token = token.split(' ')[1]
-    except (IndexError, AttributeError):
-        return jsonify({'message': 'Formato de token inválido!'}), 401
-
+@api_token_required
+def listar_usuarios_impl(token_data):
+    """Implementação do endpoint de listar usuários (protegida por token)"""
     try:
         with DatabaseConnection() as db:
-            # Validar token e permissões (mesmo processo)
-            db.cursor.execute('''
-                SELECT id, nome, ativo, expires_at
-                FROM api_tokens
-                WHERE token = %s
-            ''', (token,))
-            
-            token_data = db.cursor.fetchone()
-            
-            if not token_data:
-                return jsonify({'message': 'Token de API inválido!'}), 401
-            
-            token_id, token_nome, ativo, expires_at = token_data
-            
-            if not ativo:
-                return jsonify({'message': 'Token de API desativado!'}), 403
-            
-            if expires_at:
-                expires_at_utc = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
-                if datetime.now(timezone.utc) > expires_at_utc:
-                    return jsonify({'message': 'Token de API expirado!'}), 403
-            
-            # Verificar permissões
-            endpoint = request.path
-            method = request.method
-            
-            db.cursor.execute('''
-                SELECT endpoint, method
-                FROM api_token_permissions
-                WHERE token_id = %s
-            ''', (token_id,))
-            
-            permissions = db.cursor.fetchall()
-            
-            if not permissions:
-                return jsonify({'message': 'Token sem permissões configuradas!'}), 403
-            
-            has_permission = False
-            for perm_endpoint, perm_method in permissions:
-                if perm_endpoint.endswith('*'):
-                    base_path = perm_endpoint[:-1]
-                    if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
-                        has_permission = True
-                        break
-                elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
-                    has_permission = True
-                    break
-            
-            if not has_permission:
-                return jsonify({
-                    'message': 'Token sem permissão para este endpoint!',
-                    'endpoint': endpoint,
-                    'method': method
-                }), 403
-            
-            # Atualizar último uso
-            db.cursor.execute('''
-                UPDATE api_tokens
-                SET last_used_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            ''', (token_id,))
-            
             # Buscar usuários monitorados
             db.cursor.execute('''
                 SELECT 
@@ -360,7 +221,7 @@ def listar_usuarios():
         return jsonify({'message': 'Erro interno do servidor!', 'error': str(e)}), 500
 
 @api_v1_bp.route('/estatisticas', methods=['POST', 'OPTIONS'])
-def obter_estatisticas():
+def obter_estatisticas_wrapper():
     """
     Endpoint V1 - Obter estatísticas de um usuário
     Requer: Token de API com permissão para /api/v1/estatisticas (POST)
@@ -376,82 +237,14 @@ def obter_estatisticas():
     if request.method != 'POST':
         return jsonify({'message': f'Método {request.method} não permitido. Use POST.'}), 405
     
-    # Validar token de API
-    token = request.headers.get('Authorization') or request.headers.get('X-API-Token')
-    
-    if not token:
-        return jsonify({'message': 'Token de API não fornecido!'}), 401
+    # Chamar função protegida pelo decorator
+    return obter_estatisticas_impl()
 
-    try:
-        if token.startswith('Bearer '):
-            token = token.split(' ')[1]
-    except (IndexError, AttributeError):
-        return jsonify({'message': 'Formato de token inválido!'}), 401
-
+@api_token_required
+def obter_estatisticas_impl(token_data):
+    """Implementação do endpoint de estatísticas (protegida por token)"""
     try:
         with DatabaseConnection() as db:
-            # Validar token e permissões
-            db.cursor.execute('''
-                SELECT id, nome, ativo, expires_at
-                FROM api_tokens
-                WHERE token = %s
-            ''', (token,))
-            
-            token_data = db.cursor.fetchone()
-            
-            if not token_data:
-                return jsonify({'message': 'Token de API inválido!'}), 401
-            
-            token_id, token_nome, ativo, expires_at = token_data
-            
-            if not ativo:
-                return jsonify({'message': 'Token de API desativado!'}), 403
-            
-            if expires_at:
-                expires_at_utc = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
-                if datetime.now(timezone.utc) > expires_at_utc:
-                    return jsonify({'message': 'Token de API expirado!'}), 403
-            
-            # Verificar permissões
-            endpoint = request.path
-            method = request.method
-            
-            db.cursor.execute('''
-                SELECT endpoint, method
-                FROM api_token_permissions
-                WHERE token_id = %s
-            ''', (token_id,))
-            
-            permissions = db.cursor.fetchall()
-            
-            if not permissions:
-                return jsonify({'message': 'Token sem permissões configuradas!'}), 403
-            
-            has_permission = False
-            for perm_endpoint, perm_method in permissions:
-                if perm_endpoint.endswith('*'):
-                    base_path = perm_endpoint[:-1]
-                    if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
-                        has_permission = True
-                        break
-                elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
-                    has_permission = True
-                    break
-            
-            if not has_permission:
-                return jsonify({
-                    'message': 'Token sem permissão para este endpoint!',
-                    'endpoint': endpoint,
-                    'method': method
-                }), 403
-            
-            # Atualizar último uso
-            db.cursor.execute('''
-                UPDATE api_tokens
-                SET last_used_at = CURRENT_TIMESTAMP
-                WHERE id = %s
-            ''', (token_id,))
-            
             # Processar requisição
             data = request.get_json()
             
