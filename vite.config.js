@@ -93,7 +93,9 @@ export default defineConfig({
       // Usar path.resolve em vez de require.resolve para compatibilidade ESM
       'react': path.resolve(__dirname, 'node_modules/react'),
       'react-dom': path.resolve(__dirname, 'node_modules/react-dom')
-    }
+    },
+    // Forçar resolução correta do React
+    conditions: ['import', 'module', 'browser', 'default']
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react/jsx-runtime'],
@@ -101,7 +103,9 @@ export default defineConfig({
   },
   // Garantir que React é sempre resolvido corretamente
   esbuild: {
-    jsx: 'automatic'
+    jsx: 'automatic',
+    // Garantir que React é tratado como external apenas quando necessário
+    jsxImportSource: 'react'
   },
   server: {
     host: '0.0.0.0',
