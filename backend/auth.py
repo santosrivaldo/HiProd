@@ -247,6 +247,87 @@ def api_token_required(f):
     
     return decorated
 
+def agent_required(f):
+    """
+    Decorator para rotas acessadas pelo agente.
+    Aceita token JWT OU nome do usuário no header X-User-Name.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Tentar obter token JWT primeiro
+        token = request.headers.get('Authorization')
+        
+        if token:
+            try:
+                if token.startswith('Bearer '):
+                    token = token.split(' ')[1]
+                
+                user_id = verify_jwt_token(token)
+                if user_id:
+                    try:
+                        with DatabaseConnection() as db:
+                            db.cursor.execute('''
+                                SELECT id, nome, email, ativo, departamento_id
+                                FROM usuarios
+                                WHERE id = %s
+                            ''', (user_id,))
+                            user = db.cursor.fetchone()
+                            
+                            if user and user[3]:  # Se existe e está ativo
+                                return f(user, *args, **kwargs)
+                    except Exception as e:
+                        print(f"⚠️ Erro ao buscar usuário: {e}")
+            except Exception as e:
+                print(f"⚠️ Erro ao verificar token JWT: {e}")
+        
+        # Se não tem token válido, tentar pelo nome do usuário (modo agente)
+        user_name = request.headers.get('X-User-Name')
+        
+        if not user_name:
+            return jsonify({'message': 'Token JWT ou header X-User-Name é obrigatório!'}), 401
+        
+        # Buscar ou criar usuário monitorado pelo nome
+        try:
+            with DatabaseConnection() as db:
+                # Buscar usuário monitorado
+                db.cursor.execute('''
+                    SELECT id, nome, cargo, departamento_id, ativo
+                    FROM usuarios_monitorados
+                    WHERE nome = %s
+                ''', (user_name,))
+                
+                usuario_monitorado = db.cursor.fetchone()
+                
+                if not usuario_monitorado:
+                    # Criar usuário monitorado se não existir
+                    db.cursor.execute('''
+                        INSERT INTO usuarios_monitorados (nome, ativo)
+                        VALUES (%s, TRUE)
+                        RETURNING id, nome, cargo, departamento_id, ativo
+                    ''', (user_name,))
+                    usuario_monitorado = db.cursor.fetchone()
+                    print(f"✅ Usuário monitorado criado: {user_name}")
+                
+                # Retornar como tupla similar ao formato de usuarios
+                # (id, nome, email, ativo, departamento_id)
+                user_data = (
+                    usuario_monitorado[0],  # id
+                    usuario_monitorado[1],  # nome
+                    None,  # email (não existe em usuarios_monitorados)
+                    usuario_monitorado[4],  # ativo
+                    usuario_monitorado[3]   # departamento_id
+                )
+                
+                return f(user_data, *args, **kwargs)
+                
+        except Exception as e:
+            print(f"❌ Erro ao buscar/criar usuário monitorado: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'message': 'Erro ao processar requisição do agente!'}), 500
+    
+    return decorated
+
 def hybrid_token_required(f):
     """
     Decorator híbrido que aceita tanto JWT quanto API Token.
