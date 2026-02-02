@@ -11,6 +11,7 @@ import TagManagement from './components/TagManagement'
 import ActivityManagement from './components/ActivityManagement'
 import WorkScheduleManagement from './components/WorkScheduleManagement'
 import Settings from './components/Settings'
+import TokenManagement from './components/TokenManagement'
 import ScreenshotPage from './pages/ScreenshotPage'
 import FacePresencePage from './pages/FacePresencePage'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
@@ -36,6 +37,7 @@ function AppContent() {
         <Route path="/activities" element={<ActivityManagement />} />
         <Route path="/schedules" element={<WorkScheduleManagement />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/tokens" element={<TokenManagement />} />
         <Route path="/screenshots/:activityId" element={<ScreenshotPage />} />
         <Route path="/face-presence" element={<FacePresencePage />} />
       </Routes>

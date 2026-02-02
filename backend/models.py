@@ -339,6 +339,38 @@ def init_db():
             
             print("✅ Tabela face_presence_checks criada")
 
+            # Tabela de tokens de API
+            print("📋 Criando tabela de tokens de API...")
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_tokens (
+                id SERIAL PRIMARY KEY,
+                nome VARCHAR(100) NOT NULL,
+                token VARCHAR(255) NOT NULL UNIQUE,
+                descricao TEXT,
+                ativo BOOLEAN DEFAULT TRUE,
+                created_by UUID REFERENCES usuarios(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used_at TIMESTAMP,
+                expires_at TIMESTAMP
+            );
+            ''')
+            print("✅ Tabela api_tokens criada")
+
+            # Tabela de permissões de tokens por endpoint
+            print("📋 Criando tabela de permissões de tokens...")
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS api_token_permissions (
+                id SERIAL PRIMARY KEY,
+                token_id INTEGER NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+                endpoint VARCHAR(255) NOT NULL,
+                method VARCHAR(10) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(token_id, endpoint, method)
+            );
+            ''')
+            print("✅ Tabela api_token_permissions criada")
+
             print("✅ Todas as tabelas criadas")
 
             # 5. Criar índices para melhor performance
@@ -356,7 +388,11 @@ def init_db():
                 'CREATE INDEX IF NOT EXISTS idx_tags_ativo ON tags(ativo);',
                 'CREATE INDEX IF NOT EXISTS idx_tag_palavras_chave_tag_id ON tag_palavras_chave(tag_id);',
                 'CREATE INDEX IF NOT EXISTS idx_atividade_tags_atividade_id ON atividade_tags(atividade_id);',
-                'CREATE INDEX IF NOT EXISTS idx_atividade_tags_tag_id ON atividade_tags(tag_id);'
+                'CREATE INDEX IF NOT EXISTS idx_atividade_tags_tag_id ON atividade_tags(tag_id);',
+                'CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token);',
+                'CREATE INDEX IF NOT EXISTS idx_api_tokens_ativo ON api_tokens(ativo);',
+                'CREATE INDEX IF NOT EXISTS idx_api_token_permissions_token_id ON api_token_permissions(token_id);',
+                'CREATE INDEX IF NOT EXISTS idx_api_token_permissions_endpoint ON api_token_permissions(endpoint, method);'
             ]
 
             for indice in indices:

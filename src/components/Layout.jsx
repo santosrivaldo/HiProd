@@ -12,6 +12,7 @@ import {
   XMarkIcon,
   ClockIcon,
   UserIcon,
+  KeyIcon,
 } from "@heroicons/react/24/outline";
 import Dashboard from "./Dashboard";
 import ActivityManagement from "./ActivityManagement";
@@ -32,6 +33,7 @@ const navigation = [
   { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users", path: "/users" },
   { name: "Escalas", icon: ClockIcon, component: "schedules", path: "/schedules" },
   { name: "Presença Facial", icon: UserIcon, component: "face-presence", path: "/face-presence" },
+  { name: "Tokens API", icon: KeyIcon, component: "tokens", path: "/tokens" },
   { name: "Configurações", icon: Cog6ToothIcon, component: "settings", path: "/settings" },
 ];
 
