@@ -194,8 +194,35 @@ def agent_required(f):
     return decorated
 
 def generate_api_token():
-    """Gerar um token de API único e seguro"""
-    return secrets.token_urlsafe(32)
+    """
+    Gerar um token de API único e seguro.
+    Garante que o token seja único no banco de dados.
+    """
+    max_attempts = 10  # Limite de tentativas para evitar loop infinito
+    
+    for attempt in range(max_attempts):
+        token = secrets.token_urlsafe(32)
+        
+        # Verificar se o token já existe no banco
+        try:
+            with DatabaseConnection() as db:
+                db.cursor.execute('SELECT id FROM api_tokens WHERE token = %s', (token,))
+                if not db.cursor.fetchone():
+                    # Token único encontrado
+                    return token
+        except Exception as e:
+            # Se houver erro ao verificar, retornar o token mesmo assim
+            # (melhor ter um token do que falhar completamente)
+            print(f"⚠️ Erro ao verificar unicidade do token (tentativa {attempt + 1}): {e}")
+            if attempt == max_attempts - 1:
+                # Última tentativa, retornar mesmo com erro
+                return token
+    
+    # Se chegou aqui, todas as tentativas geraram tokens duplicados (muito improvável)
+    # Gerar um token com timestamp para garantir unicidade
+    import time
+    unique_suffix = str(int(time.time() * 1000000))  # Microsegundos
+    return secrets.token_urlsafe(24) + unique_suffix
 
 def hash_api_token(token):
     """Hash do token para armazenamento seguro"""
