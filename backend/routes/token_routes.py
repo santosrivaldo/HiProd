@@ -325,22 +325,56 @@ def toggle_token(current_user, token_id):
 def get_available_endpoints(current_user):
     """Lista todos os endpoints disponíveis para configuração de permissões"""
     endpoints = [
-        {'endpoint': '/atividades', 'method': 'GET', 'description': 'Listar atividades'},
-        {'endpoint': '/atividades', 'method': 'POST', 'description': 'Criar atividade'},
-        {'endpoint': '/api/atividades', 'method': 'POST', 'description': 'Buscar atividades por usuário e período (requer token API)'},
-        {'endpoint': '/atividades/*', 'method': 'GET', 'description': 'Buscar atividade específica'},
-        {'endpoint': '/usuarios', 'method': 'GET', 'description': 'Listar usuários'},
+        # Atividades
+        {'endpoint': '/atividades', 'method': 'GET', 'description': 'Listar atividades (aceita JWT ou Token API)'},
+        {'endpoint': '/atividade', 'method': 'GET', 'description': 'Listar atividades (alternativo)'},
+        {'endpoint': '/atividades/<id>', 'method': 'GET', 'description': 'Buscar atividade específica'},
+        {'endpoint': '/atividades/<id>', 'method': 'PATCH', 'description': 'Atualizar atividade'},
+        {'endpoint': '/atividades/<id>', 'method': 'DELETE', 'description': 'Excluir atividade'},
+        {'endpoint': '/atividades/<id>/tags', 'method': 'GET', 'description': 'Listar tags de uma atividade'},
+        {'endpoint': '/estatisticas', 'method': 'GET', 'description': 'Obter estatísticas de atividades'},
+        {'endpoint': '/screenshot/<id>', 'method': 'GET', 'description': 'Obter screenshot de atividade'},
+        {'endpoint': '/screenshots/batch', 'method': 'POST', 'description': 'Obter múltiplos screenshots'},
+        {'endpoint': '/face-presence-check', 'method': 'POST', 'description': 'Verificar presença facial'},
+        {'endpoint': '/face-presence-stats', 'method': 'GET', 'description': 'Estatísticas de presença facial'},
+        {'endpoint': '/api/atividades', 'method': 'POST', 'description': 'Buscar atividades por usuário e período (legado)'},
+        
+        # Usuários
+        {'endpoint': '/usuarios', 'method': 'GET', 'description': 'Listar usuários do sistema (aceita JWT ou Token API)'},
+        {'endpoint': '/usuarios/<id>', 'method': 'GET', 'description': 'Buscar usuário específico'},
         {'endpoint': '/usuarios', 'method': 'POST', 'description': 'Criar usuário'},
-        {'endpoint': '/usuarios/*', 'method': 'GET', 'description': 'Buscar usuário específico'},
-        {'endpoint': '/usuarios/*', 'method': 'PUT', 'description': 'Atualizar usuário'},
-        {'endpoint': '/departamentos', 'method': 'GET', 'description': 'Listar departamentos'},
+        {'endpoint': '/usuarios/<id>', 'method': 'PUT', 'description': 'Atualizar usuário'},
+        {'endpoint': '/usuarios/<id>', 'method': 'DELETE', 'description': 'Excluir usuário'},
+        {'endpoint': '/usuarios/<id>/reativar', 'method': 'PATCH', 'description': 'Reativar usuário'},
+        {'endpoint': '/usuarios/<id>/reset-senha', 'method': 'PATCH', 'description': 'Resetar senha'},
+        {'endpoint': '/usuarios/<id>/departamento', 'method': 'PATCH', 'description': 'Atualizar departamento do usuário'},
+        {'endpoint': '/usuarios/inativos', 'method': 'GET', 'description': 'Listar usuários inativos'},
+        {'endpoint': '/usuarios-monitorados', 'method': 'GET', 'description': 'Listar usuários monitorados (aceita JWT ou Token API)'},
+        {'endpoint': '/usuarios-monitorados', 'method': 'POST', 'description': 'Criar usuário monitorado'},
+        {'endpoint': '/usuarios-monitorados/<id>', 'method': 'PUT', 'description': 'Atualizar usuário monitorado'},
+        
+        # Departamentos
+        {'endpoint': '/departamentos', 'method': 'GET', 'description': 'Listar departamentos (aceita JWT ou Token API)'},
         {'endpoint': '/departamentos', 'method': 'POST', 'description': 'Criar departamento'},
-        {'endpoint': '/tags', 'method': 'GET', 'description': 'Listar tags'},
+        {'endpoint': '/departamentos/<id>/configuracoes', 'method': 'GET', 'description': 'Obter configurações do departamento'},
+        {'endpoint': '/departamentos/<id>/configuracoes', 'method': 'POST', 'description': 'Atualizar configurações do departamento'},
+        
+        # Tags
+        {'endpoint': '/tags', 'method': 'GET', 'description': 'Listar tags (aceita JWT ou Token API)'},
         {'endpoint': '/tags', 'method': 'POST', 'description': 'Criar tag'},
-        {'endpoint': '/categorias', 'method': 'GET', 'description': 'Listar categorias'},
+        {'endpoint': '/tags/<id>', 'method': 'PUT', 'description': 'Atualizar tag'},
+        {'endpoint': '/tags/<id>', 'method': 'DELETE', 'description': 'Excluir tag'},
+        
+        # Categorias
+        {'endpoint': '/categorias', 'method': 'GET', 'description': 'Listar categorias (aceita JWT ou Token API)'},
         {'endpoint': '/categorias', 'method': 'POST', 'description': 'Criar categoria'},
-        {'endpoint': '/escalas', 'method': 'GET', 'description': 'Listar escalas'},
+        
+        # Escalas
+        {'endpoint': '/escalas', 'method': 'GET', 'description': 'Listar escalas (aceita JWT ou Token API)'},
         {'endpoint': '/escalas', 'method': 'POST', 'description': 'Criar escala'},
+        {'endpoint': '/escalas/<id>', 'method': 'PUT', 'description': 'Atualizar escala'},
+        {'endpoint': '/escalas/<id>', 'method': 'DELETE', 'description': 'Excluir escala'},
+        
         # Endpoints V1 para API Externa
         {'endpoint': '/api/v1/atividades', 'method': 'POST', 'description': 'V1 - Buscar atividades por usuário e período'},
         {'endpoint': '/api/v1/usuarios', 'method': 'GET', 'description': 'V1 - Listar usuários monitorados'},

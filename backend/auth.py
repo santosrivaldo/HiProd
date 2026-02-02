@@ -32,10 +32,10 @@ def verify_token(token):
         return None
 
 def token_required(f):
-    """Decorator para rotas protegidas"""
+    """Decorator para rotas protegidas - aceita JWT ou Token de API"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
+        token = request.headers.get('Authorization') or request.headers.get('X-API-Token')
         if not token:
             return jsonify({'message': 'Token não fornecido!'}), 401
 
@@ -45,6 +45,85 @@ def token_required(f):
         except IndexError:
             return jsonify({'message': 'Formato de token inválido!'}), 401
 
+        # Tentar primeiro como token de API
+        try:
+            token_clean = token.strip()
+            with DatabaseConnection() as db:
+                db.cursor.execute('''
+                    SELECT id, nome, ativo, expires_at, created_by
+                    FROM api_tokens
+                    WHERE token = %s
+                ''', (token_clean,))
+                
+                api_token_data = db.cursor.fetchone()
+                
+                if api_token_data:
+                    token_id, token_nome, ativo, expires_at, created_by = api_token_data
+                    
+                    # Verificar se token está ativo
+                    if not ativo:
+                        return jsonify({'message': 'Token de API desativado!'}), 403
+                    
+                    # Verificar expiração
+                    if expires_at:
+                        expires_at_utc = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
+                        if datetime.now(timezone.utc) > expires_at_utc:
+                            return jsonify({'message': 'Token de API expirado!'}), 403
+                    
+                    # Verificar permissões
+                    endpoint = request.path
+                    method = request.method
+                    
+                    db.cursor.execute('''
+                        SELECT endpoint, method
+                        FROM api_token_permissions
+                        WHERE token_id = %s
+                    ''', (token_id,))
+                    
+                    permissions = db.cursor.fetchall()
+                    
+                    if not permissions:
+                        return jsonify({'message': 'Token sem permissões configuradas!'}), 403
+                    
+                    # Verificar se o token tem permissão para este endpoint
+                    has_permission = False
+                    for perm_endpoint, perm_method in permissions:
+                        # Suporte a wildcards (ex: /atividades/*)
+                        if perm_endpoint.endswith('*'):
+                            base_path = perm_endpoint[:-1]
+                            if endpoint.startswith(base_path) and (perm_method == '*' or perm_method == method):
+                                has_permission = True
+                                break
+                        elif perm_endpoint == endpoint and (perm_method == '*' or perm_method == method):
+                            has_permission = True
+                            break
+                    
+                    if not has_permission:
+                        return jsonify({
+                            'message': 'Token sem permissão para este endpoint!',
+                            'endpoint': endpoint,
+                            'method': method
+                        }), 403
+                    
+                    # Atualizar último uso
+                    db.cursor.execute('''
+                        UPDATE api_tokens
+                        SET last_used_at = CURRENT_TIMESTAMP
+                        WHERE id = %s
+                    ''', (token_id,))
+                    
+                    # Criar um objeto current_user simulado para compatibilidade
+                    # (None, nome, None, None, None, True) - similar ao formato de current_user
+                    current_user = (None, f'api_token_{token_id}', None, None, None, True)
+                    return f(current_user, *args, **kwargs)
+        except Exception as api_error:
+            # Se falhar (token não encontrado ou erro de banco), tentar como JWT
+            # Apenas logar se for um erro inesperado (não "token não encontrado")
+            if 'api_tokens' in str(api_error).lower() or 'database' in str(api_error).lower():
+                print(f"⚠️ Erro ao verificar token de API (tentando JWT): {api_error}")
+            # Continuar para tentar JWT
+        
+        # Tentar como JWT token
         user_id = verify_token(token)
         if not user_id:
             return jsonify({'message': 'Token inválido ou expirado!'}), 401
