@@ -45,12 +45,28 @@ def main():
     
     O agent gerencia:
     - Monitoramento de atividades (janelas, URLs, aplicações)
-    - Envio de dados para API
+    - Envio de dados para API via HTTPS com handshake TLS
     - Detecção facial e rastreamento de presença
     
     Tudo integrado em um único executável!
+    
+    ⚠️ IMPORTANTE: Configure API_URL no arquivo .env para usar HTTPS:
+    API_URL=https://hiprod.grupohi.com.br
     """
     try:
+        # Verificar configuração de API_URL
+        api_url = os.getenv('API_URL', '')
+        if api_url:
+            if api_url.startswith('https://'):
+                print(f"[INFO] ✅ HTTPS configurado: {api_url}")
+                print(f"[INFO] ✅ Handshake TLS será realizado automaticamente")
+            elif api_url.startswith('http://'):
+                print(f"[WARN] ⚠️ HTTP não seguro detectado: {api_url}")
+                print(f"[WARN] ⚠️ Recomendado usar HTTPS para segurança")
+            else:
+                print(f"[INFO] API_URL configurado: {api_url}")
+        else:
+            print(f"[INFO] Usando API_URL padrão (verifique configuração)")
         # Garantir que o Tkinter está disponível
         try:
             import tkinter as tk

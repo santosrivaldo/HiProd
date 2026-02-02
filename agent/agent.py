@@ -541,7 +541,8 @@ except ImportError:
 # Veja config.example para exemplo de configuração
 
 # URL da API do HiProd (opcional - tem valor padrão)
-API_BASE_URL = os.getenv('API_URL', 'http://192.241.155.236:8010')
+# ⚠️ IMPORTANTE: Configure para HTTPS para usar handshake TLS
+API_BASE_URL = os.getenv('API_URL', 'https://hiprod.grupohi.com.br')
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
 

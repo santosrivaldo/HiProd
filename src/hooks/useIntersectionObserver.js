@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const useIntersectionObserver = (options = {}) => {
   const [isIntersecting, setIsIntersecting] = useState(false)
@@ -38,7 +38,7 @@ const useIntersectionObserver = (options = {}) => {
         observerRef.current = null
       }
     }
-  }, []) // Executar apenas uma vez na montagem
+  }, [options.threshold, options.rootMargin]) // Incluir dependências das opções
 
   return [elementRef, isIntersecting]
 }

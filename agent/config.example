@@ -14,8 +14,16 @@
 # ========================================
 
 # URL da API do HiProd (opcional - tem valor padrão)
-# Exemplo: http://192.241.155.236:8010 ou http://localhost:8010
-API_URL=http://192.241.155.236:8010
+# Exemplo: https://hiprod.grupohi.com.br ou https://192.241.155.236:8010
+# ⚠️ IMPORTANTE: Use HTTPS para conexão segura com handshake TLS
+API_URL=https://hiprod.grupohi.com.br
+
+# Configurações SSL/TLS
+# Verificar certificado SSL (true/false) - padrão: true
+SSL_VERIFY=true
+
+# Caminho opcional para certificado customizado (deixe vazio para usar certificados do sistema)
+# SSL_CERT_PATH=
 
 # ⚠️ NOTA: Não é mais necessário configurar credenciais!
 # A API identifica o usuário automaticamente pelo nome do usuário do Windows.
