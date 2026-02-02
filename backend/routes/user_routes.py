@@ -58,7 +58,7 @@ def get_monitored_users(current_user):
         # Buscar usuário específico ou criar se não existir
         try:
             with DatabaseConnection() as db:
-                # Primeiro, tentar encontrar o usuário
+                # Primeiro, tentar encontrar o usuário (independente do status ativo)
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
                            um.escala_trabalho_id, um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
@@ -67,12 +67,25 @@ def get_monitored_users(current_user):
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
                     LEFT JOIN escalas_trabalho et ON um.escala_trabalho_id = et.id
-                    WHERE um.nome = %s AND um.ativo = TRUE;
+                    WHERE um.nome = %s;
                 ''', (nome_usuario,))
 
                 usuario_existente = db.cursor.fetchone()
 
                 if usuario_existente:
+                    # Se usuário existe mas está inativo, reativar
+                    if not usuario_existente[4]:  # ativo está no índice 4
+                        print(f"🔄 Reativando usuário monitorado: {nome_usuario}")
+                        db.cursor.execute('''
+                            UPDATE usuarios_monitorados
+                            SET ativo = TRUE, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                        ''', (usuario_existente[0],))
+                        # Atualizar o valor na tupla para refletir a mudança
+                        usuario_existente = list(usuario_existente)
+                        usuario_existente[4] = True
+                        usuario_existente = tuple(usuario_existente)
+                        print(f"✅ Usuário monitorado reativado: {nome_usuario} (ID: {usuario_existente[0]})")
                     # Usuário existe, retornar seus dados
                     departamento_info = None
                     if len(usuario_existente) > 12 and usuario_existente[12]:
@@ -123,15 +136,89 @@ def get_monitored_users(current_user):
                     escala_padrao = db.cursor.fetchone()
                     escala_padrao_id = escala_padrao[0] if escala_padrao else None
 
-                    db.cursor.execute('''
-                        INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-                    ''', (nome_usuario, None, 'Usuário', escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
+                    try:
+                        db.cursor.execute('''
+                            INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho, ativo)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE)
+                            RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
+                        ''', (nome_usuario, None, 'Usuário', escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
 
-                    novo_usuario = db.cursor.fetchone()
-                    print(f"✅ Usuário monitorado criado: {nome_usuario} (ID: {novo_usuario[0]})")
+                        novo_usuario = db.cursor.fetchone()
+                        print(f"✅ Usuário monitorado criado: {nome_usuario} (ID: {novo_usuario[0]})")
+                    except Exception as insert_error:
+                        # Se der erro de duplicação (unique constraint), tentar buscar novamente
+                        if 'unique' in str(insert_error).lower() or 'duplicate' in str(insert_error).lower():
+                            print(f"⚠️ Usuário já existe (erro de duplicação), buscando novamente: {nome_usuario}")
+                            db.cursor.execute('''
+                                SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                                       um.escala_trabalho_id, um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
+                                       d.nome as departamento_nome, d.cor as departamento_cor,
+                                       et.nome as escala_nome, et.horario_inicio_trabalho as escala_inicio, et.horario_fim_trabalho as escala_fim, et.dias_trabalho as escala_dias
+                                FROM usuarios_monitorados um
+                                LEFT JOIN departamentos d ON um.departamento_id = d.id
+                                LEFT JOIN escalas_trabalho et ON um.escala_trabalho_id = et.id
+                                WHERE um.nome = %s;
+                            ''', (nome_usuario,))
+                            novo_usuario_row = db.cursor.fetchone()
+                            
+                            if novo_usuario_row:
+                                # Reativar se estiver inativo
+                                if not novo_usuario_row[4]:
+                                    db.cursor.execute('''
+                                        UPDATE usuarios_monitorados
+                                        SET ativo = TRUE, updated_at = CURRENT_TIMESTAMP
+                                        WHERE id = %s
+                                    ''', (novo_usuario_row[0],))
+                                    print(f"✅ Usuário monitorado reativado: {nome_usuario} (ID: {novo_usuario_row[0]})")
+                                
+                                # Construir resultado completo usando os dados buscados
+                                departamento_info = None
+                                if len(novo_usuario_row) > 12 and novo_usuario_row[12]:
+                                    departamento_info = {
+                                        'nome': novo_usuario_row[12],
+                                        'cor': novo_usuario_row[13] if len(novo_usuario_row) > 13 else None
+                                    }
+                                
+                                escala_info = None
+                                if len(novo_usuario_row) > 14 and novo_usuario_row[14]:
+                                    escala_info = {
+                                        'nome': novo_usuario_row[14],
+                                        'horario_inicio_trabalho': str(novo_usuario_row[15]) if novo_usuario_row[15] else '08:00:00',
+                                        'horario_fim_trabalho': str(novo_usuario_row[16]) if novo_usuario_row[16] else '18:00:00',
+                                        'dias_trabalho': novo_usuario_row[17] if novo_usuario_row[17] else '1,2,3,4,5'
+                                    }
+                                
+                                horario_inicio = str(novo_usuario_row[15]) if escala_info and novo_usuario_row[15] else (str(novo_usuario_row[8]) if len(novo_usuario_row) > 8 and novo_usuario_row[8] else '08:00:00')
+                                horario_fim = str(novo_usuario_row[16]) if escala_info and novo_usuario_row[16] else (str(novo_usuario_row[9]) if len(novo_usuario_row) > 9 and novo_usuario_row[9] else '18:00:00')
+                                dias_trabalho = novo_usuario_row[17] if escala_info and novo_usuario_row[17] else (novo_usuario_row[10] if len(novo_usuario_row) > 10 and novo_usuario_row[10] else '1,2,3,4,5')
+                                
+                                result = {
+                                    'id': novo_usuario_row[0],
+                                    'nome': novo_usuario_row[1],
+                                    'departamento_id': novo_usuario_row[2] if len(novo_usuario_row) > 2 else None,
+                                    'cargo': novo_usuario_row[3] if len(novo_usuario_row) > 3 else None,
+                                    'ativo': True,  # Já foi reativado se estava inativo
+                                    'created_at': format_datetime_brasilia(novo_usuario_row[5]) if novo_usuario_row[5] else None,
+                                    'updated_at': format_datetime_brasilia(novo_usuario_row[6]) if len(novo_usuario_row) > 6 and novo_usuario_row[6] else None,
+                                    'escala_trabalho_id': novo_usuario_row[7] if len(novo_usuario_row) > 7 else None,
+                                    'horario_inicio_trabalho': horario_inicio,
+                                    'horario_fim_trabalho': horario_fim,
+                                    'dias_trabalho': dias_trabalho,
+                                    'monitoramento_ativo': novo_usuario_row[11] if len(novo_usuario_row) > 11 and novo_usuario_row[11] is not None else True,
+                                    'departamento': departamento_info,
+                                    'escala': escala_info,
+                                    'created': False  # Não foi criado agora, apenas encontrado/reativado
+                                }
+                                print(f"✅ Usuário monitorado encontrado após erro de duplicação: {nome_usuario} (ID: {novo_usuario_row[0]})")
+                                return jsonify(result)
+                            else:
+                                # Se ainda não encontrou, relançar o erro original
+                                raise insert_error
+                        else:
+                            # Se for outro erro, relançar
+                            raise insert_error
 
+                    # Se chegou aqui, novo_usuario foi criado com sucesso
                     result = {
                         'id': novo_usuario[0],
                         'nome': novo_usuario[1],
