@@ -46,9 +46,14 @@ def buscar_atividades_impl(token_data=None, *args, **kwargs):
     """Implementação do endpoint de atividades (protegida por token)"""
     print(f"📥 [V1] POST /api/v1/atividades - Iniciando busca de atividades")
     # token_data é uma tupla: (token_id, token_nome, ativo, expires_at, created_by)
-    if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
-        token_id, token_nome = token_data[0], token_data[1]
-        print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
+    try:
+        if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
+            token_id, token_nome = token_data[0], token_data[1]
+            print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
+    except (IndexError, TypeError) as e:
+        print(f"   ⚠️ Erro ao processar token_data: {e}")
+        print(f"   token_data type: {type(token_data)}, value: {token_data}")
+    
     try:
         with DatabaseConnection() as db:
             # Processar requisição
@@ -257,9 +262,14 @@ def listar_usuarios_impl(token_data=None, *args, **kwargs):
     """Implementação do endpoint de listar usuários (protegida por token)"""
     print(f"📥 [V1] GET /api/v1/usuarios - Listando usuários monitorados")
     # token_data é uma tupla: (token_id, token_nome, ativo, expires_at, created_by)
-    if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
-        token_id, token_nome = token_data[0], token_data[1]
-        print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
+    try:
+        if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
+            token_id, token_nome = token_data[0], token_data[1]
+            print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
+    except (IndexError, TypeError) as e:
+        print(f"   ⚠️ Erro ao processar token_data: {e}")
+        print(f"   token_data type: {type(token_data)}, value: {token_data}")
+    
     try:
         with DatabaseConnection() as db:
             # Buscar usuários monitorados
@@ -342,9 +352,14 @@ def obter_estatisticas_impl(token_data=None, *args, **kwargs):
     """Implementação do endpoint de estatísticas (protegida por token)"""
     print(f"📥 [V1] POST /api/v1/estatisticas - Obtendo estatísticas")
     # token_data é uma tupla: (token_id, token_nome, ativo, expires_at, created_by)
-    if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
-        token_id, token_nome = token_data[0], token_data[1]
-        print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
+    try:
+        if token_data and isinstance(token_data, tuple) and len(token_data) >= 2:
+            token_id, token_nome = token_data[0], token_data[1]
+            print(f"   🔑 Token ID: {token_id}, Nome: {token_nome}")
+    except (IndexError, TypeError) as e:
+        print(f"   ⚠️ Erro ao processar token_data: {e}")
+        print(f"   token_data type: {type(token_data)}, value: {token_data}")
+    
     try:
         with DatabaseConnection() as db:
             # Processar requisição

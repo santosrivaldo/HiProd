@@ -376,6 +376,11 @@ def api_token_required(f):
                         }
                     }), 401
                 
+                # Validar que token_data tem os campos esperados
+                if not token_data or len(token_data) < 5:
+                    print(f"❌ token_data inválido: {token_data}")
+                    return jsonify({'message': 'Erro ao validar token de API!'}), 500
+                
                 token_id, token_nome, ativo, expires_at, created_by = token_data
                 
                 # Verificar se token está ativo
