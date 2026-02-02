@@ -142,6 +142,9 @@ def api_token_required(f):
             return jsonify({'message': 'Formato de token inválido!'}), 401
 
         try:
+            # Limpar token (remover espaços, tabs, quebras de linha)
+            token = token.strip()
+            
             with DatabaseConnection() as db:
                 # Buscar token no banco (armazenamos o token em texto plano para comparação)
                 db.cursor.execute('''
@@ -153,6 +156,14 @@ def api_token_required(f):
                 token_data = db.cursor.fetchone()
                 
                 if not token_data:
+                    # Log para debug (sem expor o token completo)
+                    print(f"❌ Token de API não encontrado. Primeiros 10 caracteres: {token[:10]}...")
+                    print(f"   Endpoint: {request.path}")
+                    print(f"   Método: {request.method}")
+                    # Verificar se há tokens similares (para debug)
+                    db.cursor.execute('SELECT COUNT(*) FROM api_tokens WHERE ativo = TRUE')
+                    total_tokens = db.cursor.fetchone()[0]
+                    print(f"   Total de tokens ativos no banco: {total_tokens}")
                     return jsonify({'message': 'Token de API inválido!'}), 401
                 
                 token_id, token_nome, ativo, expires_at, created_by = token_data
