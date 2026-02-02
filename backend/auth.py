@@ -321,10 +321,15 @@ def agent_required(f):
                 return f(user_data, *args, **kwargs)
                 
         except Exception as e:
-            print(f"❌ Erro ao buscar/criar usuário monitorado: {e}")
+            print(f"❌ Erro ao buscar/criar usuário monitorado no agent_required: {e}")
             import traceback
             traceback.print_exc()
-            return jsonify({'message': 'Erro ao processar requisição do agente!'}), 500
+            # Garantir que sempre retorna JSON, nunca HTML
+            return jsonify({
+                'message': 'Erro ao processar requisição do agente!',
+                'error': str(e),
+                'error_type': type(e).__name__
+            }), 500
     
     return decorated
 

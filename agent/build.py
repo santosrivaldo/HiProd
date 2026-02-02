@@ -12,6 +12,15 @@ import platform
 from pathlib import Path
 import time
 
+# Tentar importar PyInstaller para verificar disponibilidade
+try:
+    import PyInstaller
+    PYINSTALLER_AVAILABLE = True
+    PYINSTALLER_VERSION = PyInstaller.__version__
+except ImportError:
+    PYINSTALLER_AVAILABLE = False
+    PYINSTALLER_VERSION = None
+
 class AgentBuilder:
     def __init__(self):
         self.agent_dir = Path(__file__).parent
@@ -66,23 +75,39 @@ class AgentBuilder:
         """Verifica se os pré-requisitos estão atendidos"""
         self.print_step("Verificando pré-requisitos")
         
-        # Verificar se o venv existe
-        if not self.venv_dir.exists():
-            self.print_error("Ambiente virtual nao encontrado!")
-            print("Execute primeiro: python setup.py")
-            return False
+        # Verificar se o PyInstaller está instalado (usar Python atual)
+        pyinstaller_found = False
+        if PYINSTALLER_AVAILABLE:
+            pyinstaller_found = True
+            self.print_success(f"PyInstaller encontrado (versão: {PYINSTALLER_VERSION})")
+        elif self.pyinstaller_path.exists():
+            pyinstaller_found = True
+            self.print_success(f"PyInstaller encontrado em: {self.pyinstaller_path}")
+        else:
+            # Tentar usar python -m PyInstaller como último recurso
+            try:
+                result = subprocess.run(
+                    [sys.executable, '-m', 'PyInstaller', '--version'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0:
+                    pyinstaller_found = True
+                    self.print_success("PyInstaller encontrado via python -m PyInstaller")
+            except:
+                pass
         
-        # Verificar se o PyInstaller está instalado
-        if not self.pyinstaller_path.exists():
+        if not pyinstaller_found:
             self.print_error("PyInstaller nao encontrado!")
             print("Execute: pip install pyinstaller")
             return False
         
         # Verificar se os arquivos principais existem
+        # NOTA: face_detection.py está integrado em agent.py, não é necessário como arquivo separado
         main_file = self.agent_dir / "main.py"
         agent_file = self.agent_dir / "agent.py"
         lock_screen_file = self.agent_dir / "lock_screen.py"
-        face_detection_file = self.agent_dir / "face_detection.py"
         
         if not main_file.exists():
             self.print_error("Arquivo main.py nao encontrado!")
@@ -93,8 +118,16 @@ class AgentBuilder:
         if not lock_screen_file.exists():
             self.print_error("Arquivo lock_screen.py nao encontrado!")
             return False
-        if not face_detection_file.exists():
-            self.print_error("Arquivo face_detection.py nao encontrado!")
+        
+        # Verificar se agent.py contém o código de detecção facial integrado
+        try:
+            with open(agent_file, 'r', encoding='utf-8') as f:
+                agent_content = f.read()
+                if 'FACE_DETECTION_AVAILABLE' not in agent_content:
+                    self.print_error("Arquivo agent.py nao contem codigo de deteccao facial integrado!")
+                    return False
+        except Exception as e:
+            self.print_error(f"Erro ao verificar agent.py: {e}")
             return False
         
         self.print_success("Todos os pre-requisitos atendidos")
@@ -154,9 +187,15 @@ class AgentBuilder:
             self.print_error(f"Arquivo spec nao encontrado: {self.spec_file}")
             return False
         
-        # Usar o arquivo spec para compilar
-        # O spec já contém todas as configurações necessárias
-        command = f'"{self.pyinstaller_path}" --clean --noconfirm "{self.spec_file}"'
+        # Determinar comando PyInstaller
+        # Tentar usar python -m PyInstaller primeiro (mais confiável)
+        if PYINSTALLER_AVAILABLE:
+            command = f'"{sys.executable}" -m PyInstaller --clean --noconfirm "{self.spec_file}"'
+        elif self.pyinstaller_path.exists():
+            command = f'"{self.pyinstaller_path}" --clean --noconfirm "{self.spec_file}"'
+        else:
+            # Última tentativa: usar pyinstaller diretamente
+            command = f'pyinstaller --clean --noconfirm "{self.spec_file}"'
         
         if not self.run_command(command, "Executando PyInstaller com arquivo spec"):
             return False

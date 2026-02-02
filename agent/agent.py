@@ -97,7 +97,9 @@ def safe_print(*args, **kwargs):
 # ========================================
 # MÓDULO DE DETECÇÃO FACIAL (INTEGRADO)
 # ========================================
-# Código do face_detection.py integrado diretamente aqui
+# Código de detecção facial integrado diretamente no agent.py
+# Não há dependência de arquivo face_detection.py separado
+# Tudo compila em um único executável
 
 # Tentar importar OpenCV para detecção facial
 try:
@@ -1952,6 +1954,14 @@ def get_application_name(window_title):
 def get_usuario_monitorado_id(usuario_nome):
     """Busca ou cria usuário monitorado pelo nome"""
     try:
+        # Validar nome do usuário
+        if not usuario_nome or not usuario_nome.strip():
+            safe_print("[ERROR] Nome do usuário não fornecido ou vazio")
+            return None
+        
+        usuario_nome = usuario_nome.strip()
+        safe_print(f"[INFO] Buscando/criando usuário monitorado: {usuario_nome}")
+        
         # Realizar handshake TLS se for HTTPS
         if API_BASE_URL.startswith('https://'):
             if not perform_tls_handshake(API_BASE_URL):
@@ -1959,11 +1969,53 @@ def get_usuario_monitorado_id(usuario_nome):
                 return None
         
         session = get_secure_session()
+        headers = get_headers(usuario_nome)
+        safe_print(f"[INFO] URL: {USUARIOS_MONITORADOS_URL}")
+        safe_print(f"[INFO] Params: nome={usuario_nome}")
+        safe_print(f"[INFO] Headers: X-User-Name={headers.get('X-User-Name', 'N/A')}")
+        
         resp = session.get(USUARIOS_MONITORADOS_URL,
                             params={'nome': usuario_nome},
-                            headers=get_headers(usuario_nome))
+                            headers=headers)
+        
+        # Sempre mostrar informações da resposta em caso de erro
+        safe_print(f"[INFO] Status code: {resp.status_code}")
+        safe_print(f"[INFO] Content-Type: {resp.headers.get('Content-Type', 'N/A')}")
+        safe_print(f"[INFO] Response length: {len(resp.text)} bytes")
+        
         if resp.status_code == 200:
-            data = resp.json()
+            # Verificar se a resposta não está vazia
+            if not resp.text or not resp.text.strip():
+                safe_print("[ERROR] Resposta da API está vazia")
+                return None
+            
+            # Verificar content-type
+            content_type = resp.headers.get('Content-Type', '').lower()
+            if 'application/json' not in content_type and 'text/json' not in content_type:
+                safe_print(f"[WARN] Content-Type inesperado: {content_type}")
+                safe_print(f"[DEBUG] Primeiros 200 caracteres da resposta: {resp.text[:200]}")
+            
+            # Tentar fazer parse do JSON
+            try:
+                # Tentar fazer parse direto
+                data = resp.json()
+            except ValueError as json_error:
+                # Se falhar, tentar limpar a resposta e fazer parse novamente
+                try:
+                    # Remover espaços em branco no início e fim
+                    cleaned_text = resp.text.strip()
+                    # Tentar fazer parse manualmente
+                    import json
+                    data = json.loads(cleaned_text)
+                except (ValueError, json.JSONDecodeError) as json_error2:
+                    safe_print(f"[ERROR] Erro ao fazer parse do JSON: {json_error}")
+                    safe_print(f"[ERROR] Erro ao fazer parse após limpeza: {json_error2}")
+                    safe_print(f"[ERROR] Status: {resp.status_code}")
+                    safe_print(f"[ERROR] Content-Type: {resp.headers.get('Content-Type', 'N/A')}")
+                    safe_print(f"[ERROR] Resposta completa ({len(resp.text)} chars):")
+                    safe_print(f"[ERROR] {resp.text}")
+                    return None
+            
             user_id = data.get('id')
             was_created = data.get('created', False)
             if was_created:
@@ -1973,14 +2025,28 @@ def get_usuario_monitorado_id(usuario_nome):
             return user_id
         elif resp.status_code == 401:
             safe_print("[ERROR] Erro de autenticação na API. Verifique a configuração.")
+            safe_print(f"[ERROR] Resposta: {resp.text}")
+            safe_print(f"[ERROR] Headers enviados: X-User-Name={usuario_nome}")
+            return None
+        elif resp.status_code == 500:
+            safe_print("[ERROR] Erro interno do servidor (500). Verifique os logs do backend.")
+            safe_print(f"[ERROR] Resposta completa: {resp.text}")
             return None
         else:
-            safe_print(
-                f"[ERROR] Erro ao buscar usuário monitorado: {resp.status_code} {resp.text}"
-            )
+            safe_print(f"[ERROR] Erro ao buscar usuário monitorado: Status {resp.status_code}")
+            safe_print(f"[ERROR] Resposta completa: {resp.text}")
             return None
+    except requests.exceptions.RequestException as e:
+        safe_print(f"[ERROR] Erro de conexão ao consultar usuário monitorado: {e}")
+        if not IS_EXECUTABLE:
+            import traceback
+            traceback.print_exc()
+        return None
     except Exception as e:
         safe_print(f"[ERROR] Erro ao consultar usuário monitorado: {e}")
+        import traceback
+        if not IS_EXECUTABLE:
+            traceback.print_exc()
         return None
 
 

@@ -153,6 +153,8 @@ def get_monitored_users(current_user):
 
         except Exception as e:
             print(f"❌ Erro ao buscar/criar usuário monitorado {nome_usuario}: {e}")
+            import traceback
+            traceback.print_exc()
             # Retornar um usuário básico para manter o agente funcionando
             return jsonify({
                 'id': 0,
@@ -164,7 +166,7 @@ def get_monitored_users(current_user):
                 'updated_at': None,
                 'departamento': None,
                 'created': False,
-                'error': 'Erro ao processar usuário, usando fallback'
+                'error': f'Erro ao processar usuário: {str(e)}'
             }), 200
 
     else:

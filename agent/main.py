@@ -5,14 +5,13 @@ HiProd Agent - Executável Único Integrado
 
 Este é o ponto de entrada principal que integra todos os componentes:
 - lock_screen.py: Tela de bloqueio e interface gráfica
-- agent.py: Monitoramento de atividades e envio para API
-- face_detection.py: Detecção facial e rastreamento de presença
+- agent.py: Monitoramento de atividades, envio para API e detecção facial (tudo integrado)
 
 Fluxo de execução:
 1. Inicia a tela de bloqueio (lock_screen)
 2. Quando o expediente é aberto, inicia o agent em thread separada
-3. O agent automaticamente integra a detecção facial
-4. Tudo roda em um único executável (.exe)
+3. O agent.py contém todo o código de detecção facial integrado
+4. Tudo roda em um único executável (.exe) - arquivo único compilado
 
 Para compilar:
     python build.py
@@ -93,8 +92,7 @@ def main():
             print(error_msg)
             print("[ERROR] Verifique se todos os arquivos estão presentes:")
             print("  - lock_screen.py")
-            print("  - agent.py")
-            print("  - face_detection.py")
+            print("  - agent.py (contém detecção facial integrada)")
             
             # Tentar mostrar erro em janela
             try:
@@ -108,7 +106,7 @@ def main():
         
         # Iniciar a tela de bloqueio
         # Ela automaticamente iniciará o agent quando necessário
-        # O agent automaticamente usará face_detection se disponível
+        # O agent.py contém todo o código de detecção facial integrado
         print("[INFO] Iniciando tela de bloqueio...")
         lock_screen_main()
         
