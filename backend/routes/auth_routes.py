@@ -3,7 +3,7 @@ import uuid
 import bcrypt
 import jwt
 from flask import Blueprint, request, jsonify
-from ..auth import generate_token, token_required
+from ..auth import generate_jwt_token, token_required
 from ..database import DatabaseConnection
 from ..config import Config
 from ..utils import format_datetime_brasilia
@@ -78,7 +78,7 @@ def login():
                 print(f"⚠️ Erro ao atualizar último login: {update_error}")
 
             # Gerar token
-            token = generate_token(usuario[0])
+            token = generate_jwt_token(usuario[0])
 
             response_data = {
                 'usuario_id': str(usuario[0]),
