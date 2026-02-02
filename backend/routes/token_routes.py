@@ -57,8 +57,13 @@ def get_tokens(current_user):
 
             return jsonify(result), 200
     except Exception as e:
-        print(f"Erro ao listar tokens: {e}")
-        return jsonify({'message': 'Erro ao listar tokens!'}), 500
+        print(f"❌ Erro ao listar tokens: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro ao listar tokens!',
+            'error': str(e)
+        }), 500
 
 @token_bp.route('/api-tokens', methods=['POST'])
 @token_required
@@ -85,7 +90,12 @@ def create_token(current_user):
         # Calcular data de expiração
         expires_at = None
         if expires_days:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
+            try:
+                expires_days = int(expires_days)
+                if expires_days > 0:
+                    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
+            except (ValueError, TypeError):
+                return jsonify({'message': 'expires_days deve ser um número inteiro positivo!'}), 400
         
         with DatabaseConnection() as db:
             # Inserir token
@@ -100,13 +110,29 @@ def create_token(current_user):
             # Inserir permissões
             for perm in permissions:
                 endpoint = perm.get('endpoint')
-                method = perm.get('method', 'GET').upper()
+                method = perm.get('method', 'GET')
                 
-                if endpoint:
+                if not endpoint:
+                    continue
+                
+                # Validar e normalizar método
+                if isinstance(method, str):
+                    method = method.upper()
+                else:
+                    method = 'GET'
+                
+                # Validar endpoint
+                if not isinstance(endpoint, str) or len(endpoint.strip()) == 0:
+                    continue
+                
+                try:
                     db.cursor.execute('''
                         INSERT INTO api_token_permissions (token_id, endpoint, method)
                         VALUES (%s, %s, %s)
-                    ''', (token_id, endpoint, method))
+                    ''', (token_id, endpoint.strip(), method))
+                except Exception as perm_error:
+                    print(f"⚠️ Erro ao inserir permissão {endpoint} ({method}): {perm_error}")
+                    # Continuar com outras permissões mesmo se uma falhar
             
             return jsonify({
                 'message': 'Token criado com sucesso!',
@@ -116,8 +142,13 @@ def create_token(current_user):
             }), 201
             
     except Exception as e:
-        print(f"Erro ao criar token: {e}")
-        return jsonify({'message': 'Erro ao criar token!'}), 500
+        print(f"❌ Erro ao criar token: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro ao criar token!',
+            'error': str(e)
+        }), 500
 
 @token_bp.route('/api-tokens/<int:token_id>', methods=['PUT'])
 @token_required
@@ -158,20 +189,29 @@ def update_token(current_user, token_id):
                 params.append(ativo)
             
             if expires_days is not None:
-                if expires_days:
-                    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
-                else:
-                    expires_at = None
-                updates.append('expires_at = %s')
-                params.append(expires_at)
+                try:
+                    if expires_days:
+                        expires_days = int(expires_days)
+                        if expires_days > 0:
+                            expires_at = datetime.now(timezone.utc) + timedelta(days=expires_days)
+                        else:
+                            expires_at = None
+                    else:
+                        expires_at = None
+                    updates.append('expires_at = %s')
+                    params.append(expires_at)
+                except (ValueError, TypeError):
+                    return jsonify({'message': 'expires_days deve ser um número inteiro positivo ou null!'}), 400
             
             updates.append('updated_at = CURRENT_TIMESTAMP')
             params.append(token_id)
             
-            if updates:
+            if len(updates) > 1:  # Mais que apenas updated_at
+                # Construir query de forma segura
+                set_clause = ', '.join(updates)
                 db.cursor.execute(f'''
                     UPDATE api_tokens
-                    SET {', '.join(updates)}
+                    SET {set_clause}
                     WHERE id = %s
                 ''', params)
             
@@ -183,19 +223,40 @@ def update_token(current_user, token_id):
                 # Inserir novas permissões
                 for perm in permissions:
                     endpoint = perm.get('endpoint')
-                    method = perm.get('method', 'GET').upper()
+                    method = perm.get('method', 'GET')
                     
-                    if endpoint:
+                    if not endpoint:
+                        continue
+                    
+                    # Validar e normalizar método
+                    if isinstance(method, str):
+                        method = method.upper()
+                    else:
+                        method = 'GET'
+                    
+                    # Validar endpoint
+                    if not isinstance(endpoint, str) or len(endpoint.strip()) == 0:
+                        continue
+                    
+                    try:
                         db.cursor.execute('''
                             INSERT INTO api_token_permissions (token_id, endpoint, method)
                             VALUES (%s, %s, %s)
-                        ''', (token_id, endpoint, method))
+                        ''', (token_id, endpoint.strip(), method))
+                    except Exception as perm_error:
+                        print(f"⚠️ Erro ao inserir permissão {endpoint} ({method}): {perm_error}")
+                        # Continuar com outras permissões mesmo se uma falhar
             
             return jsonify({'message': 'Token atualizado com sucesso!'}), 200
             
     except Exception as e:
-        print(f"Erro ao atualizar token: {e}")
-        return jsonify({'message': 'Erro ao atualizar token!'}), 500
+        print(f"❌ Erro ao atualizar token: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro ao atualizar token!',
+            'error': str(e)
+        }), 500
 
 @token_bp.route('/api-tokens/<int:token_id>', methods=['DELETE'])
 @token_required
@@ -214,8 +275,13 @@ def delete_token(current_user, token_id):
             return jsonify({'message': 'Token excluído com sucesso!'}), 200
             
     except Exception as e:
-        print(f"Erro ao excluir token: {e}")
-        return jsonify({'message': 'Erro ao excluir token!'}), 500
+        print(f"❌ Erro ao excluir token: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro ao excluir token!',
+            'error': str(e)
+        }), 500
 
 @token_bp.route('/api-tokens/<int:token_id>/toggle', methods=['POST'])
 @token_required
@@ -246,8 +312,13 @@ def toggle_token(current_user, token_id):
             }), 200
             
     except Exception as e:
-        print(f"Erro ao alterar status do token: {e}")
-        return jsonify({'message': 'Erro ao alterar status do token!'}), 500
+        print(f"❌ Erro ao alterar status do token: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'message': 'Erro ao alterar status do token!',
+            'error': str(e)
+        }), 500
 
 @token_bp.route('/api-tokens/endpoints', methods=['GET'])
 @token_required
