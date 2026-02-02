@@ -49,12 +49,18 @@ def get_users(current_user):
         return jsonify([]), 200
 
 @user_bp.route('/usuarios-monitorados', methods=['GET'])
-@agent_required  # Aceita token OU nome do usuário no header X-User-Name
-def get_monitored_users(current_user):
+def get_monitored_users():
+    """
+    Endpoint para listar ou buscar/criar usuários monitorados.
+    
+    - Se tiver parâmetro 'nome': Busca/cria usuário específico (SEM autenticação)
+    - Se não tiver parâmetro 'nome': Lista todos os usuários (REQUER autenticação)
+    """
     # Verificar se foi passado um nome para buscar/criar usuário específico
     nome_usuario = request.args.get('nome')
 
     if nome_usuario:
+        # Verificação de existência/criação: NÃO requer autenticação
         # Buscar usuário específico ou criar se não existir
         try:
             with DatabaseConnection() as db:
@@ -257,7 +263,58 @@ def get_monitored_users(current_user):
             }), 200
 
     else:
-        # Listar todos os usuários monitorados (comportamento original)
+        # Listar todos os usuários monitorados: REQUER autenticação
+        # Verificar autenticação manualmente
+        token = request.headers.get('Authorization')
+        user_name = request.headers.get('X-User-Name')
+        
+        # Tentar autenticação JWT primeiro
+        current_user = None
+        if token:
+            try:
+                from ..auth import verify_jwt_token
+                if token.startswith('Bearer '):
+                    token = token.split(' ')[1]
+                user_id = verify_jwt_token(token)
+                if user_id:
+                    with DatabaseConnection() as db:
+                        db.cursor.execute('''
+                            SELECT id, nome, email, ativo, departamento_id
+                            FROM usuarios
+                            WHERE id = %s
+                        ''', (user_id,))
+                        user = db.cursor.fetchone()
+                        if user and user[3]:  # Se existe e está ativo
+                            current_user = user
+            except Exception as e:
+                print(f"⚠️ Erro ao verificar token JWT: {e}")
+        
+        # Se não tem token válido, tentar pelo nome do usuário (modo agente)
+        if not current_user and user_name:
+            try:
+                with DatabaseConnection() as db:
+                    db.cursor.execute('''
+                        SELECT id, nome, cargo, departamento_id, ativo
+                        FROM usuarios_monitorados
+                        WHERE nome = %s
+                    ''', (user_name,))
+                    usuario_monitorado = db.cursor.fetchone()
+                    if usuario_monitorado:
+                        current_user = (
+                            usuario_monitorado[0],  # id
+                            usuario_monitorado[1],  # nome
+                            None,  # email
+                            usuario_monitorado[4],  # ativo
+                            usuario_monitorado[3]   # departamento_id
+                        )
+            except Exception as e:
+                print(f"⚠️ Erro ao buscar usuário monitorado: {e}")
+        
+        # Se não tem autenticação, retornar erro
+        if not current_user:
+            return jsonify({'message': 'Autenticação necessária para listar todos os usuários monitorados!'}), 401
+        
+        # Listar todos os usuários monitorados
         try:
             with DatabaseConnection() as db:
                 db.cursor.execute('''
