@@ -1,6 +1,13 @@
 import time
 import psutil
 import requests
+from requests.adapters import HTTPAdapter
+try:
+    from urllib3.util.retry import Retry
+except ImportError:
+    from requests.packages.urllib3.util.retry import Retry
+import ssl
+import socket
 import win32gui
 from datetime import datetime, time as dt_time
 import pytz
@@ -538,6 +545,10 @@ API_BASE_URL = os.getenv('API_URL', 'http://192.241.155.236:8010')
 ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
 
+# Configuração SSL/TLS
+SSL_VERIFY = os.getenv('SSL_VERIFY', 'true').lower() == 'true'
+SSL_CERT_PATH = os.getenv('SSL_CERT_PATH', None)  # Caminho opcional para certificado customizado
+
 # Configurações de monitoramento
 SCREENSHOT_ENABLED = True      # Habilitar captura de screenshots (futuro)
 SCREENSHOT_QUALITY = 55        # Qualidade do screenshot (1-100)
@@ -978,6 +989,121 @@ else:
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
 
+
+def create_secure_session():
+    """
+    Cria uma sessão HTTP com handshake TLS e verificação de certificado SSL.
+    Implementa retry automático e configurações de segurança.
+    """
+    session = requests.Session()
+    
+    # Configurar retry automático
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST", "PUT", "DELETE"]
+    )
+    
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    # Configurar verificação SSL/TLS
+    if API_BASE_URL.startswith('https://'):
+        if SSL_VERIFY:
+            if SSL_CERT_PATH and os.path.exists(SSL_CERT_PATH):
+                # Usar certificado customizado se fornecido
+                session.verify = SSL_CERT_PATH
+                safe_print(f"[TLS] Usando certificado customizado: {SSL_CERT_PATH}")
+            else:
+                # Verificação padrão com certificados do sistema
+                session.verify = True
+                safe_print("[TLS] Verificação SSL habilitada (certificados do sistema)")
+        else:
+            # AVISO: Desabilitar verificação SSL é inseguro (apenas para desenvolvimento)
+            session.verify = False
+            safe_print("[TLS] ⚠️ AVISO: Verificação SSL DESABILITADA (inseguro!)")
+    
+    # Configurar timeout padrão
+    session.timeout = REQUEST_TIMEOUT
+    
+    return session
+
+# Sessão global com TLS configurado
+_secure_session = None
+
+def get_secure_session():
+    """Retorna a sessão HTTP segura (criada com handshake TLS)"""
+    global _secure_session
+    if _secure_session is None:
+        _secure_session = create_secure_session()
+    return _secure_session
+
+def perform_tls_handshake(url):
+    """
+    Realiza handshake TLS explícito com o servidor antes de fazer requisições.
+    Verifica se o servidor suporta TLS e valida o certificado.
+    
+    Args:
+        url: URL do servidor (deve começar com https://)
+    
+    Returns:
+        bool: True se handshake foi bem-sucedido, False caso contrário
+    """
+    if not url.startswith('https://'):
+        safe_print(f"[TLS] URL não é HTTPS: {url}")
+        return False
+    
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port or 443
+        
+        safe_print(f"[TLS] Iniciando handshake TLS com {hostname}:{port}...")
+        
+        # Criar contexto SSL com verificação de certificado
+        context = ssl.create_default_context()
+        
+        # Se há certificado customizado, carregá-lo
+        if SSL_CERT_PATH and os.path.exists(SSL_CERT_PATH):
+            context.load_verify_locations(SSL_CERT_PATH)
+            safe_print(f"[TLS] Certificado customizado carregado: {SSL_CERT_PATH}")
+        
+        # Criar socket e fazer handshake TLS
+        sock = socket.create_connection((hostname, port), timeout=10)
+        ssock = context.wrap_socket(sock, server_hostname=hostname)
+        
+        # Obter informações do certificado
+        cert = ssock.getpeercert()
+        cipher = ssock.cipher()
+        
+        safe_print(f"[TLS] ✅ Handshake TLS bem-sucedido!")
+        safe_print(f"[TLS]    Servidor: {hostname}:{port}")
+        safe_print(f"[TLS]    Protocolo: {ssock.version()}")
+        safe_print(f"[TLS]    Cipher: {cipher[0]} ({cipher[1]})")
+        safe_print(f"[TLS]    Certificado válido até: {cert.get('notAfter', 'N/A')}")
+        
+        ssock.close()
+        sock.close()
+        
+        return True
+        
+    except ssl.SSLError as e:
+        safe_print(f"[TLS] ❌ Erro SSL durante handshake: {e}")
+        if "certificate verify failed" in str(e):
+            safe_print("[TLS]    Certificado SSL inválido ou não confiável")
+            safe_print("[TLS]    Verifique se o certificado está correto ou configure SSL_CERT_PATH")
+        return False
+    except socket.timeout:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port or 443
+        safe_print(f"[TLS] ❌ Timeout ao conectar com {hostname}:{port}")
+        return False
+    except Exception as e:
+        safe_print(f"[TLS] ❌ Erro durante handshake TLS: {e}")
+        return False
 
 def get_headers(usuario_nome=None):
     """
@@ -1825,7 +1951,14 @@ def get_application_name(window_title):
 def get_usuario_monitorado_id(usuario_nome):
     """Busca ou cria usuário monitorado pelo nome"""
     try:
-        resp = requests.get(USUARIOS_MONITORADOS_URL,
+        # Realizar handshake TLS se for HTTPS
+        if API_BASE_URL.startswith('https://'):
+            if not perform_tls_handshake(API_BASE_URL):
+                safe_print("[ERROR] Falha no handshake TLS - não foi possível estabelecer conexão segura")
+                return None
+        
+        session = get_secure_session()
+        resp = session.get(USUARIOS_MONITORADOS_URL,
                             params={'nome': usuario_nome},
                             headers=get_headers(usuario_nome))
         if resp.status_code == 200:
@@ -1856,7 +1989,8 @@ def verificar_usuario_ativo(usuario_id, usuario_nome=None):
         # Se não tiver nome, tentar obter do sistema
         if not usuario_nome:
             usuario_nome = get_logged_user()
-        resp = requests.get(USUARIOS_MONITORADOS_URL,
+        session = get_secure_session()
+        resp = session.get(USUARIOS_MONITORADOS_URL,
                             headers=get_headers(usuario_nome))
         if resp.status_code == 200:
             usuarios = resp.json()
@@ -1873,7 +2007,8 @@ def verificar_usuario_ativo(usuario_id, usuario_nome=None):
 def obter_configuracoes_horario_usuario(usuario_nome):
     """Obtém as configurações de horário de trabalho do usuário"""
     try:
-        resp = requests.get(USUARIOS_MONITORADOS_URL,
+        session = get_secure_session()
+        resp = session.get(USUARIOS_MONITORADOS_URL,
                             params={'nome': usuario_nome},
                             headers=get_headers(usuario_nome))
         if resp.status_code == 200:
@@ -1952,7 +2087,18 @@ def enviar_atividade(registro):
     try:
         # Obter nome do usuário do registro ou do sistema
         usuario_nome = registro.get('usuario_nome') or get_logged_user()
-        resp = requests.post(ATIVIDADE_URL,
+        
+        # Realizar handshake TLS se for HTTPS (apenas na primeira requisição)
+        if API_BASE_URL.startswith('https://') and not hasattr(enviar_atividade, '_tls_handshake_done'):
+            if perform_tls_handshake(API_BASE_URL):
+                enviar_atividade._tls_handshake_done = True
+            else:
+                safe_print("[ERROR] Falha no handshake TLS - não foi possível estabelecer conexão segura")
+                _save_offline(registro)
+                return False
+        
+        session = get_secure_session()
+        resp = session.post(ATIVIDADE_URL,
                              json=registro,
                              headers=get_headers(usuario_nome))
         if resp.status_code == 201:
@@ -2032,7 +2178,8 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
         usuario_nome = get_logged_user()
         
         face_check_url = f"{API_BASE_URL}/face-presence-check"
-        resp = requests.post(face_check_url,
+        session = get_secure_session()
+        resp = session.post(face_check_url,
                              json=check_data,
                              headers=get_headers(usuario_nome),
                              timeout=10)
@@ -2145,6 +2292,23 @@ def main():
     safe_print(f"[CONFIG] MONITOR_INTERVAL: {MONITOR_INTERVAL}s")
     safe_print(f"[CONFIG] IDLE_THRESHOLD: {IDLE_THRESHOLD}s")
     safe_print(f"[CONFIG] Aplicações aprendidas: {len(_LEARNED_APPLICATIONS)}")
+    
+    # Mostrar configurações TLS/SSL
+    if API_BASE_URL.startswith('https://'):
+        safe_print(f"[CONFIG] TLS/SSL: Habilitado")
+        safe_print(f"[CONFIG] SSL_VERIFY: {SSL_VERIFY}")
+        if SSL_CERT_PATH:
+            safe_print(f"[CONFIG] SSL_CERT_PATH: {SSL_CERT_PATH}")
+        
+        # Realizar handshake TLS inicial para verificar conectividade
+        safe_print("[TLS] Verificando conectividade TLS com o servidor...")
+        if perform_tls_handshake(API_BASE_URL):
+            safe_print("[TLS] ✅ Servidor TLS acessível e certificado válido")
+        else:
+            safe_print("[TLS] ⚠️ Aviso: Não foi possível verificar TLS (requisições podem falhar)")
+    else:
+        safe_print(f"[CONFIG] TLS/SSL: Desabilitado (HTTP)")
+        safe_print(f"[CONFIG] ⚠️ AVISO: Comunicação não criptografada")
     
     # Não há mais autenticação necessária - a API identifica pelo nome do usuário
 
