@@ -256,6 +256,7 @@ def get_available_endpoints(current_user):
     endpoints = [
         {'endpoint': '/atividades', 'method': 'GET', 'description': 'Listar atividades'},
         {'endpoint': '/atividades', 'method': 'POST', 'description': 'Criar atividade'},
+        {'endpoint': '/api/atividades', 'method': 'POST', 'description': 'Buscar atividades por usuário e período (requer token API)'},
         {'endpoint': '/atividades/*', 'method': 'GET', 'description': 'Buscar atividade específica'},
         {'endpoint': '/usuarios', 'method': 'GET', 'description': 'Listar usuários'},
         {'endpoint': '/usuarios', 'method': 'POST', 'description': 'Criar usuário'},

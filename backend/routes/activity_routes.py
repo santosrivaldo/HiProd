@@ -1,7 +1,7 @@
 
 from flask import Blueprint, request, jsonify, Response
 from datetime import datetime, timezone, timedelta
-from ..auth import token_required, agent_required
+from ..auth import token_required, agent_required, api_token_required
 from ..database import DatabaseConnection
 from ..utils import classify_activity_with_tags, get_brasilia_now, format_datetime_brasilia
 import re
@@ -926,3 +926,138 @@ def get_face_presence_stats(current_user):
         import traceback
         traceback.print_exc()
         return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+@activity_bp.route('/api/atividades', methods=['POST'])
+@api_token_required
+def get_atividades_by_token(token_data):
+    """
+    Endpoint para buscar atividades por usuário e período usando token de API.
+    Aceita: { usuario: nome ou id, time: { inicio, fim } }
+    Retorna: lista de atividades do usuário no período especificado
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'message': 'Dados não fornecidos!'}), 400
+        
+        usuario = data.get('usuario')
+        time_data = data.get('time', {})
+        inicio = time_data.get('inicio')
+        fim = time_data.get('fim')
+        
+        if not usuario:
+            return jsonify({'message': 'Campo "usuario" é obrigatório!'}), 400
+        
+        if not inicio or not fim:
+            return jsonify({'message': 'Campos "time.inicio" e "time.fim" são obrigatórios!'}), 400
+        
+        # Validar formato das datas
+        try:
+            from datetime import datetime
+            inicio_dt = datetime.fromisoformat(inicio.replace('Z', '+00:00'))
+            fim_dt = datetime.fromisoformat(fim.replace('Z', '+00:00'))
+        except (ValueError, AttributeError) as e:
+            return jsonify({'message': f'Formato de data inválido: {str(e)}'}), 400
+        
+        with DatabaseConnection() as db:
+            # Buscar usuário monitorado por nome ou ID
+            usuario_monitorado_id = None
+            
+            # Tentar como ID primeiro
+            try:
+                usuario_id_int = int(usuario)
+                db.cursor.execute('''
+                    SELECT id FROM usuarios_monitorados WHERE id = %s
+                ''', (usuario_id_int,))
+                result = db.cursor.fetchone()
+                if result:
+                    usuario_monitorado_id = result[0]
+            except (ValueError, TypeError):
+                pass
+            
+            # Se não encontrou como ID, tentar como nome
+            if not usuario_monitorado_id:
+                db.cursor.execute('''
+                    SELECT id FROM usuarios_monitorados WHERE nome = %s
+                ''', (usuario,))
+                result = db.cursor.fetchone()
+                if result:
+                    usuario_monitorado_id = result[0]
+            
+            if not usuario_monitorado_id:
+                return jsonify({'message': f'Usuário "{usuario}" não encontrado!'}), 404
+            
+            # Buscar atividades no período
+            db.cursor.execute('''
+                SELECT
+                    a.id,
+                    a.usuario_monitorado_id,
+                    um.nome as usuario_monitorado_nome,
+                    um.cargo,
+                    a.active_window,
+                    a.titulo_janela,
+                    a.categoria,
+                    a.produtividade,
+                    a.horario,
+                    a.ociosidade,
+                    COALESCE(a.duracao, 10) as duracao,
+                    a.domain,
+                    a.application,
+                    a.ip_address,
+                    a.user_agent,
+                    CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
+                    a.screenshot_size,
+                    a.face_presence_time,
+                    a.created_at,
+                    a.updated_at
+                FROM atividades a
+                LEFT JOIN usuarios_monitorados um ON a.usuario_monitorado_id = um.id
+                WHERE a.usuario_monitorado_id = %s
+                AND a.horario >= %s
+                AND a.horario <= %s
+                ORDER BY a.horario DESC
+            ''', (usuario_monitorado_id, inicio_dt, fim_dt))
+            
+            rows = db.cursor.fetchall()
+            
+            result = []
+            for row in rows:
+                result.append({
+                    'id': row[0],
+                    'usuario_monitorado_id': row[1],
+                    'usuario_monitorado_nome': row[2],
+                    'cargo': row[3],
+                    'active_window': row[4],
+                    'titulo_janela': row[5],
+                    'categoria': row[6] or 'unclassified',
+                    'produtividade': row[7] or 'neutral',
+                    'horario': row[8].isoformat() if row[8] else None,
+                    'ociosidade': row[9] or 0,
+                    'duracao': row[10] or 10,
+                    'domain': row[11],
+                    'application': row[12],
+                    'ip_address': row[13],
+                    'user_agent': row[14],
+                    'has_screenshot': row[15] if row[15] else False,
+                    'screenshot_size': row[16],
+                    'face_presence_time': row[17],
+                    'created_at': row[18].isoformat() if row[18] else None,
+                    'updated_at': row[19].isoformat() if row[19] else None
+                })
+            
+            return jsonify({
+                'usuario': usuario,
+                'periodo': {
+                    'inicio': inicio,
+                    'fim': fim
+                },
+                'total_atividades': len(result),
+                'atividades': result
+            }), 200
+            
+    except Exception as e:
+        print(f"❌ Erro ao buscar atividades por token: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!', 'error': str(e)}), 500
