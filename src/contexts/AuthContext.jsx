@@ -67,9 +67,10 @@ export function AuthProvider({ children }) {
   const verifyToken = async (token, userData) => {
     try {
       // Fazer requisição sem interceptor para evitar loop
+      // Usar a mesma origem em produção HTTPS, localhost em desenvolvimento
       const baseURL = window.location.hostname === 'localhost' 
-        ? 'http://localhost:5000' 
-        : `${window.location.protocol}//${window.location.hostname}:5000`
+        ? 'http://localhost:8010' 
+        : `${window.location.protocol}//${window.location.hostname}/api`
       
       const response = await fetch(`${baseURL}/verify-token`, {
         method: 'POST',
