@@ -1,9 +1,7 @@
-
 from flask import Blueprint, request, jsonify
 from ..auth import token_required, generate_api_token
 from ..database import DatabaseConnection
 from ..utils import format_datetime_brasilia
-import uuid
 from datetime import datetime, timedelta, timezone
 
 token_bp = Blueprint('token', __name__)
@@ -15,7 +13,7 @@ def get_tokens(current_user):
     try:
         with DatabaseConnection() as db:
             db.cursor.execute('''
-                SELECT id, nome, descricao, ativo, created_by, created_at, updated_at, last_used_at, expires_at
+                SELECT id, nome, descricao, token, ativo, created_by, created_at, updated_at, last_used_at, expires_at
                 FROM api_tokens
                 ORDER BY created_at DESC
             ''')
@@ -23,7 +21,7 @@ def get_tokens(current_user):
 
             result = []
             for token in tokens:
-                token_id, nome, descricao, ativo, created_by, created_at, updated_at, last_used_at, expires_at = token
+                token_id, nome, descricao, token_value, ativo, created_by, created_at, updated_at, last_used_at, expires_at = token
                 
                 # Buscar nome do criador
                 creator_name = None
@@ -45,6 +43,7 @@ def get_tokens(current_user):
                     'id': token_id,
                     'nome': nome,
                     'descricao': descricao,
+                    'token': token_value,  # Mostrar token completo
                     'ativo': ativo,
                     'created_by': str(created_by) if created_by else None,
                     'created_by_name': creator_name,
@@ -83,7 +82,7 @@ def create_token(current_user):
         if not permissions:
             return jsonify({'message': 'É necessário definir pelo menos uma permissão!'}), 400
         
-        # Gerar token
+        # Gerar token único
         token_value = generate_api_token()
         user_id = current_user[0]  # ID do usuário atual
         
@@ -98,6 +97,11 @@ def create_token(current_user):
                 return jsonify({'message': 'expires_days deve ser um número inteiro positivo!'}), 400
         
         with DatabaseConnection() as db:
+            # Verificar se já existe token com mesmo nome
+            db.cursor.execute('SELECT id FROM api_tokens WHERE nome = %s', (nome,))
+            if db.cursor.fetchone():
+                return jsonify({'message': 'Já existe um token com este nome!'}), 400
+            
             # Inserir token
             db.cursor.execute('''
                 INSERT INTO api_tokens (nome, descricao, token, created_by, expires_at)
@@ -136,7 +140,7 @@ def create_token(current_user):
             
             return jsonify({
                 'message': 'Token criado com sucesso!',
-                'token': token_value,  # Retornar apenas uma vez
+                'token': token_value,  # Retornar token completo
                 'id': token_id,
                 'nome': nome
             }), 201
@@ -177,6 +181,10 @@ def update_token(current_user, token_id):
             params = []
             
             if nome is not None:
+                # Verificar se nome já existe em outro token
+                db.cursor.execute('SELECT id FROM api_tokens WHERE nome = %s AND id != %s', (nome, token_id))
+                if db.cursor.fetchone():
+                    return jsonify({'message': 'Já existe um token com este nome!'}), 400
                 updates.append('nome = %s')
                 params.append(nome)
             
@@ -207,7 +215,6 @@ def update_token(current_user, token_id):
             params.append(token_id)
             
             if len(updates) > 1:  # Mais que apenas updated_at
-                # Construir query de forma segura
                 set_clause = ', '.join(updates)
                 db.cursor.execute(f'''
                     UPDATE api_tokens
@@ -245,7 +252,6 @@ def update_token(current_user, token_id):
                         ''', (token_id, endpoint.strip(), method))
                     except Exception as perm_error:
                         print(f"⚠️ Erro ao inserir permissão {endpoint} ({method}): {perm_error}")
-                        # Continuar com outras permissões mesmo se uma falhar
             
             return jsonify({'message': 'Token atualizado com sucesso!'}), 200
             
@@ -325,67 +331,38 @@ def toggle_token(current_user, token_id):
 def get_available_endpoints(current_user):
     """Lista todos os endpoints disponíveis para configuração de permissões"""
     endpoints = [
-        # Atividades
-        {'endpoint': '/atividades', 'method': 'GET', 'description': 'Listar atividades (aceita JWT ou Token API)'},
-        {'endpoint': '/atividade', 'method': 'GET', 'description': 'Listar atividades (alternativo)'},
-        {'endpoint': '/atividades/<id>', 'method': 'GET', 'description': 'Buscar atividade específica'},
-        {'endpoint': '/atividades/<id>', 'method': 'PATCH', 'description': 'Atualizar atividade'},
-        {'endpoint': '/atividades/<id>', 'method': 'DELETE', 'description': 'Excluir atividade'},
-        {'endpoint': '/atividades/<id>/tags', 'method': 'GET', 'description': 'Listar tags de uma atividade'},
-        {'endpoint': '/estatisticas', 'method': 'GET', 'description': 'Obter estatísticas de atividades'},
-        {'endpoint': '/screenshot/<id>', 'method': 'GET', 'description': 'Obter screenshot de atividade'},
-        {'endpoint': '/screenshots/batch', 'method': 'POST', 'description': 'Obter múltiplos screenshots'},
-        {'endpoint': '/face-presence-check', 'method': 'POST', 'description': 'Verificar presença facial'},
-        {'endpoint': '/face-presence-stats', 'method': 'GET', 'description': 'Estatísticas de presença facial'},
-        {'endpoint': '/api/atividades', 'method': 'POST', 'description': 'Buscar atividades por usuário e período (legado)'},
-        
-        # Usuários
-        {'endpoint': '/usuarios', 'method': 'GET', 'description': 'Listar usuários do sistema (aceita JWT ou Token API)'},
-        {'endpoint': '/usuarios/*', 'method': '*', 'description': 'Todos os endpoints de usuários (wildcard)'},
-        {'endpoint': '/usuarios/<id>', 'method': 'GET', 'description': 'Buscar usuário específico'},
-        {'endpoint': '/usuarios', 'method': 'POST', 'description': 'Criar usuário'},
-        {'endpoint': '/usuarios/<id>', 'method': 'PUT', 'description': 'Atualizar usuário'},
-        {'endpoint': '/usuarios/<id>', 'method': 'DELETE', 'description': 'Excluir usuário'},
-        {'endpoint': '/usuarios/<id>/reativar', 'method': 'PATCH', 'description': 'Reativar usuário'},
-        {'endpoint': '/usuarios/<id>/reset-senha', 'method': 'PATCH', 'description': 'Resetar senha'},
-        {'endpoint': '/usuarios/<id>/departamento', 'method': 'PATCH', 'description': 'Atualizar departamento do usuário'},
-        {'endpoint': '/usuarios/inativos', 'method': 'GET', 'description': 'Listar usuários inativos'},
-        {'endpoint': '/usuarios-monitorados', 'method': 'GET', 'description': 'Listar usuários monitorados (aceita JWT ou Token API)'},
-        {'endpoint': '/usuarios-monitorados', 'method': 'POST', 'description': 'Criar usuário monitorado'},
-        {'endpoint': '/usuarios-monitorados/<id>', 'method': 'PUT', 'description': 'Atualizar usuário monitorado'},
-        
-        # Departamentos
-        {'endpoint': '/departamentos', 'method': 'GET', 'description': 'Listar departamentos (aceita JWT ou Token API)'},
-        {'endpoint': '/departamentos/*', 'method': '*', 'description': 'Todos os endpoints de departamentos (wildcard)'},
-        {'endpoint': '/departamentos', 'method': 'POST', 'description': 'Criar departamento'},
-        {'endpoint': '/departamentos/<id>/configuracoes', 'method': 'GET', 'description': 'Obter configurações do departamento'},
-        {'endpoint': '/departamentos/<id>/configuracoes', 'method': 'POST', 'description': 'Atualizar configurações do departamento'},
-        
-        # Tags
-        {'endpoint': '/tags', 'method': 'GET', 'description': 'Listar tags (aceita JWT ou Token API)'},
-        {'endpoint': '/tags/*', 'method': '*', 'description': 'Todos os endpoints de tags (wildcard)'},
-        {'endpoint': '/tags', 'method': 'POST', 'description': 'Criar tag'},
-        {'endpoint': '/tags/<id>', 'method': 'PUT', 'description': 'Atualizar tag'},
-        {'endpoint': '/tags/<id>', 'method': 'DELETE', 'description': 'Excluir tag'},
-        
-        # Categorias
-        {'endpoint': '/categorias', 'method': 'GET', 'description': 'Listar categorias (aceita JWT ou Token API)'},
-        {'endpoint': '/categorias/*', 'method': '*', 'description': 'Todos os endpoints de categorias (wildcard)'},
-        {'endpoint': '/categorias', 'method': 'POST', 'description': 'Criar categoria'},
-        
-        # Escalas
-        {'endpoint': '/escalas', 'method': 'GET', 'description': 'Listar escalas (aceita JWT ou Token API)'},
-        {'endpoint': '/escalas/*', 'method': '*', 'description': 'Todos os endpoints de escalas (wildcard)'},
-        {'endpoint': '/escalas', 'method': 'POST', 'description': 'Criar escala'},
-        {'endpoint': '/escalas/<id>', 'method': 'PUT', 'description': 'Atualizar escala'},
-        {'endpoint': '/escalas/<id>', 'method': 'DELETE', 'description': 'Excluir escala'},
-        
         # Endpoints V1 para API Externa
         {'endpoint': '/api/v1/atividades', 'method': 'POST', 'description': 'V1 - Buscar atividades por usuário e período'},
         {'endpoint': '/api/v1/usuarios', 'method': 'GET', 'description': 'V1 - Listar usuários monitorados'},
         {'endpoint': '/api/v1/estatisticas', 'method': 'POST', 'description': 'V1 - Obter estatísticas de usuário'},
         {'endpoint': '/api/v1/health', 'method': 'GET', 'description': 'V1 - Health check (sem autenticação)'},
+        {'endpoint': '/api/v1/*', 'method': '*', 'description': 'V1 - Todos os endpoints V1 (wildcard)'},
+        
+        # Atividades
+        {'endpoint': '/atividades', 'method': 'GET', 'description': 'Listar atividades'},
+        {'endpoint': '/atividades/*', 'method': '*', 'description': 'Todos os endpoints de atividades (wildcard)'},
+        {'endpoint': '/api/atividades', 'method': 'POST', 'description': 'Buscar atividades por usuário e período (legado)'},
+        
+        # Usuários
+        {'endpoint': '/usuarios', 'method': 'GET', 'description': 'Listar usuários'},
+        {'endpoint': '/usuarios/*', 'method': '*', 'description': 'Todos os endpoints de usuários (wildcard)'},
+        {'endpoint': '/usuarios-monitorados', 'method': 'GET', 'description': 'Listar usuários monitorados'},
+        
+        # Departamentos
+        {'endpoint': '/departamentos', 'method': 'GET', 'description': 'Listar departamentos'},
+        {'endpoint': '/departamentos/*', 'method': '*', 'description': 'Todos os endpoints de departamentos (wildcard)'},
+        
+        # Tags
+        {'endpoint': '/tags', 'method': 'GET', 'description': 'Listar tags'},
+        {'endpoint': '/tags/*', 'method': '*', 'description': 'Todos os endpoints de tags (wildcard)'},
+        
+        # Categorias
+        {'endpoint': '/categorias', 'method': 'GET', 'description': 'Listar categorias'},
+        {'endpoint': '/categorias/*', 'method': '*', 'description': 'Todos os endpoints de categorias (wildcard)'},
+        
+        # Escalas
+        {'endpoint': '/escalas', 'method': 'GET', 'description': 'Listar escalas'},
+        {'endpoint': '/escalas/*', 'method': '*', 'description': 'Todos os endpoints de escalas (wildcard)'},
     ]
     
     return jsonify(endpoints), 200
-

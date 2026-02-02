@@ -81,19 +81,6 @@ if __name__ == '__main__':
 
         # Inicializar pool de conexões
         init_connection_pool()
-        
-        # Garantir que o token padrão do sistema existe
-        try:
-            from backend.auth import get_or_create_system_token
-            system_token = get_or_create_system_token()
-            if system_token:
-                print(f"✅ Token padrão do sistema configurado: {system_token[:20]}...")
-            else:
-                print("⚠️ Aviso: Não foi possível criar token padrão do sistema")
-        except Exception as e:
-            print(f"⚠️ Erro ao inicializar token padrão do sistema: {e}")
-            import traceback
-            traceback.print_exc()
 
         host = os.getenv('FLASK_HOST', '0.0.0.0')
         port = int(os.getenv('FLASK_PORT', '8000'))

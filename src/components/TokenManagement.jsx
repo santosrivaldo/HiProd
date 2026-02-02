@@ -433,6 +433,9 @@ const TokenManagement = () => {
                 Nome
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                Token
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Descrição
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -452,7 +455,7 @@ const TokenManagement = () => {
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {tokens.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                <td colSpan="7" className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                   Nenhum token criado ainda
                 </td>
               </tr>
@@ -461,6 +464,22 @@ const TokenManagement = () => {
                 <tr key={token.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                     {token.nome}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-2">
+                      <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono break-all max-w-xs">
+                        {token.token || 'N/A'}
+                      </code>
+                      {token.token && (
+                        <button
+                          onClick={() => copyToClipboard(token.token)}
+                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300"
+                          title="Copiar token"
+                        >
+                          📋
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                     {token.descricao || '-'}
