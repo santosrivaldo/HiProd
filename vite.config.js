@@ -64,19 +64,15 @@ const IS_HTTPS = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1' ||
                  process.env.NODE_ENV === 'production' // Assumir HTTPS em produção
 const PUBLIC_HOST = process.env.VITE_PUBLIC_HOST || 'hiprod.grupohi.com.br'
 
-// Configurar HMR - usar WSS se HTTPS, WS se HTTP
-// Em produção HTTPS, desabilitar HMR ou usar WSS
-const hmrConfig = IS_PROXY && !IS_HTTPS
+// Desabilitar HMR completamente em produção HTTPS para evitar problemas de WebSocket
+// O HMR não é necessário em produção e causa problemas de mixed content
+const hmrConfig = IS_HTTPS 
+  ? false  // Desabilitar completamente em HTTPS
+  : IS_PROXY && !IS_HTTPS
   ? { 
       protocol: 'ws', 
       host: PUBLIC_HOST, 
       clientPort: 8010 
-    }
-  : IS_HTTPS
-  ? {
-      protocol: 'wss',
-      host: PUBLIC_HOST,
-      clientPort: 443
     }
   : undefined
 
@@ -88,18 +84,21 @@ export default defineConfig({
     })
   ],
   resolve: {
-    dedupe: ['react', 'react-dom'], // Garantir que há apenas uma cópia do React
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'], // Garantir que há apenas uma cópia do React
     alias: {
-      // Usar path.resolve em vez de require.resolve para compatibilidade ESM
+      // Forçar resolução única do React - usar caminho absoluto
       'react': path.resolve(__dirname, 'node_modules/react'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom')
+      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      'react/jsx-runtime': path.resolve(__dirname, 'node_modules/react/jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.resolve(__dirname, 'node_modules/react/jsx-dev-runtime.js')
     },
     // Forçar resolução correta do React
     conditions: ['import', 'module', 'browser', 'default']
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react/jsx-runtime'],
-    exclude: [] // Não excluir nada
+    exclude: [], // Não excluir nada
+    force: true // Forçar re-otimização para garantir uma única cópia
   },
   // Garantir que React é sempre resolvido corretamente
   esbuild: {
@@ -128,8 +127,24 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Evitar problemas com mixed content
-        assetFileNames: 'assets/[name].[hash].[ext]'
+        assetFileNames: 'assets/[name].[hash].[ext]',
+        // Manter React em um único chunk para evitar múltiplas cópias
+        manualChunks: (id) => {
+          // Agrupar React e dependências relacionadas em um único chunk
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'react-vendor'
+          }
+          // Outras dependências em chunks separados
+          if (id.includes('node_modules')) {
+            return 'vendor'
+          }
+        }
       }
+    },
+    // Garantir que há apenas uma cópia do React no build
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true
     }
   }
 })

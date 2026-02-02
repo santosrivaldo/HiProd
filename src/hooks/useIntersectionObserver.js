@@ -1,5 +1,5 @@
-// Importação direta dos hooks - garantindo resolução correta
-import { useEffect, useRef, useState } from 'react'
+// Importação explícita do React completo para garantir resolução única
+import * as React from 'react'
 
 /**
  * Hook para observar quando um elemento entra ou sai da viewport
@@ -11,11 +11,17 @@ import { useEffect, useRef, useState } from 'react'
  * @returns {[React.RefObject, boolean]} - [ref do elemento, se está visível]
  */
 function useIntersectionObserver(options = {}) {
-  const [isIntersecting, setIsIntersecting] = useState(false)
-  const elementRef = useRef(null)
-  const observerRef = useRef(null)
+  // Verificar se React está disponível
+  if (!React || !React.useState || !React.useEffect || !React.useRef) {
+    console.error('React hooks não estão disponíveis. Verifique se há múltiplas cópias do React.')
+    throw new Error('React hooks não disponíveis')
+  }
 
-  useEffect(() => {
+  const [isIntersecting, setIsIntersecting] = React.useState(false)
+  const elementRef = React.useRef(null)
+  const observerRef = React.useRef(null)
+
+  React.useEffect(() => {
     const element = elementRef.current
     if (!element) return
 
