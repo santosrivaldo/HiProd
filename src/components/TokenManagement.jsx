@@ -57,8 +57,12 @@ const TokenManagement = () => {
         setMessage('Token atualizado com sucesso!')
       } else {
         const response = await api.post('/api-tokens', data)
-        setNewToken(response.data.token)
-        setMessage('Token criado com sucesso! Copie o token agora, pois ele não será exibido novamente.')
+        if (response.data && response.data.token) {
+          setNewToken(response.data.token)
+          setMessage('')
+        } else {
+          setMessage('Token criado, mas não foi retornado. Verifique os logs do servidor.')
+        }
       }
 
       fetchData()
@@ -192,21 +196,39 @@ const TokenManagement = () => {
       )}
 
       {newToken && (
-        <div className="mb-4 p-4 bg-yellow-100 dark:bg-yellow-900 rounded-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
-                ⚠️ Token criado com sucesso! Copie agora:
+        <div className="mb-4 p-6 bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">🔑</span>
+                <p className="font-bold text-lg text-yellow-900 dark:text-yellow-100">
+                  Token de API Gerado com Sucesso!
+                </p>
+              </div>
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
+                ⚠️ <strong>IMPORTANTE:</strong> Este token será exibido apenas uma vez. Copie e guarde em local seguro!
               </p>
-              <code className="block p-2 bg-white dark:bg-gray-800 rounded text-sm break-all">
-                {newToken}
-              </code>
+              <div className="relative">
+                <code className="block p-4 bg-white dark:bg-gray-800 border border-yellow-300 dark:border-yellow-700 rounded-md text-sm font-mono break-all select-all">
+                  {newToken}
+                </code>
+                <button
+                  onClick={() => {
+                    copyToClipboard(newToken)
+                    setMessage('Token copiado para a área de transferência!')
+                  }}
+                  className="mt-3 w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold px-4 py-2 rounded-md transition-colors"
+                >
+                  📋 Copiar Token
+                </button>
+              </div>
             </div>
             <button
-              onClick={() => copyToClipboard(newToken)}
-              className="ml-4 bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700"
+              onClick={() => setNewToken(null)}
+              className="text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-200 text-xl font-bold"
+              title="Fechar"
             >
-              Copiar
+              ×
             </button>
           </div>
         </div>
