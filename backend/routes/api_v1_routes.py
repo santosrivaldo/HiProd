@@ -38,10 +38,12 @@ def buscar_atividades_wrapper():
 @api_token_required
 def buscar_atividades_impl(token_data):
     """Implementação do endpoint de atividades (protegida por token)"""
+    print(f"📥 [V1] POST /api/v1/atividades - Iniciando busca de atividades")
     try:
         with DatabaseConnection() as db:
             # Processar requisição
             data = request.get_json()
+            print(f"   📋 Dados recebidos: usuario={data.get('usuario') if data else 'N/A'}, periodo={data.get('time') if data else 'N/A'}")
             
             if not data:
                 return jsonify({'message': 'Dados não fornecidos!'}), 400
@@ -110,9 +112,13 @@ def buscar_atividades_impl(token_data):
                     usuario_monitorado_id = result[0]
             
             if not usuario_monitorado_id:
+                print(f"   ❌ Usuário '{usuario}' não encontrado")
                 return jsonify({'message': f'Usuário "{usuario}" não encontrado!'}), 404
             
+            print(f"   ✅ Usuário encontrado: ID={usuario_monitorado_id}, Nome={usuario}")
+            
             # Buscar atividades no período
+            print(f"   🔍 Buscando atividades de {inicio_dt} até {fim_dt}")
             try:
                 db.cursor.execute('''
                     SELECT
@@ -148,6 +154,7 @@ def buscar_atividades_impl(token_data):
                 raise
             
             rows = db.cursor.fetchall()
+            print(f"   ✅ Encontradas {len(rows)} atividades")
             
             result = []
             for row in rows:
@@ -180,6 +187,7 @@ def buscar_atividades_impl(token_data):
                     # Continuar com outras linhas mesmo se uma falhar
                     continue
             
+            print(f"   ✅ [V1] POST /api/v1/atividades - Sucesso: {len(result)} atividades retornadas")
             return jsonify({
                 'version': 'v1',
                 'usuario': usuario,
@@ -225,6 +233,7 @@ def listar_usuarios_wrapper():
 @api_token_required
 def listar_usuarios_impl(token_data):
     """Implementação do endpoint de listar usuários (protegida por token)"""
+    print(f"📥 [V1] GET /api/v1/usuarios - Listando usuários monitorados")
     try:
         with DatabaseConnection() as db:
             # Buscar usuários monitorados
@@ -243,6 +252,7 @@ def listar_usuarios_impl(token_data):
             ''')
             
             rows = db.cursor.fetchall()
+            print(f"   ✅ Encontrados {len(rows)} usuários monitorados ativos")
             
             result = []
             for row in rows:
@@ -256,6 +266,7 @@ def listar_usuarios_impl(token_data):
                     'updated_at': row[6].isoformat() if row[6] else None
                 })
             
+            print(f"   ✅ [V1] GET /api/v1/usuarios - Sucesso: {len(result)} usuários retornados")
             return jsonify({
                 'version': 'v1',
                 'total_usuarios': len(result),
@@ -291,10 +302,12 @@ def obter_estatisticas_wrapper():
 @api_token_required
 def obter_estatisticas_impl(token_data):
     """Implementação do endpoint de estatísticas (protegida por token)"""
+    print(f"📥 [V1] POST /api/v1/estatisticas - Obtendo estatísticas")
     try:
         with DatabaseConnection() as db:
             # Processar requisição
             data = request.get_json()
+            print(f"   📋 Dados recebidos: usuario={data.get('usuario') if data else 'N/A'}, periodo={data.get('time') if data else 'N/A'}")
             
             if not data:
                 return jsonify({'message': 'Dados não fornecidos!'}), 400
@@ -326,7 +339,10 @@ def obter_estatisticas_impl(token_data):
                     usuario_monitorado_id = result[0]
             
             if not usuario_monitorado_id:
+                print(f"   ❌ Usuário '{usuario}' não encontrado")
                 return jsonify({'message': f'Usuário "{usuario}" não encontrado!'}), 404
+            
+            print(f"   ✅ Usuário encontrado: ID={usuario_monitorado_id}, Nome={usuario}")
             
             # Estatísticas por categoria
             if inicio and fim:
@@ -387,6 +403,7 @@ def obter_estatisticas_impl(token_data):
                 ''', (usuario_monitorado_id,))
             
             total_atividades = db.cursor.fetchone()[0]
+            print(f"   📊 Total de atividades: {total_atividades}, Categorias: {len(stats_categoria)}")
             
             categorias = []
             for row in stats_categoria:
@@ -397,6 +414,7 @@ def obter_estatisticas_impl(token_data):
                     'tempo_total': row[3] or 0
                 })
             
+            print(f"   ✅ [V1] POST /api/v1/estatisticas - Sucesso: {total_atividades} atividades, {len(categorias)} categorias")
             return jsonify({
                 'version': 'v1',
                 'usuario': usuario,
@@ -419,6 +437,7 @@ def health_check():
     """
     Endpoint V1 - Health check (não requer autenticação)
     """
+    print(f"📥 [V1] GET /api/v1/health - Health check")
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Origin', '*')
@@ -431,6 +450,7 @@ def health_check():
             db.cursor.execute('SELECT 1')
             db.cursor.fetchone()
         
+        print(f"   ✅ [V1] GET /api/v1/health - Status: healthy")
         return jsonify({
             'version': 'v1',
             'status': 'healthy',
