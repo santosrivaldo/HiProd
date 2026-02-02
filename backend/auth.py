@@ -143,10 +143,19 @@ def api_token_required(f):
 
         try:
             # Limpar token (remover espaços, tabs, quebras de linha)
+            token_original = token
             token = token.strip()
             
             with DatabaseConnection() as db:
+                # Log de debug
+                print(f"🔍 Validando token de API:")
+                print(f"   Token recebido (primeiros 20 chars): {token[:20]}...")
+                print(f"   Comprimento do token: {len(token)}")
+                print(f"   Endpoint: {request.path}")
+                print(f"   Método: {request.method}")
+                
                 # Buscar token no banco (armazenamos o token em texto plano para comparação)
+                # Primeiro, tentar busca exata
                 db.cursor.execute('''
                     SELECT id, nome, ativo, expires_at, created_by
                     FROM api_tokens
@@ -155,16 +164,47 @@ def api_token_required(f):
                 
                 token_data = db.cursor.fetchone()
                 
+                # Se não encontrou, tentar busca case-insensitive (para debug)
                 if not token_data:
-                    # Log para debug (sem expor o token completo)
-                    print(f"❌ Token de API não encontrado. Primeiros 10 caracteres: {token[:10]}...")
-                    print(f"   Endpoint: {request.path}")
-                    print(f"   Método: {request.method}")
-                    # Verificar se há tokens similares (para debug)
+                    db.cursor.execute('''
+                        SELECT id, nome, ativo, expires_at, created_by, token
+                        FROM api_tokens
+                        WHERE LOWER(token) = LOWER(%s)
+                    ''', (token,))
+                    
+                    similar_token = db.cursor.fetchone()
+                    if similar_token:
+                        print(f"⚠️ Token encontrado com case diferente!")
+                        print(f"   Token no banco (primeiros 20 chars): {similar_token[5][:20]}...")
+                        print(f"   Token recebido (primeiros 20 chars): {token[:20]}...")
+                
+                # Se ainda não encontrou, listar alguns tokens para debug (sem expor tokens completos)
+                if not token_data:
+                    db.cursor.execute('''
+                        SELECT id, nome, ativo, LEFT(token, 20) as token_preview, LENGTH(token) as token_length
+                        FROM api_tokens
+                        WHERE ativo = TRUE
+                        ORDER BY created_at DESC
+                        LIMIT 5
+                    ''')
+                    sample_tokens = db.cursor.fetchall()
+                    print(f"   Tokens ativos no banco (amostra):")
+                    for sample in sample_tokens:
+                        print(f"     - ID: {sample[0]}, Nome: {sample[1]}, Preview: {sample[3]}..., Length: {sample[4]}")
+                    
                     db.cursor.execute('SELECT COUNT(*) FROM api_tokens WHERE ativo = TRUE')
                     total_tokens = db.cursor.fetchone()[0]
                     print(f"   Total de tokens ativos no banco: {total_tokens}")
-                    return jsonify({'message': 'Token de API inválido!'}), 401
+                    
+                    return jsonify({
+                        'message': 'Token de API inválido!',
+                        'debug': {
+                            'token_length': len(token),
+                            'token_preview': token[:10] + '...',
+                            'endpoint': request.path,
+                            'method': request.method
+                        }
+                    }), 401
                 
                 token_id, token_nome, ativo, expires_at, created_by = token_data
                 
@@ -209,10 +249,19 @@ def api_token_required(f):
                         break
                 
                 if not has_permission:
+                    # Log de debug para permissões
+                    print(f"❌ Token sem permissão!")
+                    print(f"   Endpoint solicitado: {endpoint}")
+                    print(f"   Método solicitado: {method}")
+                    print(f"   Permissões do token:")
+                    for perm_endpoint, perm_method in permissions:
+                        print(f"     - {perm_endpoint} ({perm_method})")
+                    
                     return jsonify({
                         'message': 'Token sem permissão para este endpoint!',
                         'endpoint': endpoint,
-                        'method': method
+                        'method': method,
+                        'permissions': [{'endpoint': p[0], 'method': p[1]} for p in permissions]
                     }), 403
                 
                 # Atualizar último uso
