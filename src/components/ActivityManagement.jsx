@@ -52,18 +52,19 @@ export default function ActivityManagement() {
   const [existingTags, setExistingTags] = useState([])
   const navigate = useNavigate()
   
-  const [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
+  // Hook de intersection observer com tratamento de erro
+  let loadMoreRef, isLoadMoreVisible
+  try {
+    [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
+  } catch (error) {
+    console.warn('Erro ao inicializar useIntersectionObserver, usando fallback:', error)
+    // Fallback: criar ref manualmente
+    loadMoreRef = { current: null }
+    isLoadMoreVisible = false
+  }
 
-  useEffect(() => {
-    fetchData(1, true)
-    fetchExistingTags()
-  }, [agruparAtividades])
-
-  useEffect(() => {
-    applyFilters()
-  }, [activities, searchTerm, dateFilter, typeFilter, userFilter])
-
-  const fetchExistingTags = async () => {
+  // Função para buscar tags existentes
+  const fetchExistingTags = useCallback(async () => {
     try {
       const response = await api.get('/tags')
       setExistingTags(response.data || [])
@@ -71,9 +72,10 @@ export default function ActivityManagement() {
       console.error('Erro ao buscar tags existentes:', error)
       setExistingTags([])
     }
-  }
+  }, [])
 
-  const fetchData = async (page = 1, reset = false) => {
+  // Função para buscar atividades
+  const fetchData = useCallback(async (page = 1, reset = false) => {
     try {
       if (page === 1) {
         setLoading(true)
@@ -113,21 +115,38 @@ export default function ActivityManagement() {
 
     } catch (error) {
       console.error('Error fetching data:', error)
+      if (error.response) {
+        console.error('Response error:', error.response.status, error.response.data)
+      }
       if (page === 1) {
         setActivities([])
         setUsers([])
       }
+      // Mostrar mensagem de erro ao usuário
+      setMessage('Erro ao carregar atividades. Tente novamente.')
+      setTimeout(() => setMessage(''), 5000)
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }
+  }, [agruparAtividades])
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    fetchData(1, true)
+    fetchExistingTags()
+  }, [fetchData, fetchExistingTags])
+
+  // Aplicar filtros quando atividades ou filtros mudarem
+  useEffect(() => {
+    applyFilters()
+  }, [applyFilters])
 
   const loadMoreActivities = useCallback(() => {
     if (hasMore && !loadingMore && !loading) {
       fetchData(currentPage + 1, false)
     }
-  }, [hasMore, loadingMore, loading, currentPage])
+  }, [hasMore, loadingMore, loading, currentPage, fetchData])
 
   // Detectar quando o usuário chega ao final da lista
   useEffect(() => {
@@ -136,7 +155,7 @@ export default function ActivityManagement() {
     }
   }, [isLoadMoreVisible, hasMore, loadingMore, loadMoreActivities])
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...activities]
 
     // Search filter
@@ -171,7 +190,7 @@ export default function ActivityManagement() {
     }
 
     setFilteredActivities(filtered)
-  }
+  }, [activities, searchTerm, dateFilter, typeFilter, userFilter])
 
   const getActivityType = (activity) => {
     // Check if activity has classification from API
