@@ -545,8 +545,8 @@ except ImportError:
 # URL da API do HiProd (opcional - tem valor padrão)
 # ⚠️ IMPORTANTE: Configure para HTTPS para usar handshake TLS
 API_BASE_URL = os.getenv('API_URL', 'https://hiprod.grupohi.com.br')
-ATIVIDADE_URL = f"{API_BASE_URL}/atividade"
-USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/usuarios-monitorados"
+ATIVIDADE_URL = f"{API_BASE_URL}/api/atividade"
+USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/api/usuarios-monitorados"
 
 # Configuração SSL/TLS
 SSL_VERIFY = os.getenv('SSL_VERIFY', 'true').lower() == 'true'
@@ -2244,7 +2244,7 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
         # Obter nome do usuário do sistema
         usuario_nome = get_logged_user()
         
-        face_check_url = f"{API_BASE_URL}/face-presence-check"
+        face_check_url = f"{API_BASE_URL}/api/face-presence-check"
         session = get_secure_session()
         resp = session.post(face_check_url,
                              json=check_data,

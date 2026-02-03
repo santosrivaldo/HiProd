@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -17,7 +17,7 @@ import {
   ComputerDesktopIcon
 } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
-import useIntersectionObserver from '../hooks/useIntersectionObserver'
+// Removido useIntersectionObserver - usando abordagem mais simples
 import { exportToCSV, printData, formatTime } from '../utils/exportUtils'
 
 const activityTypes = [
@@ -51,17 +51,7 @@ export default function ActivityManagement() {
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
   const [existingTags, setExistingTags] = useState([])
   const navigate = useNavigate()
-  
-  // Hook de intersection observer com tratamento de erro
-  let loadMoreRef, isLoadMoreVisible
-  try {
-    [loadMoreRef, isLoadMoreVisible] = useIntersectionObserver()
-  } catch (error) {
-    console.warn('Erro ao inicializar useIntersectionObserver, usando fallback:', error)
-    // Fallback: criar ref manualmente
-    loadMoreRef = { current: null }
-    isLoadMoreVisible = false
-  }
+  const loadMoreRef = useRef(null)
 
   // Função para buscar tags existentes
   const fetchExistingTags = useCallback(async () => {
@@ -131,30 +121,31 @@ export default function ActivityManagement() {
     }
   }, [agruparAtividades])
 
-  // Carregar dados iniciais
-  useEffect(() => {
-    fetchData(1, true)
-    fetchExistingTags()
-  }, [fetchData, fetchExistingTags])
-
-  // Aplicar filtros quando atividades ou filtros mudarem
-  useEffect(() => {
-    applyFilters()
-  }, [applyFilters])
-
-  const loadMoreActivities = useCallback(() => {
-    if (hasMore && !loadingMore && !loading) {
-      fetchData(currentPage + 1, false)
+  // Função auxiliar para obter tipo de atividade
+  const getActivityType = (activity) => {
+    // Check if activity has classification from API
+    if (activity.categoria && activity.produtividade) {
+      switch (activity.produtividade) {
+        case 'productive':
+          return { type: 'productive', label: 'Produtivo', color: 'bg-green-100 text-green-800' }
+        case 'nonproductive':
+          return { type: 'nonproductive', label: 'Não Produtivo', color: 'bg-red-100 text-red-800' }
+        case 'neutral':
+          return { type: 'neutral', label: 'Neutro', color: 'bg-blue-100 text-blue-800' }
+        default:
+          return { type: 'unclassified', label: 'Não Classificado', color: 'bg-yellow-100 text-yellow-800' }
+      }
     }
-  }, [hasMore, loadingMore, loading, currentPage, fetchData])
 
-  // Detectar quando o usuário chega ao final da lista
-  useEffect(() => {
-    if (isLoadMoreVisible && hasMore && !loadingMore) {
-      loadMoreActivities()
+    // Fallback to idle classification
+    if (activity.ociosidade >= 600) {
+      return { type: 'idle', label: 'Ocioso', color: 'bg-gray-100 text-gray-800' }
     }
-  }, [isLoadMoreVisible, hasMore, loadingMore, loadMoreActivities])
 
+    return { type: 'unclassified', label: 'Não Classificado', color: 'bg-yellow-100 text-yellow-800' }
+  }
+
+  // Função para aplicar filtros
   const applyFilters = useCallback(() => {
     let filtered = [...activities]
 
@@ -192,28 +183,23 @@ export default function ActivityManagement() {
     setFilteredActivities(filtered)
   }, [activities, searchTerm, dateFilter, typeFilter, userFilter])
 
-  const getActivityType = (activity) => {
-    // Check if activity has classification from API
-    if (activity.categoria && activity.produtividade) {
-      switch (activity.produtividade) {
-        case 'productive':
-          return { type: 'productive', label: 'Produtivo', color: 'bg-green-100 text-green-800' }
-        case 'nonproductive':
-          return { type: 'nonproductive', label: 'Não Produtivo', color: 'bg-red-100 text-red-800' }
-        case 'neutral':
-          return { type: 'neutral', label: 'Neutro', color: 'bg-blue-100 text-blue-800' }
-        default:
-          return { type: 'unclassified', label: 'Não Classificado', color: 'bg-yellow-100 text-yellow-800' }
-      }
+  // Função para carregar mais atividades
+  const loadMoreActivities = useCallback(() => {
+    if (hasMore && !loadingMore && !loading) {
+      fetchData(currentPage + 1, false)
     }
+  }, [hasMore, loadingMore, loading, currentPage, fetchData])
 
-    // Fallback to idle classification
-    if (activity.ociosidade >= 600) {
-      return { type: 'idle', label: 'Ocioso', color: 'bg-gray-100 text-gray-800' }
-    }
+  // Carregar dados iniciais
+  useEffect(() => {
+    fetchData(1, true)
+    fetchExistingTags()
+  }, [fetchData, fetchExistingTags])
 
-    return { type: 'unclassified', label: 'Não Classificado', color: 'bg-yellow-100 text-yellow-800' }
-  }
+  // Aplicar filtros quando atividades ou filtros mudarem
+  useEffect(() => {
+    applyFilters()
+  }, [applyFilters])
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600)
@@ -1069,12 +1055,15 @@ export default function ActivityManagement() {
             </div>
           )}
 
-          {/* Intersection observer target */}
+          {/* Botão para carregar mais */}
           {hasMore && !loadingMore && (
-            <div ref={loadMoreRef} className="h-4 flex justify-center py-4">
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                Role para baixo para carregar mais...
-              </div>
+            <div className="flex justify-center py-4">
+              <button
+                onClick={loadMoreActivities}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Carregar mais atividades
+              </button>
             </div>
           )}
 
