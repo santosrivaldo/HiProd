@@ -20,8 +20,10 @@ import LoadingSpinner from './LoadingSpinner'
 import MetricCard from './charts/MetricCard'
 import AdvancedChart from './charts/AdvancedChart'
 import GlobalFilters from './dashboard/GlobalFilters'
+import CircularProgress from './dashboard/CircularProgress'
 import AIInsights from './ai/AIInsights'
 import { GRUPOS_FUNCIONALIDADE, getGrupoFromCategoria } from '../constants/productivityGroups'
+import { DocumentArrowDownIcon, MagnifyingGlassIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 
 const COLORS = {
   productive: '#10B981',
@@ -131,6 +133,11 @@ export default function Dashboard() {
   const [selectedUserForTimeline, setSelectedUserForTimeline] = useState(null)
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
+  const [durationFormat, setDurationFormat] = useState('hms') // 'hms' = Hora, Minuto, Segundo
+  const [orderBy, setOrderBy] = useState('produtividade')
+  const [sortOrder, setSortOrder] = useState('asc')
+  const [showInactive, setShowInactive] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)
   const navigate = useNavigate()
 
   // Carregar dados do dashboard
@@ -579,6 +586,20 @@ export default function Dashboard() {
     return `${hours}h ${minutes}min`
   }
 
+  const formatTimeHMS = (seconds) => {
+    if (!seconds || seconds === 0) return '0s'
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+    const parts = []
+    if (hours > 0) parts.push(`${hours}h`)
+    if (minutes > 0) parts.push(`${minutes}m`)
+    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`)
+    return parts.join(' ')
+  }
+
+  const displayDuration = (seconds) => (durationFormat === 'hms' ? formatTimeHMS(seconds) : formatTime(seconds))
+
   const formatPercentage = (value, total) => {
     if (!total || total === 0) return '0%'
     const percentage = ((value / total) * 100)
@@ -663,20 +684,66 @@ export default function Dashboard() {
     ? ((summary.productive / summary.total) * 100).toFixed(1)
     : '0'
   const usuariosMonitoradosCount = users.length
+  const colaboradoresComDados = userStats.length
+
+  const workingDaysInPeriod = (() => {
+    const start = periodDays === 'custom' && customStart ? parseISO(customStart) : subDays(new Date(), typeof periodDays === 'number' ? periodDays : 7)
+    const end = periodDays === 'custom' && customEnd ? parseISO(customEnd) : new Date()
+    let count = 0
+    const d = new Date(start)
+    while (d <= end) {
+      const day = d.getDay()
+      if (day !== 0 && day !== 6) count++
+      d.setDate(d.getDate() + 1)
+    }
+    return count
+  })()
+  const cargaHorariaEsperadaSeconds = workingDaysInPeriod * 8 * 3600
+
+  const userStatsSorted = [...userStats].sort((a, b) => {
+    const pctA = a.total > 0 ? (a.productive / a.total) * 100 : 0
+    const pctB = b.total > 0 ? (b.productive / b.total) * 100 : 0
+    if (orderBy === 'produtividade') return sortOrder === 'asc' ? pctA - pctB : pctB - pctA
+    const nameA = (a.nome || '').toLowerCase()
+    const nameB = (b.nome || '').toLowerCase()
+    return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA)
+  })
+
+  const top5Produtivos = [...userStats].sort((a, b) => (b.productive || 0) - (a.productive || 0)).slice(0, 5)
+  const top5Improdutivos = [...userStats].sort((a, b) => (b.nonproductive || 0) - (a.nonproductive || 0)).slice(0, 5)
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
-          Dashboard de Produtividade
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Bem-vindo, <span className="font-semibold">{user?.usuario}</span>. Filtros globais e anÃ¡lise integrada.
-        </p>
+    <div className="p-6 space-y-6 pb-24">
+      {/* Banner de boas-vindas (azul escuro) */}
+      <div className="bg-indigo-800 dark:bg-indigo-900 rounded-2xl overflow-hidden border border-indigo-700/50 shadow-lg">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold text-white shrink-0">
+              {(user?.usuario || 'U').slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">Bem-vindo, {user?.usuario || 'Usuário'}</h1>
+              <p className="text-indigo-200 text-sm mt-0.5">Pronto para transformar dados em decisões inteligentes? Vamos começar!</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* 1. Filtros Globais */}
-      <GlobalFilters
+      {/* Filtros */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <button
+          onClick={() => setFiltersOpen(!filtersOpen)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <span className="font-semibold text-gray-900 dark:text-white">Filtros</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
+            {filtersOpen ? 'Clique aqui para fechar' : 'Clique para abrir'}
+            <ChevronUpIcon className={`w-5 h-5 transition-transform ${filtersOpen ? '' : 'rotate-180'}`} />
+          </span>
+        </button>
+        {filtersOpen && (
+          <div className="px-4 pb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <GlobalFilters
         periodDays={periodDays}
         onPeriodChange={setPeriodDays}
         customStart={customStart}
@@ -699,80 +766,185 @@ export default function Dashboard() {
         groupOptions={groupOptions}
         onRefresh={loadDashboardData}
         loading={loading}
-      />
+            />
+            <div className="flex flex-wrap items-center gap-4 mt-4">
+              <label className="inline-flex items-center gap-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Ordenar por</span>
+                <select value={orderBy} onChange={(e) => setOrderBy(e.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm py-1.5 px-2">
+                  <option value="produtividade">Produtividade</option>
+                  <option value="nome">Nome</option>
+                </select>
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Classificar</span>
+                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm py-1.5 px-2">
+                  <option value="asc">Crescente</option>
+                  <option value="desc">Decrescente</option>
+                </select>
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="rounded border-gray-300" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Mostrar inativo</span>
+              </label>
+              <button onClick={loadDashboardData} disabled={loading} className="ml-auto p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50" title="Aplicar filtros">
+                <MagnifyingGlassIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* 2. Resumo Geral */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Resumo geral</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">UsuÃ¡rios monitorados</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{usuariosMonitoradosCount}</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo produtivo total</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatTime(summary.productive)}</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo nÃ£o produtivo</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatTime(summary.nonproductive)}</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo neutro</p>
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{formatTime(summary.neutral)}</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Produtividade mÃ©dia</p>
-            <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{productividadeMedia}%</p>
-          </div>
+      {/* Botões de ação + Formato de duração */}
+      <div className="flex flex-wrap gap-3">
+        <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+          <ClockIcon className="w-5 h-5" />
+          Resumo do Controle de Desvios
+        </button>
+        <button className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+          <DocumentArrowDownIcon className="w-5 h-5" />
+          Exportar Atividade
+        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <label className="text-sm text-gray-600 dark:text-gray-400">Formato de duração</label>
+          <select value={durationFormat} onChange={(e) => setDurationFormat(e.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm py-2 px-3">
+            <option value="hms">Hora, Minuto, Segundo</option>
+            <option value="hm">Hora, Minuto</option>
+          </select>
         </div>
-      </section>
+      </div>
 
-      {/* 3. Produtividade por UsuÃ¡rio */}
+      {/* Tabela Produtividade Consolidada */}
       <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-6 pb-0">Produtividade por usuÃ¡rio</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-4 border-b border-gray-200 dark:border-gray-700">Produtividade consolidada</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">UsuÃ¡rio</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Departamento</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo produtivo</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo nÃ£o produtivo</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo neutro</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">% Produtividade</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Detalhes</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12">#</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Produtividade consolidada</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Colaborador</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Horas trabalhadas</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Carga horária esperada</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase bg-red-50 dark:bg-red-900/20">Tempo não produtivo</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo produtivo</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo indefinido</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase bg-red-50 dark:bg-red-900/20">Custo improdutivo</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Custo produtivo</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Custo</th>
+                <th className="px-4 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {userStats.map((u) => {
-                const pct = u.total > 0 ? ((u.productive / u.total) * 100).toFixed(0) : 0
+              {userStatsSorted.map((u, idx) => {
+                const pct = u.total > 0 ? (u.productive / u.total) * 100 : 0
                 return (
                   <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{u.nome}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{u.departamento || 'â€”'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 dark:text-green-400">{formatTime(u.productive)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600 dark:text-red-400">{formatTime(u.nonproductive)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 dark:text-amber-400">{formatTime(u.neutral)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">{pct}%</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        onClick={() => setSelectedUserForTimeline(selectedUserForTimeline === u.id ? null : u.id)}
-                        className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm font-medium"
-                      >
-                        Ver
-                      </button>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{idx + 1}</td>
+                    <td className="px-4 py-3">
+                      <CircularProgress percent={pct} size={44} strokeWidth={3} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-sm font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">
+                          {(u.nome || 'U').slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{u.nome}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">{displayDuration(u.total)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">{displayDuration(cargaHorariaEsperadaSeconds)}</td>
+                    <td className="px-4 py-3 text-sm text-right bg-red-50/50 dark:bg-red-900/10 text-red-700 dark:text-red-300 font-medium">{displayDuration(u.nonproductive)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-green-700 dark:text-green-300">{displayDuration(u.productive)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-amber-700 dark:text-amber-300">{displayDuration(u.neutral)}</td>
+                    <td className="px-4 py-3 text-sm text-right bg-red-50/50 dark:bg-red-900/10 text-red-700 dark:text-red-300">—</td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">—</td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
+                    <td className="px-4 py-3">
+                      <button type="button" onClick={() => setSelectedUserForTimeline(selectedUserForTimeline === u.id ? null : u.id)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500" title="Mais opções">⋮</button>
                     </td>
                   </tr>
                 )
               })}
             </tbody>
+            <tfoot className="bg-gray-50 dark:bg-gray-700/50 font-medium">
+              <tr>
+                <td className="px-4 py-3" colSpan={3}><span className="text-sm text-gray-600 dark:text-gray-400">Total / Média</span></td>
+                <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">{displayDuration(summary.total)}</td>
+                <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">{displayDuration(cargaHorariaEsperadaSeconds)}</td>
+                <td className="px-4 py-3 text-sm text-right bg-red-50/50 dark:bg-red-900/10 text-red-700 dark:text-red-300">{displayDuration(summary.nonproductive)}</td>
+                <td className="px-4 py-3 text-sm text-right text-green-700 dark:text-green-300">{displayDuration(summary.productive)}</td>
+                <td className="px-4 py-3 text-sm text-right text-amber-700 dark:text-amber-300">{displayDuration(summary.neutral)}</td>
+                <td className="px-4 py-3 text-sm text-right bg-red-50/50 dark:bg-red-900/10 text-red-700 dark:text-red-300">—</td>
+                <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">—</td>
+                <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
+                <td className="px-4 py-3"></td>
+              </tr>
+              <tr>
+                <td colSpan={2} className="px-4 py-1 pb-3 text-sm text-gray-500 dark:text-gray-400">{productividadeMedia}% (Média)</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         {userStats.length === 0 && (
-          <p className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">Nenhum dado no perÃ­odo.</p>
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">Nenhum dado no período.</p>
         )}
       </section>
+
+      {/* Painéis: Produtividade da Empresa + Top 5 produtivos + Top 5 improdutivos */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Produtividade da empresa</h3>
+          {pieData.length > 0 ? (
+            <div className="flex flex-col items-center">
+              <AdvancedChart type="pie" data={pieData} dataKey="value" height={200} colors={pieData.map(d => d.color)} />
+              <div className="mt-3 space-y-1 w-full">
+                {pieData.map((d) => (
+                  <div key={d.name} className="flex justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">{d.name}</span>
+                    <span className="font-medium text-gray-900 dark:text-white">{formatTime(d.value)} ({summary.total > 0 ? ((d.value / summary.total) * 100).toFixed(0) : 0}%)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+          )}
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Top 5 usuários produtivos</h3>
+          <div className="space-y-2">
+            {top5Produtivos.map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">{u.nome}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-20 h-2 bg-gray-200 dark:bg-gray-600 rounded overflow-hidden">
+                    <div className="h-full bg-green-500 rounded" style={{ width: `${summary.productive ? Math.min(100, (u.productive / summary.productive) * 100) : 0}%` }} />
+                  </div>
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 w-14 text-right">{formatTime(u.productive)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {top5Produtivos.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>}
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Top 5 usuários improdutivos</h3>
+          <div className="space-y-2">
+            {top5Improdutivos.map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">{u.nome}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-20 h-2 bg-gray-200 dark:bg-gray-600 rounded overflow-hidden">
+                    <div className="h-full bg-red-500 rounded" style={{ width: `${summary.nonproductive ? Math.min(100, (u.nonproductive / summary.nonproductive) * 100) : 0}%` }} />
+                  </div>
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 w-14 text-right">{formatTime(u.nonproductive)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {top5Improdutivos.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>}
+        </div>
+      </div>
 
       {/* 4. Tempo por AplicaÃ§Ã£o (com Print) */}
       <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -887,7 +1059,7 @@ export default function Dashboard() {
             )
           })()
         ) : (
-          <p className="text-gray-500 dark:text-gray-400 text-sm">Clique em &quot;Ver&quot; na tabela Produtividade por usuÃ¡rio para exibir a timeline.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Clique em &quot;Ver&quot; na tabela Produtividade consolidada para exibir a timeline.</p>
         )}
       </section>
 
@@ -896,6 +1068,20 @@ export default function Dashboard() {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Insights automÃ¡ticos</h2>
         <AIInsights data={dashboardData} onAnalyze={loadDashboardData} />
       </section>
+
+      {/* Botão flutuante IA + Total colaboradores */}
+      <div className="fixed bottom-6 right-6 flex flex-col items-end gap-2 z-10">
+        <p className="text-xs text-gray-500 dark:text-gray-400 bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded shadow">
+          Total de colaboradores gerando dados: {colaboradoresComDados}
+        </p>
+        <button
+          type="button"
+          className="w-14 h-14 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg flex items-center justify-center transition-colors"
+          title="Estou acompanhando sua produtividade!"
+        >
+          <SparklesIcon className="w-7 h-7" />
+        </button>
+      </div>
     </div>
   )
 }
