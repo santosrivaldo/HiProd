@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../services/api'
-import { format, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { formatBrasiliaDate } from '../utils/timezoneUtils'
 import {
   PlayIcon,
   PauseIcon,
@@ -173,7 +172,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
     <div className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 overflow-hidden ${compact ? 'max-w-4xl' : ''}`}>
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
         <span className="text-sm font-medium text-gray-200">
-          Timeline de telas — {date} {initialAt ? `• ${format(new Date(initialAt), 'HH:mm:ss')}` : ''}
+          Timeline de telas — {date} {initialAt ? `• ${formatBrasiliaDate(initialAt, 'time')}` : ''}
         </span>
         {onClose && (
           <button
@@ -246,7 +245,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
             <div className="text-center text-xs text-gray-500">
               {currentSlot && (
                 <>
-                  {format(parseISO(currentSlot.time), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })} —{' '}
+                  {formatBrasiliaDate(currentSlot.time, 'datetime')} —{' '}
                   {currentIndex + 1} / {framesBySecondFiltered.length} (segundos)
                   {framesBySecondFiltered.length < framesBySecond.length && (
                     <span className="ml-1 text-gray-500">(filtrado de {framesBySecond.length})</span>
@@ -263,7 +262,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
                   className={`w-1.5 h-4 rounded-sm transition-colors ${
                     i === currentIndex ? 'bg-indigo-500' : 'bg-gray-600 hover:bg-gray-500'
                   }`}
-                  title={format(parseISO(slot.time), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}
+                  title={formatBrasiliaDate(slot.time, 'datetime')}
                 />
               ))}
               {framesBySecondFiltered.length > 80 && (

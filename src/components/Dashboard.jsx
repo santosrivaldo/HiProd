@@ -2,8 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
-import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns'
-import { parseBrasiliaDate, formatBrasiliaDate } from '../utils/timezoneUtils'
+import {
+  parseBrasiliaDate,
+  formatBrasiliaDate,
+  startOfDayBrasilia,
+  endOfDayBrasilia,
+  getTodayIsoDate,
+  subDaysBrasilia
+} from '../utils/timezoneUtils'
 import { PhotoIcon } from '@heroicons/react/24/outline'
 import { 
   ChartBarIcon, 
@@ -123,8 +129,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [periodDays, setPeriodDays] = useState(7)
-  const [customStart, setCustomStart] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
-  const [customEnd, setCustomEnd] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [customStart, setCustomStart] = useState(subDaysBrasilia(getTodayIsoDate(), 7))
+  const [customEnd, setCustomEnd] = useState(getTodayIsoDate())
   const [selectedUser, setSelectedUser] = useState('all')
   const [selectedDepartment, setSelectedDepartment] = useState('all')
   const [selectedGroup, setSelectedGroup] = useState('all')
@@ -163,27 +169,25 @@ export default function Dashboard() {
       setUsers(usersList)
       setDepartments(departmentsList)
 
-      // Processar atividades - perÃ­odo
-      const now = new Date()
-      let startDate, endDate
+      // Período em São Paulo
+      let startIso, endIso
       if (periodDays === 'custom' && customStart && customEnd) {
-        startDate = startOfDay(parseISO(customStart))
-        endDate = endOfDay(parseISO(customEnd))
+        startIso = customStart
+        endIso = customEnd
       } else {
         const days = typeof periodDays === 'number' ? periodDays : 7
-        startDate = startOfDay(subDays(now, days))
-        endDate = endOfDay(now)
+        const today = getTodayIsoDate()
+        endIso = today
+        startIso = subDaysBrasilia(today, days)
       }
 
-      // Filtrar atividades por data
+      // Filtrar atividades por data (data do evento em São Paulo)
       let filteredActivities = activities.filter(activity => {
         if (!activity?.horario) return false
         const activityDate = safeParseDate(activity.horario)
         if (!activityDate) return false
-        const activityDateOnly = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate())
-        const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
-        const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-        return activityDateOnly >= startDateOnly && activityDateOnly <= endDateOnly
+        const activityDateOnly = formatBrasiliaDate(activityDate, 'isoDate')
+        return activityDateOnly >= startIso && activityDateOnly <= endIso
       })
 
       // Filtrar por usuÃ¡rio
@@ -351,7 +355,7 @@ export default function Dashboard() {
         const activityDate = safeParseDate(activity.horario)
         if (!activityDate) return
         
-        const day = format(activityDate, 'yyyy-MM-dd')
+        const day = formatBrasiliaDate(activityDate, 'isoDate')
         if (!dailyData[day]) {
           dailyData[day] = {
             date: day,
@@ -687,14 +691,18 @@ export default function Dashboard() {
   const colaboradoresComDados = userStats.length
 
   const workingDaysInPeriod = (() => {
-    const start = periodDays === 'custom' && customStart ? parseISO(customStart) : subDays(new Date(), typeof periodDays === 'number' ? periodDays : 7)
-    const end = periodDays === 'custom' && customEnd ? parseISO(customEnd) : new Date()
+    const startIso = periodDays === 'custom' && customStart ? customStart : subDaysBrasilia(getTodayIsoDate(), typeof periodDays === 'number' ? periodDays : 7)
+    const endIso = periodDays === 'custom' && customEnd ? customEnd : getTodayIsoDate()
+    if (startIso > endIso) return 0
     let count = 0
-    const d = new Date(start)
-    while (d <= end) {
-      const day = d.getDay()
-      if (day !== 0 && day !== 6) count++
-      d.setDate(d.getDate() + 1)
+    let d = startIso
+    while (d <= endIso) {
+      const dt = startOfDayBrasilia(d)
+      if (dt) {
+        const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short' }).format(dt)
+        if (weekday !== 'Sun' && weekday !== 'Sat') count++
+      }
+      d = subDaysBrasilia(d, -1)
     }
     return count
   })()

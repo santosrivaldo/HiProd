@@ -1,29 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
-import { format, startOfWeek, endOfWeek, isSameDay, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import {
+  parseBrasiliaDate,
+  formatBrasiliaDate,
+  startOfDayBrasilia,
+  endOfDayBrasilia,
+  getWeekStartBrasilia,
+  subDaysBrasilia
+} from '../utils/timezoneUtils'
 
-function parseBrasiliaDate(dateString) {
-  try {
-    // Backend sends ISO-like strings in Brasília timezone; parse safely
-    return new Date(dateString)
-  } catch (e) {
-    return new Date()
-  }
-}
+const WEEKDAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
 export default function WeeklyTimeline() {
   const [activities, setActivities] = useState([])
   const [loading, setLoading] = useState(false)
-  const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }))
-  const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1 }), [weekStart])
+  const [weekStartIso, setWeekStartIso] = useState(getWeekStartBrasilia)
+  const weekEndIso = useMemo(() => subDaysBrasilia(weekStartIso, -6), [weekStartIso])
 
   useEffect(() => {
     const fetchWeek = async () => {
       setLoading(true)
       try {
-        const dataInicio = weekStart.toISOString()
-        const dataFim = weekEnd.toISOString()
+        const dataInicio = startOfDayBrasilia(weekStartIso)?.toISOString()
+        const dataFim = endOfDayBrasilia(weekEndIso)?.toISOString()
+        if (!dataInicio || !dataFim) return
         const res = await api.get(`/atividades?agrupar=true&limite=500&data_inicio=${encodeURIComponent(dataInicio)}&data_fim=${encodeURIComponent(dataFim)}`)
         setActivities(Array.isArray(res.data) ? res.data : [])
       } catch (e) {
@@ -34,55 +34,46 @@ export default function WeeklyTimeline() {
       }
     }
     fetchWeek()
-  }, [weekStart, weekEnd])
+  }, [weekStartIso, weekEndIso])
 
-  const days = useMemo(() => {
-    const list = []
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(weekStart)
-      d.setDate(weekStart.getDate() + i)
-      list.push(d)
-    }
-    return list
-  }, [weekStart])
+  const dayIsos = useMemo(() => {
+    return [0, 1, 2, 3, 4, 5, 6].map((i) => subDaysBrasilia(weekStartIso, -i))
+  }, [weekStartIso])
 
   const activitiesByDay = useMemo(() => {
     const map = new Map()
-    days.forEach(d => map.set(format(d, 'yyyy-MM-dd'), []))
+    dayIsos.forEach((iso) => map.set(iso, []))
     for (const a of activities) {
       const when = a?.horario ? parseBrasiliaDate(a.horario) : null
       if (!when) continue
-      const key = format(when, 'yyyy-MM-dd')
+      const key = formatBrasiliaDate(when, 'isoDate')
       if (!map.has(key)) map.set(key, [])
       map.get(key).push(a)
     }
-    // sort each day by time asc
     for (const [, arr] of map.entries()) {
-      arr.sort((x, y) => new Date(x.horario) - new Date(y.horario))
+      arr.sort((x, y) => new Date(x.horario).getTime() - new Date(y.horario).getTime())
     }
     return map
-  }, [activities, days])
+  }, [activities, dayIsos])
 
-  const goPrevWeek = () => {
-    const prev = new Date(weekStart)
-    prev.setDate(prev.getDate() - 7)
-    setWeekStart(prev)
-  }
+  const goPrevWeek = () => setWeekStartIso(subDaysBrasilia(weekStartIso, 7))
+  const goNextWeek = () => setWeekStartIso(subDaysBrasilia(weekStartIso, -7))
 
-  const goNextWeek = () => {
-    const next = new Date(weekStart)
-    next.setDate(next.getDate() + 7)
-    setWeekStart(next)
+  const weekdayLabel = (iso) => {
+    const d = new Date(iso + 'T12:00:00-03:00')
+    const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short' }).format(d)
+    const num = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 }[day]
+    return `${WEEKDAY_NAMES[num]} ${formatBrasiliaDate(iso + 'T12:00:00-03:00', 'date').slice(0, 5)}`
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Timeline semanal</h2>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Timeline semanal (São Paulo)</h2>
         <div className="flex items-center gap-2">
           <button onClick={goPrevWeek} className="px-3 py-1 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100">Semana anterior</button>
           <div className="text-sm text-gray-700 dark:text-gray-300">
-            {format(weekStart, "dd 'de' MMM", { locale: ptBR })} — {format(weekEnd, "dd 'de' MMM yyyy", { locale: ptBR })}
+            {formatBrasiliaDate(weekStartIso + 'T12:00:00-03:00', 'dateWithMonth')} — {formatBrasiliaDate(weekEndIso + 'T12:00:00-03:00', 'dateWithMonth')} {weekEndIso?.slice(0, 4)}
           </div>
           <button onClick={goNextWeek} className="px-3 py-1 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100">Próxima semana</button>
         </div>
@@ -92,23 +83,22 @@ export default function WeeklyTimeline() {
         <div className="text-gray-600 dark:text-gray-300">Carregando...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-          {days.map(day => {
-            const key = format(day, 'yyyy-MM-dd')
-            const list = activitiesByDay.get(key) || []
+          {dayIsos.map((iso) => {
+            const list = activitiesByDay.get(iso) || []
             return (
-              <div key={key} className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+              <div key={iso} className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
                 <div className="font-medium text-gray-900 dark:text-gray-100 mb-2">
-                  {format(day, 'EEE dd/MM', { locale: ptBR })}
+                  {weekdayLabel(iso)}
                 </div>
                 <div className="space-y-2">
                   {list.length === 0 && (
                     <div className="text-sm text-gray-500 dark:text-gray-400">Sem atividades</div>
                   )}
-                  {list.map(act => (
+                  {list.map((act) => (
                     <div key={act.id || act.horario} className="text-sm p-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
                       <div className="flex items-center justify-between">
                         <span className="text-gray-800 dark:text-gray-200">{act.titulo || act.dominio || act.aplicacao || 'Atividade'}</span>
-                        <span className="text-xs text-gray-500">{format(parseBrasiliaDate(act.horario), 'HH:mm')}</span>
+                        <span className="text-xs text-gray-500">{formatBrasiliaDate(act.horario, 'time').slice(0, 5)}</span>
                       </div>
                       {act.categoria && (
                         <div className="text-xs text-gray-500 mt-1">{act.categoria}</div>

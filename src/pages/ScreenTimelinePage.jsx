@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../services/api'
-import { format, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
+import { formatBrasiliaDate, getTodayIsoDate, formatBrasiliaTimeHHMM } from '../utils/timezoneUtils'
 import {
   PlayIcon,
   PauseIcon,
@@ -17,7 +16,7 @@ export default function ScreenTimelinePage() {
   const [searchParams] = useSearchParams()
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(searchParams.get('userId') || '')
-  const [selectedDate, setSelectedDate] = useState(searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'))
+  const [selectedDate, setSelectedDate] = useState(searchParams.get('date') || getTodayIsoDate())
   const [frames, setFrames] = useState([])
   const [loading, setLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -174,10 +173,10 @@ export default function ScreenTimelinePage() {
     if (isNaN(atTime)) return
     const startDate = new Date(atTime - 30 * 60 * 1000)
     const endDate = new Date(atTime + 30 * 60 * 1000)
-    setFilterStartTime(format(startDate, 'HH:mm'))
-    setFilterEndTime(format(endDate, 'HH:mm'))
-    const startM = toMinutes(format(startDate, 'HH:mm'))
-    const endM = toMinutes(format(endDate, 'HH:mm'))
+    setFilterStartTime(formatBrasiliaTimeHHMM(startDate))
+    setFilterEndTime(formatBrasiliaTimeHHMM(endDate))
+    const startM = toMinutes(formatBrasiliaTimeHHMM(startDate))
+    const endM = toMinutes(formatBrasiliaTimeHHMM(endDate))
     const filtered = startM <= endM
       ? framesBySecond.filter((s) => { const m = slotTimeMinutes(s.time); return m >= startM && m <= endM })
       : framesBySecond.filter((s) => { const m = slotTimeMinutes(s.time); return m >= startM || m <= endM })
@@ -413,7 +412,7 @@ export default function ScreenTimelinePage() {
           <div className="text-center text-sm text-gray-500 dark:text-gray-400">
             {currentSlot && (
               <span>
-                {format(parseISO(currentSlot.time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })} —{' '}
+                {formatBrasiliaDate(currentSlot.time, 'datetime')} —{' '}
                 {currentIndex + 1} / {framesBySecondFiltered.length} (segundos)
                 {framesBySecondFiltered.length < framesBySecond.length && (
                   <span className="ml-1 text-gray-400">(filtrado de {framesBySecond.length})</span>
@@ -436,7 +435,7 @@ export default function ScreenTimelinePage() {
                     ? 'bg-indigo-600 shadow-md shadow-indigo-500/40'
                     : 'bg-white/50 dark:bg-white/20 hover:bg-white/70 dark:hover:bg-white/30 border border-white/20'
                 }`}
-                title={format(parseISO(slot.time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                title={formatBrasiliaDate(slot.time, 'datetime')}
               />
             ))}
             {framesBySecondFiltered.length > 120 && (

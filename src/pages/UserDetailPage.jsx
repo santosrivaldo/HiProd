@@ -1,8 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 import api from '../services/api'
+import {
+  parseBrasiliaDate,
+  formatBrasiliaDate,
+  startOfDayBrasilia,
+  endOfDayBrasilia,
+  getTodayIsoDate,
+  subDaysBrasilia,
+  formatBrasiliaTimeHHMM
+} from '../utils/timezoneUtils'
 import CircularProgress from '../components/dashboard/CircularProgress'
 import AdvancedChart from '../components/charts/AdvancedChart'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -62,12 +69,12 @@ export default function UserDetailPage() {
 
   // Dia: 'yesterday' | 'today' | 'custom'; Data: yyyy-MM-dd
   const [diaPreset, setDiaPreset] = useState('today')
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [selectedDate, setSelectedDate] = useState(getTodayIsoDate())
 
   useEffect(() => {
-    const today = format(new Date(), 'yyyy-MM-dd')
+    const today = getTodayIsoDate()
     if (diaPreset === 'today') setSelectedDate(today)
-    else if (diaPreset === 'yesterday') setSelectedDate(format(subDays(new Date(), 1), 'yyyy-MM-dd'))
+    else if (diaPreset === 'yesterday') setSelectedDate(subDaysBrasilia(today, 1))
   }, [diaPreset])
 
   const loadUser = useCallback(async () => {
@@ -92,10 +99,10 @@ export default function UserDetailPage() {
     if (!id) return
     setLoadingActivities(true)
     try {
-      const dayStart = startOfDay(parseISO(selectedDate))
-      const dayEnd = endOfDay(parseISO(selectedDate))
-      const weekStart = startOfDay(subDays(parseISO(selectedDate), 7))
-      const monthStart = startOfDay(subDays(parseISO(selectedDate), 30))
+      const dayStart = startOfDayBrasilia(selectedDate)
+      const dayEnd = endOfDayBrasilia(selectedDate)
+      const weekStart = startOfDayBrasilia(subDaysBrasilia(selectedDate, 7))
+      const monthStart = startOfDayBrasilia(subDaysBrasilia(selectedDate, 30))
 
       const [dayRes, weekRes, monthRes] = await Promise.all([
         api.get(
@@ -167,7 +174,7 @@ export default function UserDetailPage() {
     const days = new Set()
     activitiesWeek.forEach((a) => {
       const d = safeParseDate(a.horario || a.primeiro_horario)
-      if (d) days.add(format(d, 'yyyy-MM-dd'))
+      if (d) days.add(formatBrasiliaDate(d, 'isoDate'))
     })
     return days.size
   }, [activitiesWeek])
@@ -176,7 +183,7 @@ export default function UserDetailPage() {
     const days = new Set()
     activitiesMonth.forEach((a) => {
       const d = safeParseDate(a.horario || a.primeiro_horario)
-      if (d) days.add(format(d, 'yyyy-MM-dd'))
+      if (d) days.add(formatBrasiliaDate(d, 'isoDate'))
     })
     return days.size
   }, [activitiesMonth])
@@ -273,7 +280,7 @@ export default function UserDetailPage() {
         fim: item.horarioFim,
         duracao: item.duration,
         horario: item.horario,
-        data: item.horario ? format(parseISO(item.horario.slice(0, 10)), 'dd/MM/yyyy', { locale: ptBR }) : '—'
+        data: item.horario ? formatBrasiliaDate(item.horario, 'date') : '—'
       })
     })
     return Array.from(byApp.values()).sort((a, b) => (b.tempoAtivo + b.tempoOcioso) - (a.tempoAtivo + a.tempoOcioso))
@@ -410,7 +417,7 @@ export default function UserDetailPage() {
             </div>
           )}
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Data: {format(parseISO(selectedDate), "dd/MM/yyyy", { locale: ptBR })}
+            Data: {formatBrasiliaDate(selectedDate + 'T12:00:00-03:00', 'date')}
           </div>
           <button
             onClick={loadActivities}
@@ -599,18 +606,8 @@ export default function UserDetailPage() {
                                 {app.processos.map((proc, idx) => {
                                   let inicioStr = '—'
                                   let fimStr = '—'
-                                  if (proc.inicio) {
-                                    try {
-                                      const d = new Date(proc.inicio)
-                                      if (!isNaN(d.getTime())) inicioStr = format(d, 'HH:mm:ss')
-                                    } catch (_) { inicioStr = proc.inicio.slice(11, 19) || '—' }
-                                  }
-                                  if (proc.fim) {
-                                    try {
-                                      const d = new Date(proc.fim)
-                                      if (!isNaN(d.getTime())) fimStr = format(d, 'HH:mm:ss')
-                                    } catch (_) { fimStr = proc.fim.slice(11, 19) || '—' }
-                                  }
+                                  if (proc.inicio) inicioStr = formatBrasiliaDate(proc.inicio, 'time')
+                                  if (proc.fim) fimStr = formatBrasiliaDate(proc.fim, 'time')
                                   const inicioFim = proc.inicio ? `${inicioStr} - ${fimStr} (${formatTime(proc.duracao)})` : '—'
                                   return (
                                     <tr key={`${proc.id}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -625,11 +622,13 @@ export default function UserDetailPage() {
                                           onClick={() => {
                                             setInlineTimelineAt(proc.horario)
                                             setShowInlineTimeline(true)
-                                            const atDate = new Date(proc.horario)
-                                            const startDate = new Date(atDate.getTime() - 30 * 60 * 1000)
-                                            const endDate = new Date(atDate.getTime() + 30 * 60 * 1000)
-                                            setTimelineFilterStartTime(format(startDate, 'HH:mm'))
-                                            setTimelineFilterEndTime(format(endDate, 'HH:mm'))
+                                            const atDate = parseBrasiliaDate(proc.horario)
+                                            if (atDate) {
+                                              const startDate = new Date(atDate.getTime() - 30 * 60 * 1000)
+                                              const endDate = new Date(atDate.getTime() + 30 * 60 * 1000)
+                                              setTimelineFilterStartTime(formatBrasiliaTimeHHMM(startDate))
+                                              setTimelineFilterEndTime(formatBrasiliaTimeHHMM(endDate))
+                                            }
                                           }}
                                           className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
                                           title="Ver momento na timeline de telas (na mesma tela)"

@@ -1,86 +1,159 @@
 /**
- * Utilitários para manipulação de timezone de Brasília
+ * Utilitários para datas e horários no fuso de São Paulo (America/Sao_Paulo, UTC-3).
+ * Todo o sistema deve exibir e interpretar datas neste timezone.
  */
 
-// Timezone de Brasília (UTC-3)
-const BRASILIA_TIMEZONE = 'America/Sao_Paulo';
+export const SAO_PAULO_TZ = 'America/Sao_Paulo'
 
 /**
- * Converte uma data ISO string para o timezone de Brasília
- * @param {string} isoString - Data em formato ISO string
- * @returns {Date} - Data no timezone de Brasília
+ * Parse de string ISO para Date (instante UTC). Strings sem timezone são assumidas como UTC.
+ * @param {string} isoString
+ * @returns {Date|null}
  */
 export function parseBrasiliaDate(isoString) {
-  if (!isoString) return null;
-  
-  // Se a string não tem timezone, assume UTC
-  if (!isoString.includes('+') && !isoString.includes('Z') && !isoString.includes('-', 10)) {
-    isoString += 'Z'; // Adiciona UTC se não tiver timezone
+  if (!isoString) return null
+  let str = String(isoString).trim()
+  if (!str) return null
+  // Se não tem indicador de timezone, assume UTC
+  if (!/[-+Z]\d{0,2}:?\d{0,2}$/i.test(str) && str.indexOf('T') !== -1) {
+    if (!str.endsWith('Z')) str = str.replace(/(\d)$/, '$1Z')
+  } else if (str.indexOf('T') === -1 && /^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    // Apenas data: interpretar como meia-noite em São Paulo
+    return new Date(str + 'T00:00:00-03:00')
   }
-  
-  const date = new Date(isoString);
-  
-  // Converte para Brasília usando toLocaleString
-  const brasiliaDate = new Date(date.toLocaleString('en-US', { timeZone: BRASILIA_TIMEZONE }));
-  
-  return brasiliaDate;
+  const date = new Date(str)
+  return isNaN(date.getTime()) ? null : date
 }
 
 /**
- * Formata uma data para o padrão brasileiro no timezone de Brasília
- * @param {string|Date} date - Data para formatar
- * @param {string} format - Formato desejado ('date', 'time', 'datetime')
- * @returns {string} - Data formatada
+ * Formata um Date (ou string ISO) no fuso de São Paulo.
+ * @param {Date|string|null} date
+ * @param {'date'|'time'|'datetime'|'isoDate'} format - date: dd/MM/yyyy | time: HH:mm:ss | datetime: dd/MM/yyyy HH:mm:ss | isoDate: yyyy-MM-dd
+ * @returns {string}
  */
 export function formatBrasiliaDate(date, format = 'datetime') {
-  if (!date) return '';
-  
-  let dateObj;
-  if (typeof date === 'string') {
-    dateObj = parseBrasiliaDate(date);
-  } else {
-    dateObj = date;
-  }
-  
-  if (!dateObj) return '';
-  
-  const options = {
-    timeZone: BRASILIA_TIMEZONE,
+  if (date == null) return ''
+  const dateObj = typeof date === 'string' ? parseBrasiliaDate(date) : date
+  if (!dateObj || isNaN(dateObj.getTime())) return ''
+
+  const opts = {
+    timeZone: SAO_PAULO_TZ,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  };
-  
-  if (format === 'time') {
-    options.hour = '2-digit';
-    options.minute = '2-digit';
-    options.second = '2-digit';
-  } else if (format === 'datetime') {
-    options.hour = '2-digit';
-    options.minute = '2-digit';
-    options.second = '2-digit';
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
   }
-  
-  return dateObj.toLocaleString('pt-BR', options);
+
+  if (format === 'date') {
+    return dateObj.toLocaleDateString('pt-BR', { timeZone: SAO_PAULO_TZ, day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+  if (format === 'dateWithMonth') {
+    return dateObj.toLocaleDateString('pt-BR', { timeZone: SAO_PAULO_TZ, day: '2-digit', month: 'short' })
+  }
+  if (format === 'time') {
+    return dateObj.toLocaleTimeString('pt-BR', { timeZone: SAO_PAULO_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  }
+  if (format === 'isoDate') {
+    const parts = dateObj.toLocaleDateString('en-CA', { timeZone: SAO_PAULO_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).split('-')
+    return parts.length === 3 ? `${parts[0]}-${parts[1]}-${parts[2]}` : ''
+  }
+  // datetime
+  const d = dateObj.toLocaleDateString('pt-BR', { timeZone: SAO_PAULO_TZ, day: '2-digit', month: '2-digit', year: 'numeric' })
+  const t = dateObj.toLocaleTimeString('pt-BR', { timeZone: SAO_PAULO_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  return `${d} ${t}`
 }
 
 /**
- * Obtém a data atual no timezone de Brasília
- * @returns {Date} - Data atual em Brasília
+ * Data/hora atual no instante atual (para comparações). Para exibir "hoje" em SP use getTodayIsoDate().
+ * @returns {Date}
  */
 export function getBrasiliaNow() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: BRASILIA_TIMEZONE }));
+  return new Date()
 }
 
 /**
- * Converte uma data para ISO string no timezone de Brasília
- * @param {Date} date - Data para converter
- * @returns {string} - Data em formato ISO string
+ * Retorna a data de hoje no fuso de São Paulo no formato yyyy-MM-dd.
+ * @returns {string}
  */
-export function toBrasiliaISOString(date) {
-  if (!date) return null;
-  
-  // Converte para Brasília e depois para ISO
-  const brasiliaDate = new Date(date.toLocaleString('en-US', { timeZone: BRASILIA_TIMEZONE }));
-  return brasiliaDate.toISOString();
+export function getTodayIsoDate() {
+  const now = new Date()
+  const parts = now.toLocaleDateString('en-CA', { timeZone: SAO_PAULO_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).split('-')
+  return parts.length === 3 ? `${parts[0]}-${parts[1]}-${parts[2]}` : ''
+}
+
+/**
+ * Início do dia em São Paulo para a data yyyy-MM-dd (00:00:00 -03:00).
+ * Use .toISOString() para enviar à API.
+ * @param {string} isoDate - yyyy-MM-dd
+ * @returns {Date}
+ */
+export function startOfDayBrasilia(isoDate) {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null
+  return new Date(isoDate + 'T00:00:00-03:00')
+}
+
+/**
+ * Fim do dia em São Paulo para a data yyyy-MM-dd (23:59:59.999 -03:00).
+ * @param {string} isoDate - yyyy-MM-dd
+ * @returns {Date}
+ */
+export function endOfDayBrasilia(isoDate) {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null
+  return new Date(isoDate + 'T23:59:59.999-03:00')
+}
+
+/**
+ * Formata para padrão tipo date-fns (dd/MM/yyyy HH:mm:ss) em São Paulo.
+ * Útil para substituir format(parseISO(x), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR }).
+ * @param {Date|string} date
+ * @returns {string}
+ */
+export function formatBrasiliaDateTimeLong(date) {
+  return formatBrasiliaDate(date, 'datetime')
+}
+
+/**
+ * Retorna HH:mm em São Paulo (para filtros por horário).
+ * @param {Date|string} date
+ * @returns {string}
+ */
+export function formatBrasiliaTimeHHMM(date) {
+  if (date == null) return '00:00'
+  const dateObj = typeof date === 'string' ? parseBrasiliaDate(date) : date
+  if (!dateObj || isNaN(dateObj.getTime())) return '00:00'
+  const t = dateObj.toLocaleTimeString('pt-BR', { timeZone: SAO_PAULO_TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+  return t.length >= 5 ? t.slice(0, 5) : '00:00'
+}
+
+/**
+ * Subtrai n dias de uma data no fuso de São Paulo.
+ * @param {string} isoDate - yyyy-MM-dd
+ * @param {number} n
+ * @returns {string} yyyy-MM-dd
+ */
+export function subDaysBrasilia(isoDate, n) {
+  const d = startOfDayBrasilia(isoDate)
+  if (!d) return isoDate
+  const nNum = Number(n)
+  if (nNum === 0) return isoDate
+  const t = d.getTime() - nNum * 24 * 60 * 60 * 1000
+  return formatBrasiliaDate(new Date(t), 'isoDate')
+}
+
+const WEEKDAY_SP = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }
+
+/**
+ * Retorna a data (yyyy-MM-dd) da segunda-feira da semana que contém a data em SP.
+ * @param {string} [isoDate] - se omitido, usa hoje em SP
+ * @returns {string}
+ */
+export function getWeekStartBrasilia(isoDate) {
+  const today = isoDate || getTodayIsoDate()
+  const d = new Date(today + 'T12:00:00-03:00')
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: SAO_PAULO_TZ, weekday: 'short' }).format(d)
+  const daysFromMonday = (WEEKDAY_SP[weekday] + 6) % 7
+  return subDaysBrasilia(today, daysFromMonday)
 }

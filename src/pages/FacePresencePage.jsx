@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns'
+import { formatBrasiliaDate, getTodayIsoDate, subDaysBrasilia } from '../utils/timezoneUtils'
 import {
   BarChart,
   Bar,
@@ -63,10 +63,9 @@ export default function FacePresencePage() {
     setError(null)
 
     try {
-      // Calcular datas
-      const now = new Date()
-      const startDate = format(startOfDay(subDays(now, dateRange)), 'yyyy-MM-dd')
-      const endDate = format(endOfDay(now), 'yyyy-MM-dd')
+      // Período em São Paulo
+      const endDate = getTodayIsoDate()
+      const startDate = subDaysBrasilia(endDate, dateRange)
 
       // Carregar usuários
       const usersRes = await api.get('/usuarios-monitorados')
@@ -117,12 +116,13 @@ export default function FacePresencePage() {
   // Preparar dados para gráficos
   const chartData = stats.map(stat => {
     const dataKey = groupBy === 'day' ? 'data' : groupBy === 'hour' ? 'hora' : 'semana'
+    const ddMM = (iso) => (iso ? formatBrasiliaDate(iso + 'T12:00:00-03:00', 'date').slice(0, 5) : '')
     return {
-      periodo: groupBy === 'day' 
-        ? format(parseISO(stat.data), 'dd/MM')
+      periodo: groupBy === 'day'
+        ? ddMM(stat.data)
         : groupBy === 'hour'
         ? `${stat.hora}:00`
-        : format(parseISO(stat.semana), 'dd/MM'),
+        : ddMM(stat.semana),
       usuario: stat.usuario_nome,
       minutos: stat.horas_presente || 0,  // Na verdade são minutos
       deteccoes: stat.deteccoes || 0,
@@ -384,11 +384,12 @@ export default function FacePresencePage() {
                     return dateB.localeCompare(dateA)
                   })
                   .map((stat, index) => {
-                    const periodo = groupBy === 'day' 
-                      ? format(parseISO(stat.data), 'dd/MM/yyyy')
+                    const dataDate = (iso) => (iso ? formatBrasiliaDate(iso + 'T12:00:00-03:00', 'date') : '')
+                    const periodo = groupBy === 'day'
+                      ? dataDate(stat.data)
                       : groupBy === 'hour'
-                      ? `${format(parseISO(stat.data), 'dd/MM')} ${stat.hora}:00`
-                      : format(parseISO(stat.semana), 'dd/MM/yyyy')
+                      ? `${dataDate(stat.data).slice(0, 5)} ${stat.hora}:00`
+                      : dataDate(stat.semana)
                     
                     const taxaPresenca = stat.total_verificacoes > 0
                       ? ((stat.deteccoes / stat.total_verificacoes) * 100).toFixed(1)

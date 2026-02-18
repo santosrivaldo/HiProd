@@ -9,8 +9,6 @@ import {
   UserCircleIcon,
   ChartBarIcon
 } from '@heroicons/react/24/outline'
-import { format, subDays } from 'date-fns'
-
 const PERIOD_OPTIONS = [
   { label: 'Hoje', value: 1 },
   { label: '7 dias', value: 7 },
