@@ -40,11 +40,13 @@ const formatTime = (seconds) => {
   return parts.join(' ')
 }
 
-const COLORS = {
-  productive: '#10B981',
-  nonproductive: '#EF4444',
-  neutral: '#F59E0B',
-  idle: '#6B7280'
+/** Paleta semântica para gráficos e status (harmonizada e acessível) */
+const CHART_PALETTE = {
+  productive: '#059669',   // green-600 – útil / produtivo
+  nonproductive: '#dc2626', // red-600 – não útil / improdutivo
+  neutral: '#b45309',       // amber-700 – indefinido
+  idle: '#64748b',         // slate-500 – ocioso
+  active: '#2563eb'        // blue-600 – ativo
 }
 
 export default function UserDetailPage() {
@@ -207,21 +209,21 @@ export default function UserDetailPage() {
     {
       name: 'Ativo',
       value: daySummary.productive + daySummary.nonproductive + daySummary.neutral,
-      color: '#3B82F6'
+      color: CHART_PALETTE.active
     },
-    { name: 'Ocioso', value: daySummary.idle, color: '#EC4899' }
+    { name: 'Ocioso', value: daySummary.idle, color: CHART_PALETTE.idle }
   ].filter((d) => d.value > 0)
 
   const pieTarefasProdutivas = [
-    { name: 'Útil', value: daySummary.productive, color: '#3B82F6' },
-    { name: 'Não Útil', value: daySummary.nonproductive, color: '#EC4899' },
-    { name: 'Indefinido', value: daySummary.neutral + daySummary.idle, color: '#F59E0B' }
+    { name: 'Útil', value: daySummary.productive, color: CHART_PALETTE.productive },
+    { name: 'Não útil', value: daySummary.nonproductive, color: CHART_PALETTE.nonproductive },
+    { name: 'Indefinido', value: daySummary.neutral + daySummary.idle, color: CHART_PALETTE.neutral }
   ].filter((d) => d.value > 0)
 
   const pieCusto = [
-    { name: 'Custo produtivo', value: Math.round(custoProdutivo * 100) / 100, color: '#3B82F6' },
-    { name: 'Custo improdutivo', value: Math.round(custoImprodutivo * 100) / 100, color: '#EC4899' },
-    { name: 'Custo indefinido', value: Math.round(custoIndefinido * 100) / 100, color: '#F59E0B' }
+    { name: 'Custo produtivo', value: Math.round(custoProdutivo * 100) / 100, color: CHART_PALETTE.productive },
+    { name: 'Custo improdutivo', value: Math.round(custoImprodutivo * 100) / 100, color: CHART_PALETTE.nonproductive },
+    { name: 'Custo indefinido', value: Math.round(custoIndefinido * 100) / 100, color: CHART_PALETTE.neutral }
   ].filter((d) => d.value > 0)
 
   const applicationList = React.useMemo(() => {
@@ -699,61 +701,75 @@ export default function UserDetailPage() {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <ChartCard title="Tempo em atividade">
+            <ChartCard title="Tempo em atividade" minHeight={220}>
               {pieTempoAtividade.length > 0 ? (
                 <AdvancedChart
                   type="pie"
                   data={pieTempoAtividade}
                   dataKey="value"
-                  height={180}
+                  height={200}
                   colors={pieTempoAtividade.map((d) => d.color)}
+                  noWrapper
                 />
               ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-8">Sem dados</p>
               )}
             </ChartCard>
-            <ChartCard title="Tempo em tarefas produtivas">
+            <ChartCard title="Tempo em tarefas produtivas" minHeight={220}>
               {pieTarefasProdutivas.length > 0 ? (
                 <AdvancedChart
                   type="pie"
                   data={pieTarefasProdutivas}
                   dataKey="value"
-                  height={180}
+                  height={200}
                   colors={pieTarefasProdutivas.map((d) => d.color)}
+                  noWrapper
                 />
               ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 py-8">Sem dados</p>
               )}
             </ChartCard>
           </div>
-          <ChartCard title="Custo">
+          <ChartCard title="Custo" minHeight={240}>
             {pieCusto.length > 0 ? (
               <AdvancedChart
                 type="pie"
                 data={pieCusto}
                 dataKey="value"
-                height={200}
+                height={220}
                 colors={pieCusto.map((d) => d.color)}
+                noWrapper
               />
             ) : (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-8">Sem dados</p>
             )}
           </ChartCard>
         </div>
         <div className="flex flex-col">
-          <div className="glass-card border-2 border-indigo-200/50 dark:border-indigo-500/30 p-6 flex flex-col items-center justify-center min-h-[280px]">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
+          <div className="glass-card border border-indigo-200/50 dark:border-indigo-500/30 p-6 flex flex-col items-center justify-center min-h-[280px]">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4 text-center">
               Produtividade consolidada
             </h3>
-            <CircularProgress percent={pctProdutivo} size={160} strokeWidth={8} />
-            <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">
-              <span className="text-green-600 dark:text-green-400">
-                Horas produtivas: {formatTime(daySummary.productive)} ({pctProdutivo.toFixed(1)}%)
-              </span>
-              <span className="text-red-600 dark:text-red-400">
-                Horas improdutivas ou indefinidas: {formatTime(horasImprodutivasOuIndefinidas)} (
-                {(100 - pctProdutivo).toFixed(1)}%)
-              </span>
+            <CircularProgress percent={pctProdutivo} size={140} strokeWidth={10} />
+            <div className="mt-5 w-full max-w-xs space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" aria-hidden />
+                  Horas produtivas
+                </span>
+                <span className="font-medium text-gray-900 dark:text-white tabular-nums">
+                  {formatTime(daySummary.productive)} ({pctProdutivo.toFixed(1)}%)
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500" aria-hidden />
+                  Horas improdutivas ou indefinidas
+                </span>
+                <span className="font-medium text-gray-900 dark:text-white tabular-nums">
+                  {formatTime(horasImprodutivasOuIndefinidas)} ({(100 - pctProdutivo).toFixed(1)}%)
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -792,11 +808,13 @@ function SummaryCard({ label, value, valueClassName = '', withInfo = false }) {
   )
 }
 
-function ChartCard({ title, children }) {
+function ChartCard({ title, children, minHeight }) {
   return (
-    <div className="glass-card p-4">
+    <div className="glass-card p-4 flex flex-col" style={minHeight ? { minHeight } : undefined}>
       <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">{title}</h3>
-      {children}
+      <div className="flex-1 flex items-center justify-center min-h-[160px]">
+        {children}
+      </div>
     </div>
   )
 }

@@ -40,6 +40,7 @@ export default function AdvancedChart({
   showGrid = true,
   stacked = false,
   area = false,
+  noWrapper = false,
   title,
   subtitle,
   formatTooltip,
@@ -155,27 +156,42 @@ export default function AdvancedChart({
           </BarChart>
         )
 
-      case 'pie':
+      case 'pie': {
+        const outerRadius = Math.min(88, Math.max(60, (height || 200) / 2 - 36))
         return (
           <PieChart>
             <Pie
               data={data}
               dataKey={dataKey || yKeys[0]}
+              nameKey="name"
               cx="50%"
               cy="50%"
-              labelLine={false}
-              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-              outerRadius={80}
+              outerRadius={outerRadius}
+              innerRadius={outerRadius * 0.55}
+              paddingAngle={1}
               fill="#8884d8"
+              labelLine={false}
+              label={false}
             >
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} stroke="rgba(255,255,255,0.8)" strokeWidth={1.5} />
               ))}
             </Pie>
-            <Tooltip {...tooltipProps} />
-            {showLegend && <Legend />}
+            <Tooltip {...tooltipProps} formatter={(value, name) => [value, name]} />
+            {showLegend && (
+              <Legend
+                layout="horizontal"
+                align="center"
+                verticalAlign="bottom"
+                iconType="circle"
+                iconSize={8}
+                wrapperStyle={{ paddingTop: 8 }}
+                formatter={(value) => <span className="text-gray-700 dark:text-gray-300 text-sm">{value}</span>}
+              />
+            )}
           </PieChart>
         )
+      }
 
       case 'radar':
         return (
@@ -203,8 +219,8 @@ export default function AdvancedChart({
     }
   }
 
-  return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+  const content = (
+    <>
       {(title || subtitle) && (
         <div className="mb-4">
           {title && (
@@ -222,6 +238,14 @@ export default function AdvancedChart({
       <ResponsiveContainer width="100%" height={height}>
         {renderChart()}
       </ResponsiveContainer>
+    </>
+  )
+
+  if (noWrapper) return <div className="w-full">{content}</div>
+
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+      {content}
     </div>
   )
 }

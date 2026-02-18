@@ -8,8 +8,8 @@
     ],
     "first_seen": "2025-11-27T10:02:36.504770-03:00",
     "window_title_sample": "HiProd - Cursor",
-    "usage_count": 171,
-    "last_used": "2026-02-02T15:14:19.554684-03:00"
+    "usage_count": 189,
+    "last_used": "2026-02-18T12:11:59.532967-03:00"
   },
   "applicationframehost.exe": {
     "name": "ApplicationFrameHost",
@@ -44,8 +44,8 @@
     ],
     "first_seen": "2025-11-27T13:00:27.875203-03:00",
     "window_title_sample": "Como estou me sentindo hoje?",
-    "usage_count": 551,
-    "last_used": "2026-02-02T14:55:54.423685-03:00"
+    "usage_count": 562,
+    "last_used": "2026-02-18T12:20:23.776090-03:00"
   },
   "lockapp.exe": {
     "name": "LockApp",
@@ -80,8 +80,8 @@
     ],
     "first_seen": "2025-11-27T14:41:11.985150-03:00",
     "window_title_sample": null,
-    "usage_count": 280,
-    "last_used": "2026-02-02T15:10:13.522825-03:00"
+    "usage_count": 300,
+    "last_used": "2026-02-18T12:19:39.842089-03:00"
   },
   "startmenuexperiencehost.exe": {
     "name": "StartMenuExperienceHost",

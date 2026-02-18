@@ -32,3 +32,8 @@ body {
     @apply bg-white/50 dark:bg-gray-700/50 border border-white/30 dark:border-gray-600/50 rounded-xl backdrop-blur-sm;
   }
 }
+
+/* Track do gráfico de progresso circular (tema escuro) */
+.dark {
+  --chart-track: #374151;
+}

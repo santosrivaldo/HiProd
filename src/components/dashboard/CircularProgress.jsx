@@ -13,19 +13,20 @@ export default function CircularProgress({ percent = 0, size = 48, strokeWidth =
   const cy = size / 2
   const circumference = 2 * Math.PI * r
   const strokeDashoffset = circumference - (pct / 100) * circumference
-  const color = pct >= 50 ? '#10B981' : pct >= 25 ? '#F59E0B' : '#EF4444'
+  const color = pct >= 50 ? '#059669' : pct >= 25 ? '#b45309' : '#dc2626'
+
+  const trackColor = 'var(--chart-track, #e2e8f0)'
 
   return (
     <div className={`relative inline-flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="transform -rotate-90">
+      <svg width={size} height={size} className="transform -rotate-90" aria-hidden>
         <circle
           cx={cx}
           cy={cy}
           r={r}
           fill="none"
-          stroke="#E5E7EB"
+          stroke={trackColor}
           strokeWidth={strokeWidth}
-          className="dark:stroke-gray-600"
         />
         <circle
           cx={cx}
@@ -41,8 +42,8 @@ export default function CircularProgress({ percent = 0, size = 48, strokeWidth =
         />
       </svg>
       <span
-        className="absolute text-xs font-semibold text-gray-700 dark:text-gray-200"
-        style={{ fontSize: size * 0.22 }}
+        className="absolute font-semibold text-gray-800 dark:text-gray-100 tabular-nums"
+        style={{ fontSize: Math.round(size * 0.24) }}
       >
         {Math.round(pct)}%
       </span>
