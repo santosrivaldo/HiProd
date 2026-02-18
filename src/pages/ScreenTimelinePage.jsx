@@ -22,6 +22,7 @@ export default function ScreenTimelinePage() {
   const [playing, setPlaying] = useState(false)
   const [imageUrls, setImageUrls] = useState([]) // uma ou duas URLs conforme viewMode
   const [viewMode, setViewMode] = useState('one') // 'one' = uma tela, 'two' = duas telas
+  const [selectedMonitorIndex, setSelectedMonitorIndex] = useState(0) // qual tela exibir no modo "uma tela" (0 = primeira, 1 = segunda)
   const [error, setError] = useState(null)
   const playRef = useRef(null)
   const imageCache = useRef({})
@@ -42,11 +43,19 @@ export default function ScreenTimelinePage() {
   }, [frames])
 
   const currentSlot = framesBySecond[currentIndex]
-  // Frames a exibir no slot atual: 1 ou 2 conforme viewMode
+  // Número máximo de monitores nos dados (para o seletor no modo "uma tela")
+  const maxMonitors = React.useMemo(() => {
+    if (!framesBySecond.length) return 1
+    return Math.max(1, ...framesBySecond.map((s) => s.items?.length ?? 0))
+  }, [framesBySecond])
+  // Frames a exibir no slot atual: 1 ou 2 conforme viewMode; no modo "uma tela" usa selectedMonitorIndex
   const currentFramesToShow = currentSlot?.items?.length
     ? viewMode === 'two'
       ? currentSlot.items.slice(0, 2)
-      : [currentSlot.items[0]]
+      : (() => {
+          const idx = Math.min(selectedMonitorIndex, currentSlot.items.length - 1)
+          return [currentSlot.items[idx]]
+        })()
     : []
 
   const loadUsers = useCallback(async () => {
@@ -67,6 +76,7 @@ export default function ScreenTimelinePage() {
     setError(null)
     setImageUrls([])
     setCurrentIndex(0)
+    setSelectedMonitorIndex(0)
     try {
       const res = await api.get(
         `/screen-frames?usuario_monitorado_id=${selectedUser}&date=${selectedDate}&limit=2000`
@@ -118,12 +128,12 @@ export default function ScreenTimelinePage() {
     const toShow = slot?.items?.length
       ? viewMode === 'two'
         ? slot.items.slice(0, 2)
-        : [slot.items[0]]
+        : [slot.items[Math.min(selectedMonitorIndex, slot.items.length - 1)]]
       : []
     const ids = toShow.map((f) => f.id).filter(Boolean)
     if (ids.length) fetchImageUrls(ids)
     else setImageUrls([])
-  }, [currentIndex, viewMode, framesBySecond, fetchImageUrls])
+  }, [currentIndex, viewMode, selectedMonitorIndex, framesBySecond, fetchImageUrls])
 
   // Play: avança 1 slot por segundo
   useEffect(() => {
@@ -214,8 +224,8 @@ export default function ScreenTimelinePage() {
 
       {framesBySecond.length > 0 && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2 py-2">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-4 py-2">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-gray-600 dark:text-gray-400">Exibir:</span>
               <button
                 onClick={() => setViewMode('one')}
@@ -241,6 +251,24 @@ export default function ScreenTimelinePage() {
                 <Squares2X2Icon className="w-5 h-5" />
                 Duas telas
               </button>
+              {viewMode === 'one' && maxMonitors >= 2 && (
+                <>
+                  <span className="text-sm text-gray-500 dark:text-gray-400 mx-1">|</span>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Qual tela:</span>
+                  <select
+                    value={selectedMonitorIndex}
+                    onChange={(e) => setSelectedMonitorIndex(Number(e.target.value))}
+                    className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1.5 text-sm"
+                    title="Escolha qual monitor exibir"
+                  >
+                    {Array.from({ length: maxMonitors }, (_, i) => (
+                      <option key={i} value={i}>
+                        Tela {i + 1}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           </div>
 
