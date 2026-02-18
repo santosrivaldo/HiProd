@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../services/api'
-import LoadingSpinner from '../components/LoadingSpinner'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
@@ -8,7 +7,9 @@ import {
   PauseIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  FilmIcon
+  FilmIcon,
+  Squares2X2Icon,
+  Square2StackIcon
 } from '@heroicons/react/24/outline'
 
 export default function ScreenTimelinePage() {
@@ -17,15 +18,15 @@ export default function ScreenTimelinePage() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [frames, setFrames] = useState([])
   const [loading, setLoading] = useState(false)
-  const [loadingImage, setLoadingImage] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [imageUrl, setImageUrl] = useState(null)
+  const [imageUrls, setImageUrls] = useState([]) // uma ou duas URLs conforme viewMode
+  const [viewMode, setViewMode] = useState('one') // 'one' = uma tela, 'two' = duas telas
   const [error, setError] = useState(null)
   const playRef = useRef(null)
   const imageCache = useRef({})
 
-  // Agrupar frames por segundo (captured_at) para exibir um "frame" por segundo na timeline
+  // Agrupar frames por segundo; dentro de cada segundo, ordenar por monitor_index
   const framesBySecond = React.useMemo(() => {
     const byTime = new Map()
     frames.forEach((f) => {
@@ -34,11 +35,19 @@ export default function ScreenTimelinePage() {
       byTime.get(key).push(f)
     })
     const keys = Array.from(byTime.keys()).sort()
-    return keys.map((k) => ({ time: k, items: byTime.get(k) }))
+    return keys.map((k) => {
+      const items = (byTime.get(k) || []).sort((a, b) => (a.monitor_index ?? 0) - (b.monitor_index ?? 0))
+      return { time: k, items }
+    })
   }, [frames])
 
   const currentSlot = framesBySecond[currentIndex]
-  const currentFrame = currentSlot?.items?.[0] // primeiro monitor do segundo
+  // Frames a exibir no slot atual: 1 ou 2 conforme viewMode
+  const currentFramesToShow = currentSlot?.items?.length
+    ? viewMode === 'two'
+      ? currentSlot.items.slice(0, 2)
+      : [currentSlot.items[0]]
+    : []
 
   const loadUsers = useCallback(async () => {
     try {
@@ -73,23 +82,27 @@ export default function ScreenTimelinePage() {
     }
   }, [selectedUser, selectedDate])
 
-  const fetchImageUrl = useCallback(async (frameId) => {
-    if (imageCache.current[frameId]) {
-      setImageUrl(imageCache.current[frameId])
+  const fetchImageUrls = useCallback(async (frameIds) => {
+    if (!frameIds?.length) {
+      setImageUrls([])
       return
     }
-    setLoadingImage(true)
-    try {
-      const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob' })
-      const url = URL.createObjectURL(res.data)
-      imageCache.current[frameId] = url
-      setImageUrl(url)
-    } catch (e) {
-      console.error('Erro ao carregar imagem', e)
-      setImageUrl(null)
-    } finally {
-      setLoadingImage(false)
+    const urls = []
+    for (const frameId of frameIds) {
+      if (imageCache.current[frameId]) {
+        urls.push(imageCache.current[frameId])
+        continue
+      }
+      try {
+        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob' })
+        const url = URL.createObjectURL(res.data)
+        imageCache.current[frameId] = url
+        urls.push(url)
+      } catch (e) {
+        console.error('Erro ao carregar imagem', e)
+      }
     }
+    setImageUrls(urls)
   }, [])
 
   useEffect(() => {
@@ -101,12 +114,16 @@ export default function ScreenTimelinePage() {
   }, [loadFrames])
 
   useEffect(() => {
-    if (!currentFrame?.id) {
-      setImageUrl(null)
-      return
-    }
-    fetchImageUrl(currentFrame.id)
-  }, [currentFrame?.id, fetchImageUrl])
+    const slot = framesBySecond[currentIndex]
+    const toShow = slot?.items?.length
+      ? viewMode === 'two'
+        ? slot.items.slice(0, 2)
+        : [slot.items[0]]
+      : []
+    const ids = toShow.map((f) => f.id).filter(Boolean)
+    if (ids.length) fetchImageUrls(ids)
+    else setImageUrls([])
+  }, [currentIndex, viewMode, framesBySecond, fetchImageUrls])
 
   // Play: avança 1 slot por segundo
   useEffect(() => {
@@ -189,29 +206,62 @@ export default function ScreenTimelinePage() {
         </div>
       )}
 
-      {loading && <LoadingSpinner />}
-
       {!loading && frames.length === 0 && selectedUser && !error && (
         <div className="rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 p-8 text-center">
           Nenhum frame encontrado para esta data. Verifique se o agente está enviando frames.
         </div>
       )}
 
-      {!loading && framesBySecond.length > 0 && (
+      {framesBySecond.length > 0 && (
         <>
+          <div className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Exibir:</span>
+              <button
+                onClick={() => setViewMode('one')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === 'one'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                }`}
+                title="Uma tela apenas"
+              >
+                <Square2StackIcon className="w-5 h-5" />
+                Uma tela
+              </button>
+              <button
+                onClick={() => setViewMode('two')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  viewMode === 'two'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                }`}
+                title="Duas telas (quando houver 2 monitores)"
+              >
+                <Squares2X2Icon className="w-5 h-5" />
+                Duas telas
+              </button>
+            </div>
+          </div>
+
           <div className="bg-black/90 rounded-lg overflow-hidden flex items-center justify-center min-h-[400px] relative">
-            {loadingImage && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                <LoadingSpinner size="md" />
+            {imageUrls.length > 0 ? (
+              <div
+                className={`flex gap-2 p-2 w-full justify-center items-center ${
+                  imageUrls.length === 2 ? 'flex-row' : ''
+                }`}
+              >
+                {imageUrls.map((url, i) => (
+                  <div key={i} className="flex-1 min-w-0 flex justify-center">
+                    <img
+                      src={url}
+                      alt={imageUrls.length === 2 ? `Tela ${i + 1}` : 'Frame'}
+                      className="max-w-full max-h-[80vh] w-auto h-auto object-contain"
+                      style={{ maxHeight: '70vh' }}
+                    />
+                  </div>
+                ))}
               </div>
-            )}
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt="Frame"
-                className="max-w-full max-h-[80vh] w-auto h-auto object-contain"
-                style={{ maxHeight: '70vh' }}
-              />
             ) : (
               <span className="text-gray-500">Selecione um instante na timeline</span>
             )}
