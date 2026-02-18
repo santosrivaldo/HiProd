@@ -21,22 +21,38 @@ import TagManagement from "./TagManagement";
 import UserManagement from "./UserManagement";
 import Settings from "./Settings";
 import WorkScheduleManagement from "./WorkScheduleManagement";
-import { useNavigate } from "react-router-dom";
-const navigation = [
-  { name: "Dashboard", icon: ChartBarIcon, component: "dashboard", path: "/" },
+import { useNavigate, useLocation } from "react-router-dom";
+
+const navigationGroups = [
   {
-    name: "Gerenciamento",
-    icon: ClipboardDocumentListIcon,
-    component: "management",
-    path: "/activities",
+    label: "Início",
+    items: [
+      { name: "Dashboard", icon: ChartBarIcon, component: "dashboard", path: "/" },
+    ],
   },
-  { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags", path: "/tags" },
-  { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users", path: "/users" },
-  { name: "Escalas", icon: ClockIcon, component: "schedules", path: "/schedules" },
-  { name: "Presença Facial", icon: UserIcon, component: "face-presence", path: "/face-presence" },
-  { name: "Timeline de telas", icon: FilmIcon, component: "timeline", path: "/timeline" },
-  { name: "Tokens API", icon: KeyIcon, component: "tokens", path: "/tokens" },
-  { name: "Configurações", icon: Cog6ToothIcon, component: "settings", path: "/settings" },
+  {
+    label: "Monitoramento",
+    items: [
+      { name: "Gerenciamento", icon: ClipboardDocumentListIcon, component: "management", path: "/activities" },
+      { name: "Timeline de telas", icon: FilmIcon, component: "timeline", path: "/timeline" },
+      { name: "Presença Facial", icon: UserIcon, component: "face-presence", path: "/face-presence" },
+    ],
+  },
+  {
+    label: "Cadastros",
+    items: [
+      { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags", path: "/tags" },
+      { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users", path: "/users" },
+      { name: "Escalas", icon: ClockIcon, component: "schedules", path: "/schedules" },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { name: "Tokens API", icon: KeyIcon, component: "tokens", path: "/tokens" },
+      { name: "Configurações", icon: Cog6ToothIcon, component: "settings", path: "/settings" },
+    ],
+  },
 ];
 
 export default function Layout({ children }) {
@@ -45,6 +61,10 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isActive = (item) =>
+    location.pathname === item.path || currentView === item.component;
 
   const renderCurrentView = () => {
     switch (currentView) {
@@ -91,27 +111,33 @@ export default function Layout({ children }) {
                 Activity Tracker
               </h1>
             </div>
-            <nav className="mt-5 px-2 space-y-1">
-              {navigation.map((item) => (
-                <button
-                  key={item.name}
-                  onClick={() => {
-                    if (item.path) {
-                      navigate(item.path);
-                    } else {
-                      setCurrentView(item.component);
-                    }
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full group flex items-center px-2 py-2 text-base font-medium rounded-md ${
-                    currentView === item.component
-                      ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
-                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  <item.icon className="mr-4 flex-shrink-0 h-6 w-6" />
-                  {item.name}
-                </button>
+            <nav className="mt-5 px-2 space-y-6">
+              {navigationGroups.map((group) => (
+                <div key={group.label}>
+                  <p className="px-2 mb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    {group.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {group.items.map((item) => (
+                      <button
+                        key={item.name}
+                        onClick={() => {
+                          if (item.path) navigate(item.path);
+                          else setCurrentView(item.component);
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full group flex items-center px-2 py-2 text-base font-medium rounded-md ${
+                          isActive(item)
+                            ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
+                            : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        }`}
+                      >
+                        <item.icon className="mr-4 flex-shrink-0 h-6 w-6" />
+                        {item.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </nav>
           </div>

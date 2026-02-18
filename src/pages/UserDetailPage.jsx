@@ -10,7 +10,10 @@ import {
   ArrowPathIcon,
   FilmIcon,
   ChevronLeftIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  PlayIcon
 } from '@heroicons/react/24/outline'
 
 const getActivityDurationSeconds = (activity) => {
@@ -220,8 +223,67 @@ export default function UserDetailPage() {
     { name: 'Custo indefinido', value: Math.round(custoIndefinido * 100) / 100, color: '#F59E0B' }
   ].filter((d) => d.value > 0)
 
+  const applicationList = React.useMemo(() => {
+    const list = activities
+      .filter((a) => getActivityDurationSeconds(a) > 0)
+      .map((a) => {
+        const horario = a.horario || a.primeiro_horario
+        const dt = typeof horario === 'string' ? horario : horario?.isoformat?.() || ''
+        const ultimo = a.ultimo_horario
+        const dtFim = typeof ultimo === 'string' ? ultimo : ultimo?.isoformat?.() || ''
+        return {
+          id: a.id,
+          application: a.application || a.active_window?.split(' - ')[0] || 'Aplicação',
+          process: a.active_window || a.titulo_janela || '—',
+          duration: getActivityDurationSeconds(a),
+          horario: dt,
+          horarioFim: dtFim,
+          produtividade: a.produtividade || 'neutral',
+          ocioso: (a.ociosidade || 0) >= 600
+        }
+      })
+      .sort((a, b) => (a.horario || '').localeCompare(b.horario || ''))
+    return list
+  }, [activities])
+
+  const applicationsGrouped = React.useMemo(() => {
+    const byApp = new Map()
+    applicationList.forEach((item) => {
+      const appName = item.application?.trim() || 'Não listado'
+      if (!byApp.has(appName)) {
+        byApp.set(appName, {
+          appName,
+          situacao: item.produtividade,
+          tempoAtivo: 0,
+          tempoOcioso: 0,
+          processos: []
+        })
+      }
+      const g = byApp.get(appName)
+      if (item.ocioso) g.tempoOcioso += item.duration
+      else g.tempoAtivo += item.duration
+      g.processos.push({
+        id: item.id,
+        process: item.application?.split(/[\s-]/)[0] || 'processo',
+        descricao: item.process,
+        inicio: item.horario,
+        fim: item.horarioFim,
+        duracao: item.duration,
+        horario: item.horario,
+        data: item.horario ? format(parseISO(item.horario.slice(0, 10)), 'dd/MM/yyyy', { locale: ptBR }) : '—'
+      })
+    })
+    return Array.from(byApp.values()).sort((a, b) => (b.tempoAtivo + b.tempoOcioso) - (a.tempoAtivo + a.tempoOcioso))
+  }, [applicationList])
+
+  const [expandedApp, setExpandedApp] = useState(null)
+
   const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
   const timelineSearch = `?userId=${id}&date=${selectedDate}`
+  const timelineUrlAt = (atIso) =>
+    atIso
+      ? `/timeline?userId=${id}&date=${selectedDate}&at=${encodeURIComponent(atIso)}`
+      : timelineUrl
 
   if (loading) {
     return (
@@ -390,6 +452,126 @@ export default function UserDetailPage() {
         <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
           OBS: O tamanho do período pode variar conforme a atividade no período selecionado.
         </div>
+      </section>
+
+      {/* Aplicações e processos utilizados (expandível por aplicação) */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-4 border-b border-gray-200 dark:border-gray-700">
+          Aplicações e processos utilizados
+        </h2>
+        {loadingActivities ? (
+          <div className="p-6"><LoadingSpinner size="md" /></div>
+        ) : applicationsGrouped.length === 0 ? (
+          <p className="p-6 text-sm text-gray-500 dark:text-gray-400">Nenhuma atividade no dia selecionado.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
+                <tr>
+                  <th className="w-10 px-2 py-3" />
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Métrica</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Situação</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo ativo</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo ocioso</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Qtd. objetos</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Mouse</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Teclado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {applicationsGrouped.map((app) => {
+                  const isExpanded = expandedApp === app.appName
+                  const situacaoLabel = app.situacao === 'productive' ? 'Útil' : app.situacao === 'nonproductive' ? 'Não útil' : 'Indefinido'
+                  const situacaoClass = app.situacao === 'productive' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : app.situacao === 'nonproductive' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                  return (
+                    <React.Fragment key={app.appName}>
+                      <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="px-2 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedApp(isExpanded ? null : app.appName)}
+                            className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500"
+                            aria-label={isExpanded ? 'Recolher' : 'Expandir'}
+                          >
+                            {isExpanded ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{app.appName}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${situacaoClass}`}>{situacaoLabel}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-green-700 dark:text-green-300">{formatTime(app.tempoAtivo)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-red-700 dark:text-red-300">{formatTime(app.tempoOcioso)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-4 bg-gray-50/50 dark:bg-gray-900/30">
+                            <div className="mb-3 flex flex-wrap items-center gap-4 text-sm">
+                              <span className="text-gray-600 dark:text-gray-400"><span className="font-medium text-gray-700 dark:text-gray-300">Tempo acumulado:</span> {formatTime(app.tempoAtivo + app.tempoOcioso)}</span>
+                              <span className="text-gray-600 dark:text-gray-400"><span className="font-medium text-gray-700 dark:text-gray-300">Objetos acessados:</span> —</span>
+                            </div>
+                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                              <thead className="bg-gray-100 dark:bg-gray-700/50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">#</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Processo</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Descrição</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Início / Fim</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Data</th>
+                                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                                {app.processos.map((proc, idx) => {
+                                  let inicioStr = '—'
+                                  let fimStr = '—'
+                                  if (proc.inicio) {
+                                    try {
+                                      const d = new Date(proc.inicio)
+                                      if (!isNaN(d.getTime())) inicioStr = format(d, 'HH:mm:ss')
+                                    } catch (_) { inicioStr = proc.inicio.slice(11, 19) || '—' }
+                                  }
+                                  if (proc.fim) {
+                                    try {
+                                      const d = new Date(proc.fim)
+                                      if (!isNaN(d.getTime())) fimStr = format(d, 'HH:mm:ss')
+                                    } catch (_) { fimStr = proc.fim.slice(11, 19) || '—' }
+                                  }
+                                  const inicioFim = proc.inicio ? `${inicioStr} - ${fimStr} (${formatTime(proc.duracao)})` : '—'
+                                  return (
+                                    <tr key={`${proc.id}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                      <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{idx + 1}</td>
+                                      <td className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-white">{proc.process}</td>
+                                      <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300 max-w-xs truncate" title={proc.descricao}>{proc.descricao}</td>
+                                      <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{inicioFim}</td>
+                                      <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{proc.data}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        <Link
+                                          to={timelineUrlAt(proc.horario)}
+                                          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
+                                          title="Ver momento na timeline de telas"
+                                        >
+                                          <PlayIcon className="w-5 h-5" />
+                                        </Link>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {/* Resumo do dia selecionado */}

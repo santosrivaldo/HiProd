@@ -135,6 +135,25 @@ export default function ScreenTimelinePage() {
     loadFrames()
   }, [loadFrames])
 
+  const atParam = searchParams.get('at')
+
+  useEffect(() => {
+    if (!atParam || framesBySecond.length === 0) return
+    const atTime = new Date(atParam).getTime()
+    if (isNaN(atTime)) return
+    let bestIdx = 0
+    let bestDiff = Infinity
+    framesBySecond.forEach((slot, i) => {
+      const slotTime = new Date(slot.time.replace(' ', 'T')).getTime()
+      const diff = Math.abs(slotTime - atTime)
+      if (diff < bestDiff) {
+        bestDiff = diff
+        bestIdx = i
+      }
+    })
+    setCurrentIndex(bestIdx)
+  }, [atParam, framesBySecond])
+
   useEffect(() => {
     const slot = framesBySecond[currentIndex]
     const toShow = slot?.items?.length
