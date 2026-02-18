@@ -1,11 +1,14 @@
 
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, send_file
 from datetime import datetime, timezone, timedelta
 from ..auth import token_required, agent_required, api_token_required
 from ..database import DatabaseConnection
 from ..utils import classify_activity_with_tags, get_brasilia_now, format_datetime_brasilia
+from ..config import Config
 import re
 import base64
+import os
+import uuid
 
 activity_bp = Blueprint('activity', __name__)
 
@@ -721,6 +724,165 @@ def get_screenshots_batch(current_user):
     except Exception as e:
         print(f"Erro ao obter screenshots em lote: {e}")
         return jsonify({'error': 'Erro interno do servidor'}), 500
+
+
+# ========== Screen Frames (Timeline - frames por segundo, múltiplos monitores) ==========
+
+def _ensure_screen_frames_dir():
+    """Garante que o diretório de upload de frames existe."""
+    upload_dir = getattr(Config, 'UPLOAD_FOLDER', None) or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), 'uploads', 'screen_frames'
+    )
+    os.makedirs(upload_dir, exist_ok=True)
+    return upload_dir
+
+
+@activity_bp.route('/screen-frames', methods=['POST'])
+@agent_required
+def add_screen_frames(current_user):
+    """
+    Recebe frames de tela (screenshots) do agente.
+    multipart/form-data: usuario_monitorado_id (opcional se X-User-Name), captured_at (opcional), arquivos em 'frames' ou 'frames[]'.
+    Um frame por monitor, enviados a cada segundo.
+    """
+    try:
+        # usuario_monitorado_id: do agente (X-User-Name) é current_user[0]
+        usuario_monitorado_id = request.form.get('usuario_monitorado_id', type=int)
+        if usuario_monitorado_id is None and current_user and len(current_user) > 0:
+            usuario_monitorado_id = current_user[0]  # id do usuario_monitorado quando autenticado por X-User-Name
+        if not usuario_monitorado_id:
+            return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
+
+        captured_at_str = request.form.get('captured_at')
+        if captured_at_str:
+            try:
+                captured_at = datetime.fromisoformat(captured_at_str.replace('Z', '+00:00'))
+                if captured_at.tzinfo is None:
+                    captured_at = captured_at.replace(tzinfo=timezone.utc)
+            except Exception:
+                captured_at = get_brasilia_now()
+        else:
+            captured_at = get_brasilia_now()
+
+        # Arquivos: request.files.getlist('frames') ou request.files.getlist('frames[]')
+        files = request.files.getlist('frames') or request.files.getlist('frames[]')
+        if not files or not any(f and f.filename for f in files):
+            return jsonify({'message': 'Envie pelo menos um frame em "frames" ou "frames[]"!'}), 400
+
+        upload_base = _ensure_screen_frames_dir()
+        date_dir = captured_at.strftime('%Y-%m-%d')
+        user_dir = str(usuario_monitorado_id)
+        target_dir = os.path.join(upload_base, date_dir, user_dir)
+        os.makedirs(target_dir, exist_ok=True)
+
+        saved = []
+        with DatabaseConnection() as db:
+            for monitor_index, f in enumerate(files):
+                if not f or not f.filename:
+                    continue
+                ext = os.path.splitext(f.filename)[1] or '.jpg'
+                if ext.lower() not in ('.jpg', '.jpeg', '.png', '.webp'):
+                    ext = '.jpg'
+                unique = uuid.uuid4().hex[:12]
+                filename = f"{captured_at.strftime('%H-%M-%S')}_{monitor_index}_{unique}{ext}"
+                file_path = os.path.join(target_dir, filename)
+                rel_path = os.path.join(date_dir, user_dir, filename).replace('\\', '/')
+                f.save(file_path)
+
+                db.cursor.execute('''
+                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, file_path)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id;
+                ''', (usuario_monitorado_id, captured_at, monitor_index, rel_path))
+                row_id = db.cursor.fetchone()[0]
+                saved.append({'id': row_id, 'monitor_index': monitor_index, 'file_path': rel_path})
+        print(f"📥 Screen frames: {len(saved)} frames salvos para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
+        return jsonify({
+            'message': 'Frames recebidos com sucesso!',
+            'count': len(saved),
+            'captured_at': captured_at.isoformat(),
+            'ids': [s['id'] for s in saved]
+        }), 201
+    except Exception as e:
+        print(f"❌ Erro ao salvar screen frames: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+
+@activity_bp.route('/screen-frames', methods=['GET'])
+@token_required
+def list_screen_frames(current_user):
+    """
+    Lista frames de tela para timeline.
+    Query: usuario_monitorado_id (obrigatório), date (YYYY-MM-DD, opcional), limit (opcional).
+    Retorna lista ordenada por captured_at para exibição frame a frame.
+    """
+    try:
+        usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
+        date = request.args.get('date')  # YYYY-MM-DD
+        limit = request.args.get('limit', type=int) or 500
+
+        if not usuario_monitorado_id:
+            return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
+
+        with DatabaseConnection() as db:
+            where = "WHERE usuario_monitorado_id = %s"
+            params = [usuario_monitorado_id]
+            if date:
+                where += " AND captured_at::date = %s"
+                params.append(date)
+            params.append(limit)
+            db.cursor.execute(f'''
+                SELECT id, captured_at, monitor_index, file_path
+                FROM screen_frames
+                {where}
+                ORDER BY captured_at ASC, monitor_index ASC
+                LIMIT %s;
+            ''', params)
+            rows = db.cursor.fetchall()
+
+        # URL relativa para o frontend (assumindo que a API está em /api)
+        frames = []
+        for r in rows:
+            frame_id, captured_at, monitor_index, file_path = r
+            frames.append({
+                'id': frame_id,
+                'captured_at': captured_at.isoformat() if hasattr(captured_at, 'isoformat') else str(captured_at),
+                'monitor_index': monitor_index,
+                'url': f"/api/screen-frames/{frame_id}/image"
+            })
+        return jsonify({'frames': frames, 'count': len(frames)})
+    except Exception as e:
+        print(f"❌ Erro ao listar screen frames: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+
+@activity_bp.route('/screen-frames/<int:frame_id>/image', methods=['GET'])
+@token_required
+def get_screen_frame_image(current_user, frame_id):
+    """Serve a imagem de um frame para exibição na timeline."""
+    try:
+        with DatabaseConnection() as db:
+            db.cursor.execute(
+                'SELECT file_path FROM screen_frames WHERE id = %s;',
+                (frame_id,)
+            )
+            row = db.cursor.fetchone()
+        if not row:
+            return jsonify({'message': 'Frame não encontrado!'}), 404
+        file_path = row[0]
+        upload_base = _ensure_screen_frames_dir()
+        full_path = os.path.join(upload_base, file_path)
+        if not os.path.isfile(full_path):
+            return jsonify({'message': 'Arquivo de frame não encontrado!'}), 404
+        return send_file(full_path, mimetype='image/jpeg', max_age=3600)
+    except Exception as e:
+        print(f"❌ Erro ao servir frame {frame_id}: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
 
 @activity_bp.route('/face-presence-check', methods=['POST'])
 @agent_required  # Aceita token OU nome do usuário no header X-User-Name

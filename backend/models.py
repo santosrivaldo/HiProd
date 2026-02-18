@@ -339,6 +339,30 @@ def init_db():
             
             print("✅ Tabela face_presence_checks criada")
 
+            # Tabela para frames de tela (timeline por segundo, múltiplos monitores)
+            print("📋 Criando tabela screen_frames...")
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS screen_frames (
+                id SERIAL PRIMARY KEY,
+                usuario_monitorado_id INTEGER NOT NULL,
+                captured_at TIMESTAMP NOT NULL,
+                monitor_index INTEGER NOT NULL DEFAULT 0,
+                file_path VARCHAR(512) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
+            );
+            ''')
+            db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_screen_frames_usuario ON screen_frames(usuario_monitorado_id);
+            ''')
+            db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_screen_frames_captured ON screen_frames(captured_at DESC);
+            ''')
+            db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_screen_frames_usuario_date ON screen_frames(usuario_monitorado_id, (captured_at::date));
+            ''')
+            print("✅ Tabela screen_frames criada")
+
             # Tabela de tokens de API
             print("📋 Criando tabela de tokens de API...")
             db.cursor.execute('''

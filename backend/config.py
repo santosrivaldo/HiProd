@@ -33,3 +33,6 @@ class Config:
     
     # Token de API padrão do sistema (gerado automaticamente)
     SYSTEM_API_TOKEN = None  # Será gerado na primeira inicialização
+
+    # Pasta para upload de frames de tela (timeline)
+    UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'screen_frames'))

@@ -127,6 +127,19 @@ except Exception as e:
     print(f"[WARN] Erro ao importar OpenCV: {e}")
     print("[WARN] Verificação facial desabilitada.")
 
+# Captura de tela (mss = múltiplos monitores, rápido)
+try:
+    import mss
+    import mss.tools
+    SCREEN_CAPTURE_AVAILABLE = True
+    if not IS_EXECUTABLE:
+        safe_print("[INFO] ✓ mss carregado - Captura de frames de tela disponível")
+except ImportError:
+    mss = None
+    SCREEN_CAPTURE_AVAILABLE = False
+    if not IS_EXECUTABLE:
+        safe_print("[WARN] mss não encontrado - Frames de tela desabilitados. pip install mss")
+
 # Classe para rastrear tempo de presença
 class FacePresenceTracker:
     """
@@ -559,6 +572,11 @@ MONITOR_INTERVAL = 10          # Intervalo entre verificações (segundos)
 IDLE_THRESHOLD = 600           # Tempo de inatividade para considerar ocioso (segundos)
 REQUEST_TIMEOUT = 30           # Timeout para requisições HTTP (segundos)
 MAX_RETRIES = 3                # Número máximo de tentativas em caso de falha
+
+# Frames de tela para timeline (envio a cada segundo, múltiplos monitores)
+SCREEN_FRAME_INTERVAL = int(os.getenv('SCREEN_FRAME_INTERVAL', '1'))  # segundos entre envios
+SCREEN_FRAME_MAX_WIDTH = int(os.getenv('SCREEN_FRAME_MAX_WIDTH', '1280'))  # redimensionar para economizar banda
+SCREEN_FRAME_QUALITY = int(os.getenv('SCREEN_FRAME_QUALITY', '55'))  # JPEG 1-100 (leve = 50-60)
 
 # ========================================
 # BASE DE DADOS DE APLICATIVOS EXPANDIDA
@@ -2140,6 +2158,109 @@ def esta_em_horario_trabalho(usuario_nome, tz):
         return True
 
 
+# ========== Frames de tela (timeline - envio a cada segundo) ==========
+
+def capture_screen_frames():
+    """
+    Captura um frame de cada monitor, redimensiona e comprime em JPEG.
+    Retorna lista de bytes (JPEG) ou lista vazia se falhar.
+    """
+    if not SCREEN_CAPTURE_AVAILABLE or mss is None or cv2 is None:
+        return []
+    try:
+        with mss.mss() as sct:
+            out = []
+            for i, mon in enumerate(sct.monitors):
+                if i == 0 and len(sct.monitors) > 1:
+                    continue  # monitor 0 é "all", pular se houver monitores reais
+                img = sct.grab(mon)
+                if cv2 is None:
+                    continue
+                import numpy as np
+                # mss: BGRA bytes -> numpy array -> BGR para cv2
+                frame = np.frombuffer(img.raw, dtype=np.uint8).reshape((img.height, img.width, 4))
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                h, w = frame.shape[:2]
+                if SCREEN_FRAME_MAX_WIDTH and w > SCREEN_FRAME_MAX_WIDTH:
+                    r = SCREEN_FRAME_MAX_WIDTH / w
+                    new_w = SCREEN_FRAME_MAX_WIDTH
+                    new_h = int(h * r)
+                    frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                quality = max(1, min(100, SCREEN_FRAME_QUALITY))
+                _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                if jpeg is not None and len(jpeg) > 0:
+                    out.append(jpeg.tobytes())
+            return out
+    except Exception as e:
+        if not IS_EXECUTABLE:
+            safe_print(f"[FRAMES] Erro ao capturar telas: {e}")
+        return []
+
+
+def enviar_screen_frames(usuario_monitorado_id, frames_bytes_list, captured_at=None):
+    """
+    Envia frames de tela para a API (multipart/form-data).
+    frames_bytes_list: lista de bytes JPEG (um por monitor).
+    """
+    if check_stop_flag() or check_pause_flag():
+        return False
+    if not frames_bytes_list or not usuario_monitorado_id:
+        return False
+    try:
+        if captured_at is None:
+            captured_at = datetime.now(pytz.timezone('America/Sao_Paulo'))
+        captured_at_iso = captured_at.isoformat()
+        usuario_nome = get_logged_user()
+        url = f"{API_BASE_URL}/api/screen-frames"
+        headers = get_headers(usuario_nome)
+        # Remover Content-Type para requests definir multipart/form-data com boundary
+        headers.pop("Content-Type", None)
+        files = [('frames', (f'frame_{i}.jpg', fb, 'image/jpeg')) for i, fb in enumerate(frames_bytes_list)]
+        data = {
+            'usuario_monitorado_id': str(usuario_monitorado_id),
+            'captured_at': captured_at_iso
+        }
+        session = get_secure_session()
+        resp = session.post(url, data=data, files=files, headers=headers, timeout=15)
+        if resp.status_code == 201:
+            if not IS_EXECUTABLE:
+                safe_print(f"[FRAMES] {len(frames_bytes_list)} frame(s) enviado(s) | {captured_at_iso[:19]}")
+            return True
+        if resp.status_code == 401:
+            safe_print("[FRAMES] Erro de autenticação ao enviar frames.")
+            return False
+        if not IS_EXECUTABLE:
+            safe_print(f"[FRAMES] Erro {resp.status_code}: {resp.text[:200]}")
+        return False
+    except Exception as e:
+        if not IS_EXECUTABLE:
+            safe_print(f"[FRAMES] Exceção ao enviar frames: {e}")
+        return False
+
+
+def _screen_frame_worker(usuario_monitorado_id_ref):
+    """
+    Worker que roda em thread: a cada SCREEN_FRAME_INTERVAL segundos captura e envia frames.
+    usuario_monitorado_id_ref: lista de 1 elemento [id] para ser atualizado pelo main.
+    """
+    while not check_stop_flag():
+        try:
+            time.sleep(SCREEN_FRAME_INTERVAL)
+            if check_stop_flag() or check_pause_flag():
+                continue
+            uid = usuario_monitorado_id_ref[0] if usuario_monitorado_id_ref else None
+            if uid is None:
+                continue
+            if not SCREENSHOT_ENABLED or not SCREEN_CAPTURE_AVAILABLE:
+                continue
+            frames = capture_screen_frames()
+            if frames:
+                enviar_screen_frames(uid, frames)
+        except Exception as e:
+            if not IS_EXECUTABLE:
+                safe_print(f"[FRAMES] Worker erro: {e}")
+
+
 def enviar_atividade(registro):
     # Verificar se agente deve parar antes de enviar
     if check_stop_flag():
@@ -2430,6 +2551,14 @@ def main():
     global AGENT_SHOULD_STOP
     AGENT_SHOULD_STOP = False
 
+    # Referência mutável para o worker de frames de tela (atualizado no loop)
+    screen_frame_user_ref = [usuario_monitorado_id]  # sempre definido para o loop atualizar
+    if SCREENSHOT_ENABLED and SCREEN_CAPTURE_AVAILABLE:
+        import threading
+        frame_thread = threading.Thread(target=_screen_frame_worker, args=(screen_frame_user_ref,), daemon=True)
+        frame_thread.start()
+        safe_print("[FRAMES] Thread de frames de tela iniciada (envio a cada %s s)" % SCREEN_FRAME_INTERVAL)
+
     while True:
         # Verificar flag de parada
         if check_stop_flag():
@@ -2444,6 +2573,9 @@ def main():
                 safe_print("[AGENT] ⏸ Agente em pausa (intervalo) - aguardando retomada...")
             time.sleep(MONITOR_INTERVAL)
             continue  # Pular este ciclo e não capturar atividades
+
+        # Atualizar ref para o worker de frames de tela
+        screen_frame_user_ref[0] = usuario_monitorado_id
         
         current_window_info = get_active_window_info()
         current_usuario_nome = get_logged_user()

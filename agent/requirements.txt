@@ -36,3 +36,6 @@ pyperclip>=1.8.2
 
 # Detecção facial
 opencv-python>=4.8.0
+
+# Captura de tela (múltiplos monitores, leve e rápida)
+mss>=9.0.0
