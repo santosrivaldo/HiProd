@@ -183,26 +183,32 @@ export default function Layout({ children }) {
                   Activity Tracker
                 </h1>
               </div>
-              <nav className="mt-5 px-2 space-y-1">
-                {navigation.map((item) => (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      if (item.path) {
-                        navigate(item.path);
-                      } else {
-                        setCurrentView(item.component);
-                      }
-                    }}
-                    className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
-                      currentView === item.component || window.location.pathname === item.path
-                        ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
-                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                    }`}
-                  >
-                    <item.icon className="mr-3 flex-shrink-0 h-6 w-6" />
-                    {item.name}
-                  </button>
+              <nav className="mt-5 px-2 space-y-6">
+                {navigationGroups.map((group) => (
+                  <div key={group.label}>
+                    <p className="px-2 mb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                      {group.label}
+                    </p>
+                    <div className="space-y-0.5">
+                      {group.items.map((item) => (
+                        <button
+                          key={item.name}
+                          onClick={() => {
+                            if (item.path) navigate(item.path);
+                            else setCurrentView(item.component);
+                          }}
+                          className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                            isActive(item)
+                              ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
+                              : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          }`}
+                        >
+                          <item.icon className="mr-3 flex-shrink-0 h-6 w-6" />
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </nav>
             </div>
