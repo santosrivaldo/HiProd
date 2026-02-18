@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns'
@@ -848,7 +848,9 @@ export default function Dashboard() {
                         <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-sm font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">
                           {(u.nome || 'U').slice(0, 2).toUpperCase()}
                         </div>
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">{u.nome}</span>
+                        <Link to={`/users/${u.id}`} className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+                          {u.nome}
+                        </Link>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">{displayDuration(u.total)}</td>
@@ -860,7 +862,10 @@ export default function Dashboard() {
                     <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300">—</td>
                     <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">—</td>
                     <td className="px-4 py-3">
-                      <button type="button" onClick={() => setSelectedUserForTimeline(selectedUserForTimeline === u.id ? null : u.id)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500" title="Mais opções">⋮</button>
+                      <div className="flex items-center gap-1">
+                        <Link to={`/users/${u.id}`} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline px-2 py-1">Ver detalhes</Link>
+                        <button type="button" onClick={() => setSelectedUserForTimeline(selectedUserForTimeline === u.id ? null : u.id)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500" title="Mais opções">⋮</button>
+                      </div>
                     </td>
                   </tr>
                 )

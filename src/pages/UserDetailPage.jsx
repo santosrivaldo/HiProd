@@ -1,0 +1,542 @@
+import React, { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { format, subDays, startOfDay, endOfDay, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+import api from '../services/api'
+import CircularProgress from '../components/dashboard/CircularProgress'
+import AdvancedChart from '../components/charts/AdvancedChart'
+import LoadingSpinner from '../components/LoadingSpinner'
+import {
+  ArrowPathIcon,
+  FilmIcon,
+  ChevronLeftIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
+
+const getActivityDurationSeconds = (activity) => {
+  if (!activity) return 0
+  const total = activity.duracao_total
+  const single = activity.duracao
+  if (typeof total === 'number' && !isNaN(total) && total > 0) return total
+  if (typeof single === 'number' && !isNaN(single) && single > 0) return single
+  const grouped = activity.eventos_agrupados
+  if (typeof grouped === 'number' && grouped > 0) return grouped * 10
+  return 0
+}
+
+const formatTime = (seconds) => {
+  if (!seconds || seconds === 0) return '0s'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  const parts = []
+  if (h > 0) parts.push(`${h}h`)
+  if (m > 0) parts.push(`${m}m`)
+  if (s > 0 || parts.length === 0) parts.push(`${s}s`)
+  return parts.join(' ')
+}
+
+const COLORS = {
+  productive: '#10B981',
+  nonproductive: '#EF4444',
+  neutral: '#F59E0B',
+  idle: '#6B7280'
+}
+
+export default function UserDetailPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [user, setUser] = useState(null)
+  const [activities, setActivities] = useState([])
+  const [activitiesWeek, setActivitiesWeek] = useState([])
+  const [activitiesMonth, setActivitiesMonth] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadingActivities, setLoadingActivities] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Dia: 'yesterday' | 'today' | 'custom'; Data: yyyy-MM-dd
+  const [diaPreset, setDiaPreset] = useState('today')
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+
+  useEffect(() => {
+    const today = format(new Date(), 'yyyy-MM-dd')
+    if (diaPreset === 'today') setSelectedDate(today)
+    else if (diaPreset === 'yesterday') setSelectedDate(format(subDays(new Date(), 1), 'yyyy-MM-dd'))
+  }, [diaPreset])
+
+  const loadUser = useCallback(async () => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.get('/usuarios-monitorados')
+      const list = Array.isArray(res.data) ? res.data : []
+      const found = list.find((u) => String(u.id) === String(id))
+      if (found) setUser(found)
+      else setError('Usuário não encontrado.')
+    } catch (e) {
+      console.error(e)
+      setError('Erro ao carregar usuário.')
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  const loadActivities = useCallback(async () => {
+    if (!id) return
+    setLoadingActivities(true)
+    try {
+      const dayStart = startOfDay(parseISO(selectedDate))
+      const dayEnd = endOfDay(parseISO(selectedDate))
+      const weekStart = startOfDay(subDays(parseISO(selectedDate), 7))
+      const monthStart = startOfDay(subDays(parseISO(selectedDate), 30))
+
+      const [dayRes, weekRes, monthRes] = await Promise.all([
+        api.get(
+          `/atividades?usuario_monitorado_id=${id}&data_inicio=${dayStart.toISOString()}&data_fim=${dayEnd.toISOString()}&agrupar=true&limite=500`
+        ),
+        api.get(
+          `/atividades?usuario_monitorado_id=${id}&data_inicio=${weekStart.toISOString()}&data_fim=${dayEnd.toISOString()}&agrupar=true&limite=2000`
+        ),
+        api.get(
+          `/atividades?usuario_monitorado_id=${id}&data_inicio=${monthStart.toISOString()}&data_fim=${dayEnd.toISOString()}&agrupar=true&limite=5000`
+        )
+      ])
+
+      const dayList = Array.isArray(dayRes.data) ? dayRes.data : []
+      const weekList = Array.isArray(weekRes.data) ? weekRes.data : []
+      const monthList = Array.isArray(monthRes.data) ? monthRes.data : []
+
+      setActivities(dayList)
+      setActivitiesWeek(weekList)
+      setActivitiesMonth(monthList)
+    } catch (e) {
+      console.error(e)
+      setActivities([])
+      setActivitiesWeek([])
+      setActivitiesMonth([])
+    } finally {
+      setLoadingActivities(false)
+    }
+  }, [id, selectedDate])
+
+  useEffect(() => {
+    loadUser()
+  }, [loadUser])
+
+  useEffect(() => {
+    loadActivities()
+  }, [loadActivities])
+
+  const safeParseDate = (dateString) => {
+    if (!dateString) return null
+    try {
+      const d = new Date(dateString)
+      return !isNaN(d.getTime()) ? d : null
+    } catch {
+      return null
+    }
+  }
+
+  const daySummary = React.useMemo(() => {
+    let productive = 0,
+      nonproductive = 0,
+      neutral = 0,
+      idle = 0
+    activities.forEach((a) => {
+      const dur = getActivityDurationSeconds(a)
+      if (dur <= 0) return
+      const prod = (a.produtividade || 'neutral').toLowerCase()
+      const ocioso = a.ociosidade >= 600
+      if (prod === 'productive') productive += dur
+      else if (prod === 'nonproductive') nonproductive += dur
+      else if (ocioso) idle += dur
+      else neutral += dur
+    })
+    const total = productive + nonproductive + neutral + idle
+    return { productive, nonproductive, neutral, idle, total }
+  }, [activities])
+
+  const workingDaysWeek = React.useMemo(() => {
+    const days = new Set()
+    activitiesWeek.forEach((a) => {
+      const d = safeParseDate(a.horario || a.primeiro_horario)
+      if (d) days.add(format(d, 'yyyy-MM-dd'))
+    })
+    return days.size
+  }, [activitiesWeek])
+
+  const workingDaysMonth = React.useMemo(() => {
+    const days = new Set()
+    activitiesMonth.forEach((a) => {
+      const d = safeParseDate(a.horario || a.primeiro_horario)
+      if (d) days.add(format(d, 'yyyy-MM-dd'))
+    })
+    return days.size
+  }, [activitiesMonth])
+
+  const horasTrabalhoDia = 8
+  const cargaHorariaSelecionada = 1 * horasTrabalhoDia * 3600
+  const horarioTrabalho = user
+    ? `${(user.horario_inicio_trabalho || '09:00').slice(0, 5)}-${(user.horario_fim_trabalho || '18:00').slice(0, 5)} (Almoço: 12h-13h)`
+    : '09h-18h (Almoço: 12h-13h)'
+
+  const custoColaboradorDia = 166.67
+  const totalProd = daySummary.total
+  const custoProdutivo =
+    totalProd > 0 ? (daySummary.productive / totalProd) * custoColaboradorDia : 0
+  const custoImprodutivo =
+    totalProd > 0 ? (daySummary.nonproductive / totalProd) * custoColaboradorDia : 0
+  const custoIndefinido =
+    totalProd > 0
+      ? ((daySummary.neutral + daySummary.idle) / totalProd) * custoColaboradorDia
+      : 0
+
+  const pctProdutivo =
+    daySummary.total > 0
+      ? (daySummary.productive / daySummary.total) * 100
+      : 0
+  const horasImprodutivasOuIndefinidas =
+    daySummary.nonproductive + daySummary.neutral + daySummary.idle
+
+  const pieTempoAtividade = [
+    {
+      name: 'Ativo',
+      value: daySummary.productive + daySummary.nonproductive + daySummary.neutral,
+      color: '#3B82F6'
+    },
+    { name: 'Ocioso', value: daySummary.idle, color: '#EC4899' }
+  ].filter((d) => d.value > 0)
+
+  const pieTarefasProdutivas = [
+    { name: 'Útil', value: daySummary.productive, color: '#3B82F6' },
+    { name: 'Não Útil', value: daySummary.nonproductive, color: '#EC4899' },
+    { name: 'Indefinido', value: daySummary.neutral + daySummary.idle, color: '#F59E0B' }
+  ].filter((d) => d.value > 0)
+
+  const pieCusto = [
+    { name: 'Custo produtivo', value: Math.round(custoProdutivo * 100) / 100, color: '#3B82F6' },
+    { name: 'Custo improdutivo', value: Math.round(custoImprodutivo * 100) / 100, color: '#EC4899' },
+    { name: 'Custo indefinido', value: Math.round(custoIndefinido * 100) / 100, color: '#F59E0B' }
+  ].filter((d) => d.value > 0)
+
+  const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
+  const timelineSearch = `?userId=${id}&date=${selectedDate}`
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <LoadingSpinner size="lg" text="Carregando usuário..." />
+      </div>
+    )
+  }
+
+  if (error || !user) {
+    return (
+      <div className="p-6">
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4">
+          {error || 'Usuário não encontrado.'}
+        </div>
+        <button
+          onClick={() => navigate(-1)}
+          className="mt-4 inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 hover:underline"
+        >
+          <ChevronLeftIcon className="w-5 h-5" /> Voltar
+        </button>
+      </div>
+    )
+  }
+
+  const departamentoNome =
+    user.departamento?.nome || user.departamento_nome || '—'
+
+  return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6 pb-24">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+          title="Voltar"
+        >
+          <ChevronLeftIcon className="w-6 h-6" />
+        </button>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
+          Detalhes do usuário
+        </h1>
+      </div>
+
+      {/* Perfil: avatar + dados em grid */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex-shrink-0">
+            <div className="w-24 h-24 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-3xl font-bold text-indigo-700 dark:text-indigo-300">
+              {(user.nome || 'U').slice(0, 2).toUpperCase()}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">ID</label>
+              <div className="mt-0.5 px-3 py-2 rounded-lg bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-900 dark:text-white text-sm font-mono">
+                {user.id}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nome</label>
+              <div className="mt-0.5 px-3 py-2 rounded-lg bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-900 dark:text-white text-sm">
+                {user.nome}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">E-mail</label>
+              <div className="mt-0.5 px-3 py-2 rounded-lg bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-500 dark:text-gray-400 text-sm">
+                —
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Telefone</label>
+              <div className="mt-0.5 px-3 py-2 rounded-lg bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-500 dark:text-gray-400 text-sm">
+                —
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Custo</label>
+              <div className="mt-0.5 px-3 py-2 rounded-lg bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-900 dark:text-white text-sm">
+                BRL 3.500,00
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Departamento</label>
+              <div className="mt-0.5 px-3 py-2 rounded-lg bg-indigo-50/50 dark:bg-indigo-900/20 text-gray-900 dark:text-white text-sm">
+                {departamentoNome}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Filtro de data + Reconsolidar */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dia</label>
+            <select
+              value={diaPreset}
+              onChange={(e) => setDiaPreset(e.target.value)}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+            >
+              <option value="yesterday">Ontem</option>
+              <option value="today">Hoje</option>
+              <option value="custom">Outro</option>
+            </select>
+          </div>
+          {diaPreset === 'custom' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+              />
+            </div>
+          )}
+          <div className="text-sm text-gray-500 dark:text-gray-400">
+            Data: {format(parseISO(selectedDate), "dd/MM/yyyy", { locale: ptBR })}
+          </div>
+          <button
+            onClick={loadActivities}
+            disabled={loadingActivities}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <ArrowPathIcon className="w-5 h-5" />
+            Reconsolidar
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          Última consolidação: —
+        </p>
+      </section>
+
+      {/* Preview / Timeline de telas */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+          <FilmIcon className="w-5 h-5" />
+          Timeline de telas
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Não há preview carregado. Selecione um período ou abra a timeline para ver os frames.
+        </p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Link
+            to={timelineUrl}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-600 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+          >
+            <FilmIcon className="w-5 h-5" />
+            Abrir timeline de telas
+          </Link>
+          <Link
+            to={`/timeline${timelineSearch}&jump=first5`}
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+          >
+            Primeiros 5 minutos
+          </Link>
+          <Link
+            to={`/timeline${timelineSearch}&jump=last5`}
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+          >
+            Últimos 5 minutos
+          </Link>
+        </div>
+        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
+          OBS: O tamanho do período pode variar conforme a atividade no período selecionado.
+        </div>
+      </section>
+
+      {/* Resumo do dia selecionado */}
+      <section className="bg-gradient-to-r from-indigo-600/10 to-purple-600/10 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200/50 dark:border-indigo-800/50 p-4">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Resumo do dia selecionado
+        </h2>
+        {loadingActivities ? (
+          <LoadingSpinner size="md" />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <SummaryCard label="Dias trabalhados na semana" value={`${workingDaysWeek} dias`} />
+            <SummaryCard label="Dias trabalhados no mês" value={`${workingDaysMonth} dias (${workingDaysMonth * 8} horas)`} />
+            <SummaryCard label="Dias selecionados" value="1 dia" />
+            <SummaryCard label="Carga horária selecionada" value="8h" />
+            <SummaryCard label="Horário de Trabalho" value={horarioTrabalho} />
+            <SummaryCard
+              label="Horas produtivas"
+              value={formatTime(daySummary.productive)}
+              valueClassName="text-green-700 dark:text-green-300"
+            />
+            <SummaryCard
+              label="Horas improdutivas"
+              value={formatTime(daySummary.nonproductive)}
+              valueClassName="text-red-700 dark:text-red-300 bg-red-50/50 dark:bg-red-900/10 px-2 py-1 rounded"
+            />
+            <SummaryCard label="Custo do colaborador no dia" value={`${custoColaboradorDia.toFixed(2)} BRL`} />
+            <SummaryCard
+              label={`Custo produtivo (${formatTime(daySummary.productive)})`}
+              value={`${custoProdutivo.toFixed(2)} BRL`}
+            />
+            <SummaryCard
+              label={`Custo improdutivo (${formatTime(daySummary.nonproductive)})`}
+              value={`${custoImprodutivo.toFixed(2)} BRL`}
+              valueClassName="text-red-700 dark:text-red-300 bg-red-50/50 dark:bg-red-900/10 px-2 py-1 rounded"
+            />
+            <SummaryCard
+              label={`Custo indefinido (${formatTime(daySummary.neutral + daySummary.idle)})`}
+              value={`${custoIndefinido.toFixed(2)} BRL`}
+              withInfo
+            />
+          </div>
+        )}
+      </section>
+
+      {/* Gráficos: donuts + Produtividade consolidada */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <ChartCard title="Tempo em atividade">
+              {pieTempoAtividade.length > 0 ? (
+                <AdvancedChart
+                  type="pie"
+                  data={pieTempoAtividade}
+                  dataKey="value"
+                  height={180}
+                  colors={pieTempoAtividade.map((d) => d.color)}
+                />
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+              )}
+            </ChartCard>
+            <ChartCard title="Tempo em tarefas produtivas">
+              {pieTarefasProdutivas.length > 0 ? (
+                <AdvancedChart
+                  type="pie"
+                  data={pieTarefasProdutivas}
+                  dataKey="value"
+                  height={180}
+                  colors={pieTarefasProdutivas.map((d) => d.color)}
+                />
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+              )}
+            </ChartCard>
+          </div>
+          <ChartCard title="Custo">
+            {pieCusto.length > 0 ? (
+              <AdvancedChart
+                type="pie"
+                data={pieCusto}
+                dataKey="value"
+                height={200}
+                colors={pieCusto.map((d) => d.color)}
+              />
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
+            )}
+          </ChartCard>
+        </div>
+        <div className="flex flex-col">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow border-2 border-indigo-200 dark:border-indigo-800 p-6 flex flex-col items-center justify-center min-h-[280px]">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
+              Produtividade consolidada
+            </h3>
+            <CircularProgress percent={pctProdutivo} size={160} strokeWidth={8} />
+            <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">
+              <span className="text-green-600 dark:text-green-400">
+                Horas produtivas: {formatTime(daySummary.productive)} ({pctProdutivo.toFixed(1)}%)
+              </span>
+              <span className="text-red-600 dark:text-red-400">
+                Horas improdutivas ou indefinidas: {formatTime(horasImprodutivasOuIndefinidas)} (
+                {(100 - pctProdutivo).toFixed(1)}%)
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Barra inferior: link para timeline (player) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 dark:bg-gray-900 border-t border-gray-700 py-2 px-4 flex items-center justify-between z-20">
+        <span className="text-sm text-gray-400">Timeline de telas</span>
+        <Link
+          to={timelineUrl}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium"
+        >
+          <FilmIcon className="w-5 h-5" />
+          Abrir player
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, valueClassName = '', withInfo = false }) {
+  return (
+    <div className="bg-white dark:bg-gray-800/80 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+      <div className="flex items-center gap-1">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+          {label}
+        </span>
+        {withInfo && (
+          <InformationCircleIcon className="w-4 h-4 text-gray-400" title="Custo indefinido" />
+        )}
+      </div>
+      <p className={`mt-1 text-sm font-semibold text-gray-900 dark:text-white ${valueClassName}`}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function ChartCard({ title, children }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-4">
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">{title}</h3>
+      {children}
+    </div>
+  )
+}

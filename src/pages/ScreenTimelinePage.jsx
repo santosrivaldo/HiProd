@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -13,9 +14,10 @@ import {
 } from '@heroicons/react/24/outline'
 
 export default function ScreenTimelinePage() {
+  const [searchParams] = useSearchParams()
   const [users, setUsers] = useState([])
-  const [selectedUser, setSelectedUser] = useState('')
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [selectedUser, setSelectedUser] = useState(searchParams.get('userId') || '')
+  const [selectedDate, setSelectedDate] = useState(searchParams.get('date') || format(new Date(), 'yyyy-MM-dd'))
   const [frames, setFrames] = useState([])
   const [loading, setLoading] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(0)
@@ -63,12 +65,15 @@ export default function ScreenTimelinePage() {
       const res = await api.get('/usuarios-monitorados')
       const list = Array.isArray(res.data) ? res.data : []
       setUsers(list)
-      if (list.length && !selectedUser) setSelectedUser(String(list[0].id))
+      const fromUrl = searchParams.get('userId')
+      if (list.length && !selectedUser) {
+        setSelectedUser(fromUrl && list.some((u) => String(u.id) === fromUrl) ? fromUrl : String(list[0].id))
+      }
     } catch (e) {
       console.error(e)
       setError('Erro ao carregar usuários')
     }
-  }, [selectedUser])
+  }, [selectedUser, searchParams])
 
   const loadFrames = useCallback(async () => {
     if (!selectedUser || !selectedDate) return
@@ -118,6 +123,13 @@ export default function ScreenTimelinePage() {
   useEffect(() => {
     loadUsers()
   }, [loadUsers])
+
+  useEffect(() => {
+    const userId = searchParams.get('userId')
+    const date = searchParams.get('date')
+    if (userId) setSelectedUser(userId)
+    if (date) setSelectedDate(date)
+  }, [searchParams])
 
   useEffect(() => {
     loadFrames()
