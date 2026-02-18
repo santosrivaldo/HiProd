@@ -25,6 +25,8 @@ export default function ScreenTimelinePage() {
   const [imageUrls, setImageUrls] = useState([]) // uma ou duas URLs conforme viewMode
   const [viewMode, setViewMode] = useState('one') // 'one' = uma tela, 'two' = duas telas
   const [selectedMonitorIndex, setSelectedMonitorIndex] = useState(0) // qual tela exibir no modo "uma tela" (0 = primeira, 1 = segunda)
+  const [filterStartTime, setFilterStartTime] = useState('00:00') // HH:mm
+  const [filterEndTime, setFilterEndTime] = useState('23:59') // HH:mm
   const [error, setError] = useState(null)
   const playRef = useRef(null)
   const imageCache = useRef({})
@@ -44,12 +46,37 @@ export default function ScreenTimelinePage() {
     })
   }, [frames])
 
-  const currentSlot = framesBySecond[currentIndex]
+  const toMinutes = (hhmm) => {
+    const [h, m] = (hhmm || '00:00').split(':').map(Number)
+    return (h || 0) * 60 + (m || 0)
+  }
+
+  const slotTimeMinutes = (slotTime) => {
+    const t = slotTime.slice(11, 16)
+    return toMinutes(t)
+  }
+
+  const framesBySecondFiltered = React.useMemo(() => {
+    const startM = toMinutes(filterStartTime)
+    const endM = toMinutes(filterEndTime)
+    if (startM <= endM) {
+      return framesBySecond.filter((s) => {
+        const m = slotTimeMinutes(s.time)
+        return m >= startM && m <= endM
+      })
+    }
+    return framesBySecond.filter((s) => {
+      const m = slotTimeMinutes(s.time)
+      return m >= startM || m <= endM
+    })
+  }, [framesBySecond, filterStartTime, filterEndTime])
+
+  const currentSlot = framesBySecondFiltered[currentIndex]
   // Número máximo de monitores nos dados (para o seletor no modo "uma tela")
   const maxMonitors = React.useMemo(() => {
-    if (!framesBySecond.length) return 1
-    return Math.max(1, ...framesBySecond.map((s) => s.items?.length ?? 0))
-  }, [framesBySecond])
+    if (!framesBySecondFiltered.length) return 1
+    return Math.max(1, ...framesBySecondFiltered.map((s) => s.items?.length ?? 0))
+  }, [framesBySecondFiltered])
   // Frames a exibir no slot atual: 1 ou 2 conforme viewMode; no modo "uma tela" usa selectedMonitorIndex
   const currentFramesToShow = currentSlot?.items?.length
     ? viewMode === 'two'
@@ -135,15 +162,28 @@ export default function ScreenTimelinePage() {
     loadFrames()
   }, [loadFrames])
 
+  useEffect(() => {
+    setCurrentIndex((i) => Math.min(i, Math.max(0, framesBySecondFiltered.length - 1)))
+  }, [framesBySecondFiltered.length])
+
   const atParam = searchParams.get('at')
 
   useEffect(() => {
     if (!atParam || framesBySecond.length === 0) return
     const atTime = new Date(atParam).getTime()
     if (isNaN(atTime)) return
+    const startDate = new Date(atTime - 30 * 60 * 1000)
+    const endDate = new Date(atTime + 30 * 60 * 1000)
+    setFilterStartTime(format(startDate, 'HH:mm'))
+    setFilterEndTime(format(endDate, 'HH:mm'))
+    const startM = toMinutes(format(startDate, 'HH:mm'))
+    const endM = toMinutes(format(endDate, 'HH:mm'))
+    const filtered = startM <= endM
+      ? framesBySecond.filter((s) => { const m = slotTimeMinutes(s.time); return m >= startM && m <= endM })
+      : framesBySecond.filter((s) => { const m = slotTimeMinutes(s.time); return m >= startM || m <= endM })
     let bestIdx = 0
     let bestDiff = Infinity
-    framesBySecond.forEach((slot, i) => {
+    filtered.forEach((slot, i) => {
       const slotTime = new Date(slot.time.replace(' ', 'T')).getTime()
       const diff = Math.abs(slotTime - atTime)
       if (diff < bestDiff) {
@@ -155,7 +195,7 @@ export default function ScreenTimelinePage() {
   }, [atParam, framesBySecond])
 
   useEffect(() => {
-    const slot = framesBySecond[currentIndex]
+    const slot = framesBySecondFiltered[currentIndex]
     const toShow = slot?.items?.length
       ? viewMode === 'two'
         ? slot.items.slice(0, 2)
@@ -164,14 +204,14 @@ export default function ScreenTimelinePage() {
     const ids = toShow.map((f) => f.id).filter(Boolean)
     if (ids.length) fetchImageUrls(ids)
     else setImageUrls([])
-  }, [currentIndex, viewMode, selectedMonitorIndex, framesBySecond, fetchImageUrls])
+  }, [currentIndex, viewMode, selectedMonitorIndex, framesBySecondFiltered, fetchImageUrls])
 
   // Play: avança 1 slot por segundo
   useEffect(() => {
-    if (!playing || framesBySecond.length === 0) return
+    if (!playing || framesBySecondFiltered.length === 0) return
     playRef.current = setInterval(() => {
       setCurrentIndex((i) => {
-        if (i >= framesBySecond.length - 1) {
+        if (i >= framesBySecondFiltered.length - 1) {
           setPlaying(false)
           return i
         }
@@ -181,10 +221,10 @@ export default function ScreenTimelinePage() {
     return () => {
       if (playRef.current) clearInterval(playRef.current)
     }
-  }, [playing, framesBySecond.length])
+  }, [playing, framesBySecondFiltered.length])
 
   const goPrev = () => setCurrentIndex((i) => Math.max(0, i - 1))
-  const goNext = () => setCurrentIndex((i) => Math.min(framesBySecond.length - 1, i + 1))
+  const goNext = () => setCurrentIndex((i) => Math.min(framesBySecondFiltered.length - 1, i + 1))
 
   // Limpar object URLs ao desmontar
   useEffect(() => {
@@ -203,42 +243,56 @@ export default function ScreenTimelinePage() {
         </h1>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-wrap gap-4 items-end">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Usuário
-          </label>
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 min-w-[200px]"
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-4">
+        <div className="flex flex-wrap gap-4 items-end">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Usuário</label>
+            <select
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 min-w-[200px]"
+            >
+              <option value="">Selecione</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.nome || `ID ${u.id}`}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filtro por dia</label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filtro por horário (início)</label>
+            <input
+              type="time"
+              value={filterStartTime}
+              onChange={(e) => setFilterStartTime(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filtro por horário (fim)</label>
+            <input
+              type="time"
+              value={filterEndTime}
+              onChange={(e) => setFilterEndTime(e.target.value)}
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+            />
+          </div>
+          <button
+            onClick={loadFrames}
+            disabled={loading || !selectedUser}
+            className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <option value="">Selecione</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nome || `ID ${u.id}`}
-              </option>
-            ))}
-          </select>
+            {loading ? 'Carregando...' : 'Carregar'}
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Data
-          </label>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
-          />
-        </div>
-        <button
-          onClick={loadFrames}
-          disabled={loading || !selectedUser}
-          className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Carregando...' : 'Carregar'}
-        </button>
       </div>
 
       {error && (
@@ -257,7 +311,7 @@ export default function ScreenTimelinePage() {
         <>
           <div className="flex flex-wrap items-center justify-between gap-4 py-2">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Exibir:</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Telas para seleção:</span>
               <button
                 onClick={() => setViewMode('one')}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -344,7 +398,7 @@ export default function ScreenTimelinePage() {
             </button>
             <button
               onClick={goNext}
-              disabled={currentIndex >= framesBySecond.length - 1}
+              disabled={currentIndex >= framesBySecondFiltered.length - 1}
               className="p-2 rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Próximo"
             >
@@ -356,14 +410,17 @@ export default function ScreenTimelinePage() {
             {currentSlot && (
               <span>
                 {format(parseISO(currentSlot.time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })} —{' '}
-                {currentIndex + 1} / {framesBySecond.length} (segundos)
+                {currentIndex + 1} / {framesBySecondFiltered.length} (segundos)
+                {framesBySecondFiltered.length < framesBySecond.length && (
+                  <span className="ml-1 text-gray-400">(filtrado de {framesBySecond.length})</span>
+                )}
               </span>
             )}
           </div>
 
-          {/* Scrubber: barra com pontos por segundo */}
+          {/* Scrubber: barra com pontos por segundo (lista filtrada) */}
           <div className="flex flex-wrap gap-1 justify-center py-2">
-            {framesBySecond.slice(0, 120).map((slot, i) => (
+            {framesBySecondFiltered.slice(0, 120).map((slot, i) => (
               <button
                 key={slot.time}
                 onClick={() => {
@@ -378,9 +435,9 @@ export default function ScreenTimelinePage() {
                 title={format(parseISO(slot.time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
               />
             ))}
-            {framesBySecond.length > 120 && (
+            {framesBySecondFiltered.length > 120 && (
               <span className="text-xs text-gray-400 self-center ml-2">
-                +{framesBySecond.length - 120} s
+                +{framesBySecondFiltered.length - 120} s
               </span>
             )}
           </div>
