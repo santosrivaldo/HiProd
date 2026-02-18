@@ -279,6 +279,7 @@ export default function UserDetailPage() {
 
   const [expandedApp, setExpandedApp] = useState(null)
   const [inlineTimelineAt, setInlineTimelineAt] = useState(null)
+  const [showInlineTimeline, setShowInlineTimeline] = useState(false)
 
   const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
   const timelineSearch = `?userId=${id}&date=${selectedDate}`
@@ -427,33 +428,61 @@ export default function UserDetailPage() {
           <FilmIcon className="w-5 h-5" />
           Timeline de telas
         </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Não há preview carregado. Selecione um período ou abra a timeline para ver os frames.
-        </p>
+        {!showInlineTimeline && !inlineTimelineAt && (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Não há preview carregado. Selecione um período ou abra a timeline para ver os frames.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2 mb-4">
-          <Link
-            to={timelineUrl}
+          <button
+            type="button"
+            onClick={() => {
+              setShowInlineTimeline(true)
+              setInlineTimelineAt(null)
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-600 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
           >
             <FilmIcon className="w-5 h-5" />
             Abrir timeline de telas
-          </Link>
-          <Link
-            to={`/timeline${timelineSearch}&jump=first5`}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowInlineTimeline(true)
+              setInlineTimelineAt(null)
+            }}
             className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
           >
             Primeiros 5 minutos
-          </Link>
-          <Link
-            to={`/timeline${timelineSearch}&jump=last5`}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowInlineTimeline(true)
+              setInlineTimelineAt(null)
+            }}
             className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
           >
             Últimos 5 minutos
-          </Link>
+          </button>
         </div>
         <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
           OBS: O tamanho do período pode variar conforme a atividade no período selecionado.
         </div>
+        {showInlineTimeline && (
+          <div className="mt-4">
+            <ScreenTimelinePlayer
+              userId={id}
+              date={selectedDate}
+              initialAt={inlineTimelineAt}
+              onClose={() => {
+                setShowInlineTimeline(false)
+                setInlineTimelineAt(null)
+              }}
+              compact
+            />
+          </div>
+        )}
       </section>
 
       {/* Aplicações e processos utilizados (expandível por aplicação) */}
@@ -498,7 +527,15 @@ export default function UserDetailPage() {
                             {isExpanded ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
                           </button>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{app.appName}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                          <Link
+                            to={timelineUrlAt(app.processos[0]?.horario)}
+                            className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                            title="Abrir página de timeline neste aplicativo"
+                          >
+                            {app.appName}
+                          </Link>
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${situacaoClass}`}>{situacaoLabel}</span>
                         </td>
@@ -553,7 +590,10 @@ export default function UserDetailPage() {
                                       <td className="px-3 py-2 text-center">
                                         <button
                                           type="button"
-                                          onClick={() => setInlineTimelineAt(proc.horario)}
+                                          onClick={() => {
+                                            setInlineTimelineAt(proc.horario)
+                                            setShowInlineTimeline(true)
+                                          }}
                                           className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
                                           title="Ver momento na timeline de telas (na mesma tela)"
                                         >
@@ -576,21 +616,6 @@ export default function UserDetailPage() {
           </div>
         )}
       </section>
-
-      {/* Timeline de telas inline (ao clicar em Play em um processo) */}
-      {inlineTimelineAt && (
-        <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="p-4">
-            <ScreenTimelinePlayer
-              userId={id}
-              date={selectedDate}
-              initialAt={inlineTimelineAt}
-              onClose={() => setInlineTimelineAt(null)}
-              compact
-            />
-          </div>
-        </section>
-      )}
 
       {/* Resumo do dia selecionado */}
       <section className="bg-gradient-to-r from-indigo-600/10 to-purple-600/10 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200/50 dark:border-indigo-800/50 p-4">
