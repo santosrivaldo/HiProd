@@ -6,6 +6,7 @@ import api from '../services/api'
 import CircularProgress from '../components/dashboard/CircularProgress'
 import AdvancedChart from '../components/charts/AdvancedChart'
 import LoadingSpinner from '../components/LoadingSpinner'
+import ScreenTimelinePlayer from '../components/ScreenTimelinePlayer'
 import {
   ArrowPathIcon,
   FilmIcon,
@@ -277,6 +278,7 @@ export default function UserDetailPage() {
   }, [applicationList])
 
   const [expandedApp, setExpandedApp] = useState(null)
+  const [inlineTimelineAt, setInlineTimelineAt] = useState(null)
 
   const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
   const timelineSearch = `?userId=${id}&date=${selectedDate}`
@@ -549,13 +551,14 @@ export default function UserDetailPage() {
                                       <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{inicioFim}</td>
                                       <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{proc.data}</td>
                                       <td className="px-3 py-2 text-center">
-                                        <Link
-                                          to={timelineUrlAt(proc.horario)}
+                                        <button
+                                          type="button"
+                                          onClick={() => setInlineTimelineAt(proc.horario)}
                                           className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
-                                          title="Ver momento na timeline de telas"
+                                          title="Ver momento na timeline de telas (na mesma tela)"
                                         >
                                           <PlayIcon className="w-5 h-5" />
-                                        </Link>
+                                        </button>
                                       </td>
                                     </tr>
                                   )
@@ -573,6 +576,21 @@ export default function UserDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Timeline de telas inline (ao clicar em Play em um processo) */}
+      {inlineTimelineAt && (
+        <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="p-4">
+            <ScreenTimelinePlayer
+              userId={id}
+              date={selectedDate}
+              initialAt={inlineTimelineAt}
+              onClose={() => setInlineTimelineAt(null)}
+              compact
+            />
+          </div>
+        </section>
+      )}
 
       {/* Resumo do dia selecionado */}
       <section className="bg-gradient-to-r from-indigo-600/10 to-purple-600/10 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200/50 dark:border-indigo-800/50 p-4">
