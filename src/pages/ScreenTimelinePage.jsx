@@ -65,7 +65,7 @@ export default function ScreenTimelinePage() {
     if (!selectedUser || !selectedDate) return
     setLoading(true)
     setError(null)
-    setImageUrl(null)
+    setImageUrls([])
     setCurrentIndex(0)
     try {
       const res = await api.get(
