@@ -19,9 +19,9 @@ import {
 import LoadingSpinner from './LoadingSpinner'
 import MetricCard from './charts/MetricCard'
 import AdvancedChart from './charts/AdvancedChart'
-import AdvancedFilters from './filters/AdvancedFilters'
+import GlobalFilters from './dashboard/GlobalFilters'
 import AIInsights from './ai/AIInsights'
-import CompactStats from './dashboard/CompactStats'
+import { GRUPOS_FUNCIONALIDADE, getGrupoFromCategoria } from '../constants/productivityGroups'
 
 const COLORS = {
   productive: '#10B981',
@@ -35,7 +35,7 @@ const CHART_COLORS = [
   '#06B6D4', '#F97316', '#84CC16', '#EC4899', '#6B7280'
 ]
 
-// Cálculo consistente da duração (segundos)
+// CÃ¡lculo consistente da duraÃ§Ã£o (segundos)
 const getActivityDurationSeconds = (activity) => {
   if (!activity) return 0
   const total = activity.duracao_total
@@ -65,7 +65,7 @@ const safeParseDate = (dateString) => {
   }
 }
 
-// Extrair domínio
+// Extrair domÃ­nio
 const extractDomainFromWindow = (activeWindow) => {
   if (!activeWindow) return 'Sistema Local'
   const urlMatch = activeWindow.match(/https?:\/\/([^\/\s]+)/)
@@ -82,9 +82,9 @@ const extractDomainFromWindow = (activeWindow) => {
   return 'Sistema Local'
 }
 
-// Extrair aplicação
+// Extrair aplicaÃ§Ã£o
 const extractApplicationFromWindow = (activeWindow) => {
-  if (!activeWindow) return 'Aplicação Desconhecida'
+  if (!activeWindow) return 'AplicaÃ§Ã£o Desconhecida'
   const knownApps = {
     'chrome': 'Google Chrome',
     'firefox': 'Firefox',
@@ -107,12 +107,12 @@ const extractApplicationFromWindow = (activeWindow) => {
   for (const [key, value] of Object.entries(knownApps)) {
     if (lowerWindow.includes(key)) return value
   }
-  const appMatch = activeWindow.match(/^([^-–]+)/)
+  const appMatch = activeWindow.match(/^([^-â€“]+)/)
   if (appMatch) {
     const appName = appMatch[1].trim()
     if (appName.length > 0 && appName.length < 50) return appName
   }
-  return 'Aplicação Desconhecida'
+  return 'AplicaÃ§Ã£o Desconhecida'
 }
 
 export default function Dashboard() {
@@ -120,13 +120,17 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [dateRange, setDateRange] = useState(7)
+  const [periodDays, setPeriodDays] = useState(7)
+  const [customStart, setCustomStart] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
+  const [customEnd, setCustomEnd] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [selectedUser, setSelectedUser] = useState('all')
   const [selectedDepartment, setSelectedDepartment] = useState('all')
+  const [selectedGroup, setSelectedGroup] = useState('all')
+  const [selectedApplication, setSelectedApplication] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [selectedUserForTimeline, setSelectedUserForTimeline] = useState(null)
   const [users, setUsers] = useState([])
   const [departments, setDepartments] = useState([])
-  const [viewMode, setViewMode] = useState('overview')
-  const [productivityFilter, setProductivityFilter] = useState(null) // 'productive', 'nonproductive', 'neutral', 'idle', null
   const navigate = useNavigate()
 
   // Carregar dados do dashboard
@@ -135,7 +139,7 @@ export default function Dashboard() {
     setError(null)
     
     try {
-      console.log('🔄 Carregando dados do dashboard...')
+      console.log('ðŸ”„ Carregando dados do dashboard...')
       
       const [activitiesRes, usersRes, departmentsRes] = await Promise.all([
         api.get('/atividades?agrupar=true&limite=1000'),
@@ -147,32 +151,35 @@ export default function Dashboard() {
       const usersList = Array.isArray(usersRes.data) ? usersRes.data : []
       const departmentsList = Array.isArray(departmentsRes.data) ? departmentsRes.data : []
 
-      console.log(`📦 Dados recebidos: ${activities.length} atividades, ${usersList.length} usuários, ${departmentsList.length} departamentos`)
+      console.log(`ðŸ“¦ Dados recebidos: ${activities.length} atividades, ${usersList.length} usuÃ¡rios, ${departmentsList.length} departamentos`)
 
       setUsers(usersList)
       setDepartments(departmentsList)
 
-      // Processar atividades
+      // Processar atividades - perÃ­odo
       const now = new Date()
-      const startDate = startOfDay(subDays(now, dateRange))
-      const endDate = endOfDay(now)
+      let startDate, endDate
+      if (periodDays === 'custom' && customStart && customEnd) {
+        startDate = startOfDay(parseISO(customStart))
+        endDate = endOfDay(parseISO(customEnd))
+      } else {
+        const days = typeof periodDays === 'number' ? periodDays : 7
+        startDate = startOfDay(subDays(now, days))
+        endDate = endOfDay(now)
+      }
 
       // Filtrar atividades por data
       let filteredActivities = activities.filter(activity => {
         if (!activity?.horario) return false
-        
         const activityDate = safeParseDate(activity.horario)
         if (!activityDate) return false
-        
-        // Comparar apenas datas (sem hora)
         const activityDateOnly = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate())
         const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
         const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-        
         return activityDateOnly >= startDateOnly && activityDateOnly <= endDateOnly
       })
 
-      // Filtrar por usuário
+      // Filtrar por usuÃ¡rio
       if (selectedUser !== 'all') {
         const userId = parseInt(selectedUser)
         if (!isNaN(userId)) {
@@ -194,20 +201,34 @@ export default function Dashboard() {
         }
       }
 
-      // Filtrar por produtividade (se selecionado)
-      if (productivityFilter) {
+      // Filtrar por status (Produtivo | Neutro | NÃ£o produtivo)
+      if (statusFilter && statusFilter !== 'all') {
         filteredActivities = filteredActivities.filter(activity => {
           const produtividade = activity.produtividade || 'neutral'
           const ociosidade = activity.ociosidade || 0
-          
-          if (productivityFilter === 'idle') {
-            return ociosidade >= 600
-          }
-          return produtividade === productivityFilter
+          if (statusFilter === 'idle') return ociosidade >= 600
+          return produtividade === statusFilter
         })
       }
 
-      console.log(`✅ ${filteredActivities.length} atividades após filtros`)
+      // Filtrar por aplicaÃ§Ã£o
+      if (selectedApplication && selectedApplication !== 'all') {
+        filteredActivities = filteredActivities.filter(activity => {
+          const app = activity.application || extractApplicationFromWindow(activity.active_window)
+          return app === selectedApplication
+        })
+      }
+
+      // Filtrar por grupo de pÃ¡ginas
+      if (selectedGroup && selectedGroup !== 'all') {
+        filteredActivities = filteredActivities.filter(activity => {
+          const app = activity.application || extractApplicationFromWindow(activity.active_window)
+          const grupo = getGrupoFromCategoria(activity.categoria, app)
+          return grupo === selectedGroup
+        })
+      }
+
+      console.log(`âœ… ${filteredActivities.length} atividades apÃ³s filtros`)
 
       // Calcular summary
       const summary = {
@@ -237,13 +258,13 @@ export default function Dashboard() {
           }
         }
         
-        // Adicionar tempo de presença facial ao summary
+        // Adicionar tempo de presenÃ§a facial ao summary
         if (activity.face_presence_time) {
           summary.facePresence += activity.face_presence_time
         }
       })
 
-      // Processar dados por domínio
+      // Processar dados por domÃ­nio
       const domainMap = {}
       filteredActivities.forEach(activity => {
         const duration = getActivityDurationSeconds(activity)
@@ -261,7 +282,7 @@ export default function Dashboard() {
         .sort((a, b) => b.value - a.value)
         .slice(0, 10)
 
-      // Processar dados por aplicação
+      // Processar dados por aplicaÃ§Ã£o
       const applicationMap = {}
       filteredActivities.forEach(activity => {
         const duration = getActivityDurationSeconds(activity)
@@ -317,7 +338,7 @@ export default function Dashboard() {
 
       const hourlyData = Object.values(hourlyMap)
 
-      // Processar dados diários
+      // Processar dados diÃ¡rios
       const dailyData = {}
       filteredActivities.forEach(activity => {
         const activityDate = safeParseDate(activity.horario)
@@ -353,9 +374,9 @@ export default function Dashboard() {
 
       const timelineData = Object.values(dailyData).sort((a, b) => a.date.localeCompare(b.date))
 
-      // Processar estatísticas por usuário
+      // Processar estatÃ­sticas por usuÃ¡rio
       const userStatsMap = {}
-      const presenceStatsMap = {} // Estatísticas de presença facial
+      const presenceStatsMap = {} // EstatÃ­sticas de presenÃ§a facial
       
       filteredActivities.forEach(activity => {
         if (!activity?.usuario_monitorado_id) return
@@ -363,11 +384,15 @@ export default function Dashboard() {
         const userId = activity.usuario_monitorado_id
         const userName = activity.usuario_monitorado_nome ||
                         usersList.find(u => u.id === userId)?.nome ||
-                        `Usuário ${userId}`
+                        `UsuÃ¡rio ${userId}`
 
+        const userObj = usersList.find(u => u.id === userId)
+        const departamentoNome = userObj?.departamento?.nome || userObj?.departamento_nome || 'â€”'
         if (!userStatsMap[userId]) {
           userStatsMap[userId] = {
+            id: userId,
             nome: userName,
+            departamento: departamentoNome,
             productive: 0,
             nonproductive: 0,
             neutral: 0,
@@ -393,7 +418,7 @@ export default function Dashboard() {
           }
         }
         
-        // Processar dados de presença facial
+        // Processar dados de presenÃ§a facial
         if (activity.face_presence_time !== null && activity.face_presence_time !== undefined) {
           if (!presenceStatsMap[userId]) {
             presenceStatsMap[userId] = {
@@ -419,7 +444,7 @@ export default function Dashboard() {
       const userStats = Object.values(userStatsMap)
       const presenceStats = Object.values(presenceStatsMap)
       
-      // Calcular tempo total de presença no summary
+      // Calcular tempo total de presenÃ§a no summary
       const totalPresenceTime = presenceStats.reduce((sum, stat) => sum + stat.maxPresenceTime, 0)
 
       // Atividades recentes
@@ -437,10 +462,58 @@ export default function Dashboard() {
           application: activity.application || extractApplicationFromWindow(activity.active_window)
         }))
 
-      // Dados do gráfico de pizza
+      // Tempo por aplicaÃ§Ã£o (com referÃªncia a print/screenshot)
+      const timeByAppKey = {}
+      filteredActivities.forEach(activity => {
+        const duration = getActivityDurationSeconds(activity)
+        if (duration <= 0) return
+        const app = activity.application || extractApplicationFromWindow(activity.active_window)
+        const grupo = getGrupoFromCategoria(activity.categoria, app)
+        const userName = activity.usuario_monitorado_nome || usersList.find(u => u.id === activity.usuario_monitorado_id)?.nome || `UsuÃ¡rio ${activity.usuario_monitorado_id}`
+        const key = `${activity.usuario_monitorado_id}|${app}`
+        if (!timeByAppKey[key]) {
+          timeByAppKey[key] = {
+            userId: activity.usuario_monitorado_id,
+            userName,
+            application: app,
+            grupoFuncionalidade: grupo,
+            tempoTotal: 0,
+            classificacao: activity.produtividade === 'productive' ? 'Produtivo' : activity.produtividade === 'nonproductive' ? 'NÃ£o produtivo' : 'Neutro',
+            activityIdForScreenshot: activity.has_screenshot ? activity.id : null
+          }
+        }
+        timeByAppKey[key].tempoTotal += duration
+        if (activity.has_screenshot && !timeByAppKey[key].activityIdForScreenshot) {
+          timeByAppKey[key].activityIdForScreenshot = activity.id
+        }
+      })
+      const timeByApplication = Object.values(timeByAppKey).sort((a, b) => b.tempoTotal - a.tempoTotal)
+
+      // Timeline por usuÃ¡rio (para detalhamento)
+      const userTimelineMap = {}
+      const sortedByHorario = [...filteredActivities].sort((a, b) => {
+        const dateA = safeParseDate(a.horario)
+        const dateB = safeParseDate(b.horario)
+        if (!dateA || !dateB) return 0
+        return dateA - dateB
+      })
+      sortedByHorario.forEach(activity => {
+        const uid = activity.usuario_monitorado_id
+        if (!userTimelineMap[uid]) userTimelineMap[uid] = []
+        userTimelineMap[uid].push({
+          ...activity,
+          application: activity.application || extractApplicationFromWindow(activity.active_window),
+          classificacao: activity.produtividade === 'productive' ? 'Produtivo' : activity.produtividade === 'nonproductive' ? 'NÃ£o produtivo' : 'Neutro'
+        })
+      })
+
+      // OpÃ§Ãµes para filtro de grupo (grupos de funcionalidade)
+      const groupOptions = GRUPOS_FUNCIONALIDADE.map(g => ({ value: g.grupo, label: g.grupo }))
+
+      // Dados do grÃ¡fico de pizza
       const pieData = [
         { name: 'Produtivo', value: summary.productive, color: COLORS.productive },
-        { name: 'Não Produtivo', value: summary.nonproductive, color: COLORS.nonproductive },
+        { name: 'NÃ£o Produtivo', value: summary.nonproductive, color: COLORS.nonproductive },
         { name: 'Neutro', value: summary.neutral, color: COLORS.neutral },
         { name: 'Ocioso', value: summary.idle, color: COLORS.idle }
       ].filter(item => item.value > 0)
@@ -456,10 +529,14 @@ export default function Dashboard() {
         hourlyData,
         presenceStats,
         totalPresenceTime,
-        rawActivities: activities
+        rawActivities: activities,
+        filteredActivities,
+        timeByApplication,
+        userTimelineMap,
+        groupOptions
       }
 
-      console.log('✅ Dashboard processado:', {
+      console.log('âœ… Dashboard processado:', {
         summary,
         timelineDays: timelineData.length,
         recentActivities: recentActivities.length
@@ -467,7 +544,7 @@ export default function Dashboard() {
 
       setDashboardData(processedData)
     } catch (err) {
-      console.error('❌ Erro ao carregar dashboard:', err)
+      console.error('âŒ Erro ao carregar dashboard:', err)
       setError(err.message || 'Erro ao carregar dados do dashboard')
       setDashboardData({
         pieData: [],
@@ -477,12 +554,16 @@ export default function Dashboard() {
         recentActivities: [],
         domainData: [],
         applicationData: [],
-        hourlyData: []
+        hourlyData: [],
+        filteredActivities: [],
+        timeByApplication: [],
+        userTimelineMap: {},
+        groupOptions: []
       })
     } finally {
       setLoading(false)
     }
-  }, [dateRange, selectedUser, selectedDepartment, productivityFilter])
+  }, [periodDays, customStart, customEnd, selectedUser, selectedDepartment, selectedGroup, selectedApplication, statusFilter])
 
   // Carregar dados quando o componente monta ou quando filtros mudam
   useEffect(() => {
@@ -549,7 +630,7 @@ export default function Dashboard() {
       <div className="p-6">
         <div className="text-center py-12">
           <ChartBarIcon className="mx-auto h-16 w-16 mb-4 text-gray-400" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum dado disponível</h3>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum dado disponÃ­vel</h3>
           <button
             onClick={loadDashboardData}
             className="px-6 py-3 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
@@ -561,512 +642,260 @@ export default function Dashboard() {
     )
   }
 
-  const { pieData, timelineData, userStats, summary, recentActivities, domainData, applicationData, hourlyData, presenceStats = [], totalPresenceTime = 0 } = dashboardData || {}
-  
-  // Garantir que filteredActivities existe para o componente
-  const filteredActivities = dashboardData?.rawActivities || []
+  const {
+    pieData,
+    timelineData,
+    userStats = [],
+    summary = {},
+    recentActivities = [],
+    domainData = [],
+    applicationData = [],
+    hourlyData = [],
+    presenceStats = [],
+    totalPresenceTime = 0,
+    timeByApplication = [],
+    userTimelineMap = {},
+    groupOptions = []
+  } = dashboardData || {}
 
-  const handleResetFilters = () => {
-    setDateRange(7)
-    setSelectedUser('all')
-    setSelectedDepartment('all')
-    setProductivityFilter(null)
-  }
-
-  const handleProductivityFilter = (filter) => {
-    if (productivityFilter === filter) {
-      setProductivityFilter(null) // Deselecionar se já estiver selecionado
-    } else {
-      setProductivityFilter(filter)
-    }
-  }
+  const filteredActivities = dashboardData?.filteredActivities || []
+  const productividadeMedia = summary.total > 0
+    ? ((summary.productive / summary.total) * 100).toFixed(1)
+    : '0'
+  const usuariosMonitoradosCount = users.length
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header Moderno */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Dashboard de Produtividade
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Bem-vindo, <span className="font-semibold">{user?.usuario}</span>! Análise completa de atividades e performance.
-          </p>
-        </div>
-        <button
-          onClick={loadDashboardData}
-          disabled={loading}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center space-x-2 shadow-md hover:shadow-lg transition-all"
-        >
-          <ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          <span>Atualizar</span>
-        </button>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
+          Dashboard de Produtividade
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Bem-vindo, <span className="font-semibold">{user?.usuario}</span>. Filtros globais e anÃ¡lise integrada.
+        </p>
       </div>
 
-      {/* Filtros Avançados */}
-      <AdvancedFilters
-        dateRange={dateRange}
-        onDateRangeChange={setDateRange}
-        selectedUser={selectedUser}
-        onUserChange={setSelectedUser}
+      {/* 1. Filtros Globais */}
+      <GlobalFilters
+        periodDays={periodDays}
+        onPeriodChange={setPeriodDays}
+        customStart={customStart}
+        customEnd={customEnd}
+        onCustomStartChange={setCustomStart}
+        onCustomEndChange={setCustomEnd}
         selectedDepartment={selectedDepartment}
         onDepartmentChange={setSelectedDepartment}
-        users={users}
+        selectedGroup={selectedGroup}
+        onGroupChange={setSelectedGroup}
+        selectedApplication={selectedApplication}
+        onApplicationChange={setSelectedApplication}
+        selectedUser={selectedUser}
+        onUserChange={setSelectedUser}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
         departments={departments}
-        onReset={handleResetFilters}
+        users={users}
+        applicationOptions={applicationData}
+        groupOptions={groupOptions}
+        onRefresh={loadDashboardData}
+        loading={loading}
       />
 
-      {/* Tabs de Visualização */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { id: 'overview', name: 'Visão Geral', icon: ChartBarIcon },
-            { id: 'domains', name: 'Domínios', icon: GlobeAltIcon },
-            { id: 'applications', name: 'Aplicações', icon: ComputerDesktopIcon },
-            { id: 'timeline', name: 'Timeline', icon: CalendarDaysIcon }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setViewMode(tab.id)}
-              className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors ${
-                viewMode === tab.id
-                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-              }`}
-            >
-              <tab.icon className="h-5 w-5" />
-              <span>{tab.name}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Conteúdo baseado na tab selecionada */}
-      {viewMode === 'overview' ? (
-        <>
-          {/* Cards de Métricas Principais - Clicáveis para Filtrar */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <button
-              onClick={() => handleProductivityFilter('productive')}
-              className={`transition-all transform hover:scale-105 ${productivityFilter === 'productive' ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
-            >
-              <MetricCard
-                title="Tempo Produtivo"
-                value={formatTime(summary.productive)}
-                subtitle={formatPercentage(summary.productive, summary.total)}
-                icon={ChartBarIcon}
-                color="green"
-                trend={summary.productive > summary.total * 0.5 ? 'up' : 'down'}
-                trendValue={formatPercentage(summary.productive, summary.total)}
-              />
-            </button>
-            <button
-              onClick={() => handleProductivityFilter('nonproductive')}
-              className={`transition-all transform hover:scale-105 ${productivityFilter === 'nonproductive' ? 'ring-2 ring-red-500 ring-offset-2' : ''}`}
-            >
-              <MetricCard
-                title="Tempo Não Produtivo"
-                value={formatTime(summary.nonproductive)}
-                subtitle={formatPercentage(summary.nonproductive, summary.total)}
-                icon={ChartBarIcon}
-                color="red"
-                trend={summary.nonproductive < summary.total * 0.3 ? 'up' : 'down'}
-                trendValue={formatPercentage(summary.nonproductive, summary.total)}
-              />
-            </button>
-            <button
-              onClick={() => handleProductivityFilter('neutral')}
-              className={`transition-all transform hover:scale-105 ${productivityFilter === 'neutral' ? 'ring-2 ring-yellow-500 ring-offset-2' : ''}`}
-            >
-              <MetricCard
-                title="Tempo Neutro"
-                value={formatTime(summary.neutral)}
-                subtitle={formatPercentage(summary.neutral, summary.total)}
-                icon={ClockIcon}
-                color="yellow"
-              />
-            </button>
-            <button
-              onClick={() => handleProductivityFilter('idle')}
-              className={`transition-all transform hover:scale-105 ${productivityFilter === 'idle' ? 'ring-2 ring-gray-500 ring-offset-2' : ''}`}
-            >
-              <MetricCard
-                title="Tempo Ocioso"
-                value={formatTime(summary.idle)}
-                subtitle={formatPercentage(summary.idle, summary.total)}
-                icon={ClockIcon}
-                color="indigo"
-              />
-            </button>
+      {/* 2. Resumo Geral */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Resumo geral</h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">UsuÃ¡rios monitorados</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{usuariosMonitoradosCount}</p>
           </div>
-
-          {/* Indicador de Filtro Ativo */}
-          {productivityFilter && (
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg p-3 flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-2">
-                <FunnelIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
-                  Filtro ativo: <span className="capitalize">{productivityFilter === 'idle' ? 'Ocioso' : productivityFilter === 'productive' ? 'Produtivo' : productivityFilter === 'nonproductive' ? 'Não Produtivo' : 'Neutro'}</span>
-                </span>
-              </div>
-              <button
-                onClick={() => setProductivityFilter(null)}
-                className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
-              >
-                Remover filtro
-              </button>
-            </div>
-          )}
-
-          {/* Layout Compacto - Grid de Visualizações */}
-          <div className="grid grid-cols-12 gap-4">
-            {/* Coluna 1: Insights de IA (3 colunas) */}
-            <div className="col-span-12 lg:col-span-3">
-              <AIInsights 
-                data={dashboardData} 
-                onAnalyze={loadDashboardData}
-              />
-            </div>
-
-            {/* Coluna 2: Gráfico de Pizza (4 colunas) */}
-            <div className="col-span-12 lg:col-span-4">
-              <AdvancedChart
-                type="pie"
-                data={pieData}
-                dataKey="value"
-                height={280}
-                title="Distribuição de Produtividade"
-                subtitle="Tempo por categoria"
-                colors={pieData.map(d => d.color)}
-              />
-            </div>
-
-            {/* Coluna 3: Timeline Diária (5 colunas) */}
-            <div className="col-span-12 lg:col-span-5">
-              <AdvancedChart
-                type="area"
-                data={timelineData}
-                xKey="date"
-                yKeys={['productive', 'nonproductive', 'neutral']}
-                height={280}
-                title="Evolução Diária"
-                subtitle="Tendência ao longo do tempo"
-                stacked={true}
-                colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
-              />
-            </div>
-
-            {/* Coluna 4: Distribuição por Hora (6 colunas) */}
-            <div className="col-span-12 lg:col-span-6">
-              <AdvancedChart
-                type="bar"
-                data={hourlyData}
-                xKey="hour"
-                yKeys={['productive', 'nonproductive', 'neutral']}
-                height={250}
-                title="Distribuição por Hora"
-                subtitle="Horários mais produtivos"
-                stacked={true}
-                colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral]}
-                formatTooltip={(value) => formatTime(value)}
-                formatXAxis={(hour) => formatHour(hour)}
-              />
-            </div>
-
-            {/* Coluna 5: Estatísticas Compactas (6 colunas) */}
-            <div className="col-span-12 lg:col-span-6">
-              <CompactStats
-                domainData={domainData}
-                applicationData={applicationData}
-                userStats={userStats}
-                formatTime={formatTime}
-              />
-            </div>
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo produtivo total</p>
+            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatTime(summary.productive)}</p>
           </div>
-        </>
-      ) : null}
-
-      {/* DOMÍNIOS - Página Dedicada */}
-      {viewMode === 'domains' && (
-        <div className="space-y-6">
-          {/* Resumo de Domínios */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <MetricCard
-              title="Total de Domínios"
-              value={domainData.length}
-              subtitle="Domínios únicos"
-              icon={GlobeAltIcon}
-              color="blue"
-            />
-            <MetricCard
-              title="Tempo Total"
-              value={formatTime(domainData.reduce((sum, d) => sum + d.value, 0))}
-              subtitle="Em todos os domínios"
-              icon={ClockIcon}
-              color="indigo"
-            />
-            <MetricCard
-              title="Top Domínio"
-              value={domainData[0]?.name?.substring(0, 20) || 'N/A'}
-              subtitle={domainData[0] ? formatTime(domainData[0].value) : '0min'}
-              icon={GlobeAltIcon}
-              color="green"
-            />
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo nÃ£o produtivo</p>
+            <p className="text-2xl font-bold text-red-600 dark:text-red-400">{formatTime(summary.nonproductive)}</p>
           </div>
-
-          {/* Lista de Domínios */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Top Domínios por Tempo de Uso</h2>
-              <div className="text-sm text-gray-500 dark:text-gray-400">{domainData.length} domínios encontrados</div>
-            </div>
-            {domainData.length > 0 ? (
-              <div className="space-y-3">
-                {domainData.map((domain, index) => {
-                  const totalDomainTime = domainData.reduce((sum, d) => sum + d.value, 0)
-                  const percentage = (domain.value / totalDomainTime) * 100
-                  return (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                      <div className="flex items-center space-x-4 flex-1 min-w-0">
-                        <div className="flex-shrink-0">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <GlobeAltIcon className="w-4 h-4 text-gray-400" />
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{domain.name}</p>
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{domain.activities} atividade{domain.activities !== 1 ? 's' : ''}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatTime(domain.value)}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{percentage.toFixed(1)}%</p>
-                        </div>
-                        <div className="w-20 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                          <div className="h-2 rounded-full" style={{ width: `${Math.min(percentage, 100)}%`, backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-[200px] text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <GlobeAltIcon className="mx-auto h-12 w-12 mb-2" />
-                  <p className="text-sm">Nenhum domínio encontrado</p>
-                </div>
-              </div>
-            )}
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo neutro</p>
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{formatTime(summary.neutral)}</p>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Produtividade mÃ©dia</p>
+            <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{productividadeMedia}%</p>
           </div>
         </div>
-      )}
+      </section>
 
-      {viewMode === 'applications' && (
-        <div className="space-y-6 mb-6">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Aplicações Mais Utilizadas</h2>
-              <div className="text-sm text-gray-500 dark:text-gray-400">{applicationData.length} aplicações encontradas</div>
-            </div>
-            {applicationData.length > 0 ? (
-              <div className="space-y-3">
-                {applicationData.map((app, index) => {
-                  const totalAppTime = applicationData.reduce((sum, a) => sum + a.value, 0)
-                  const percentage = (app.value / totalAppTime) * 100
-                  return (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                      <div className="flex items-center space-x-4 flex-1 min-w-0">
-                        <div className="flex-shrink-0 text-2xl">⚡</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{app.name}</p>
-                            <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">#{index + 1}</span>
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{app.activities} sessão{app.activities !== 1 ? 'ões' : ''} de uso</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{formatTime(app.value)}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{percentage.toFixed(1)}% do tempo</p>
-                        </div>
-                        <div className="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
-                          <div className="h-2 rounded-full bg-gradient-to-r from-green-400 to-blue-500" style={{ width: `${Math.min(percentage, 100)}%` }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-[200px] text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <ComputerDesktopIcon className="mx-auto h-12 w-12 mb-2" />
-                  <p className="text-sm">Nenhuma aplicação encontrada</p>
-                </div>
-              </div>
-            )}
-          </div>
+      {/* 3. Produtividade por UsuÃ¡rio */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-6 pb-0">Produtividade por usuÃ¡rio</h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">UsuÃ¡rio</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Departamento</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo produtivo</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo nÃ£o produtivo</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo neutro</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">% Produtividade</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Detalhes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {userStats.map((u) => {
+                const pct = u.total > 0 ? ((u.productive / u.total) * 100).toFixed(0) : 0
+                return (
+                  <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{u.nome}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{u.departamento || 'â€”'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600 dark:text-green-400">{formatTime(u.productive)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600 dark:text-red-400">{formatTime(u.nonproductive)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 dark:text-amber-400">{formatTime(u.neutral)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900 dark:text-white">{pct}%</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button
+                        onClick={() => setSelectedUserForTimeline(selectedUserForTimeline === u.id ? null : u.id)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm font-medium"
+                      >
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
+        {userStats.length === 0 && (
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">Nenhum dado no perÃ­odo.</p>
+        )}
+      </section>
 
-      {viewMode === 'timeline' && (
-        <div className="space-y-6">
-          {/* Resumo da Timeline */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <MetricCard
-              title="Dias Monitorados"
-              value={timelineData.length}
-              subtitle="Período analisado"
-              icon={CalendarDaysIcon}
-              color="blue"
-            />
-            <MetricCard
-              title="Tempo Total"
-              value={formatTime(summary.total)}
-              subtitle="Período completo"
-              icon={ClockIcon}
-              color="indigo"
-            />
-            <MetricCard
-              title="Média Diária"
-              value={formatTime(timelineData.length > 0 ? summary.total / timelineData.length : 0)}
-              subtitle="Por dia"
-              icon={ChartBarIcon}
-              color="green"
-            />
-            <MetricCard
-              title="Atividades"
-              value={filteredActivities.length}
-              subtitle="Total registrado"
-              icon={ChartBarIcon}
-              color="purple"
-            />
-          </div>
-
-          {/* Timeline Visual */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Atividade Diária por Produtividade</h2>
-            </div>
-            {timelineData.length > 0 ? (
-              <AdvancedChart
-                type="bar"
-                data={timelineData}
-                xKey="date"
-                yKeys={['productive', 'nonproductive', 'neutral', 'idle']}
-                height={400}
-                stacked={true}
-                colors={[COLORS.productive, COLORS.nonproductive, COLORS.neutral, COLORS.idle]}
-                formatTooltip={(value) => formatTime(value)}
-                formatXAxis={(value) => format(parseISO(value), 'dd/MM')}
-                formatYAxis={(value) => formatTime(value)}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-[400px] text-gray-500 dark:text-gray-400">
-                <div className="text-center">
-                  <CalendarDaysIcon className="mx-auto h-16 w-16 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhum dado de timeline</h3>
-                  <p className="text-sm">Selecione um período diferente ou verifique os filtros</p>
-                </div>
-              </div>
-            )}
-          </div>
+      {/* 4. Tempo por AplicaÃ§Ã£o (com Print) */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-6 pb-0">Tempo por aplicaÃ§Ã£o</h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">UsuÃ¡rio</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">AplicaÃ§Ã£o</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Grupo de funcionalidade</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tempo total</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">ClassificaÃ§Ã£o</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Print</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {timeByApplication.slice(0, 50).map((row, idx) => (
+                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{row.userName}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{row.application}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{row.grupoFuncionalidade}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white">{formatTime(row.tempoTotal)}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                      row.classificacao === 'Produtivo' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                      row.classificacao === 'NÃ£o produtivo' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                      'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}>
+                      {row.classificacao}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right">
+                    {row.activityIdForScreenshot ? (
+                      <button
+                        onClick={() => navigate(`/screenshots/${row.activityIdForScreenshot}`)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm font-medium inline-flex items-center gap-1"
+                      >
+                        <PhotoIcon className="w-4 h-4" /> Ver screenshot
+                      </button>
+                    ) : (
+                      <span className="text-gray-400 text-sm">â€”</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+        {timeByApplication.length === 0 && (
+          <p className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">Nenhum dado no perÃ­odo.</p>
+        )}
+      </section>
 
-      {/* Atividades Recentes */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Atividades Recentes</h2>
-          <div className="text-sm text-gray-500 dark:text-gray-400">Últimas {recentActivities.length} atividades</div>
+      {/* 5. Agrupamento de PÃ¡ginas por Funcionalidade (referÃªncia) */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-6 pb-0">Agrupamento de pÃ¡ginas por funcionalidade</h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Grupo</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Exemplos de pÃ¡ginas / aplicaÃ§Ãµes</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">ClassificaÃ§Ã£o padrÃ£o</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {GRUPOS_FUNCIONALIDADE.map((g, idx) => (
+                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{g.grupo}</td>
+                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{g.exemplos}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">{g.classificacao}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="space-y-3">
-          {recentActivities.length > 0 ? (
-            recentActivities.map((activity, index) => (
-              <div key={index} className="group flex items-start space-x-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200">
-                <div className="flex-shrink-0 mt-1">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white ${
-                    activity.produtividade === 'productive' ? 'bg-green-500' :
-                    activity.produtividade === 'nonproductive' ? 'bg-red-500' :
-                    'bg-yellow-500'
-                  }`}>
-                    {activity.usuario_monitorado_nome?.charAt(0)?.toUpperCase() || 'U'}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 mb-1">
-                        {activity.active_window}
-                      </p>
-                      <div className="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        <span className="font-medium">{activity.usuario_monitorado_nome}</span>
-                        <span>•</span>
-                        <span>{formatBrasiliaDate(activity.horario, 'datetime')}</span>
-                        {activity.duracao && (
-                          <>
-                            <span>•</span>
-                            <span>{formatDuration(activity.duracao)}</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2 flex-wrap gap-1">
-                        {activity.domain && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                            <GlobeAltIcon className="w-3 h-3 mr-1" />
-                            {activity.domain}
-                          </span>
-                        )}
-                        {activity.application && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                            <ComputerDesktopIcon className="w-3 h-3 mr-1" />
-                            {activity.application}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      {activity.has_screenshot && (
-                        <button
-                          onClick={() => handleViewScreenshot(activity.id)}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
-                          title="Ver Screenshot"
-                        >
-                          <PhotoIcon className="w-4 h-4 mr-1" />
-                          <span className="hidden sm:inline">Screenshot</span>
-                        </button>
-                      )}
-                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
-                        activity.produtividade === 'productive'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                          : activity.produtividade === 'nonproductive'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-                          : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+      </section>
+
+      {/* 6. Detalhamento (Timeline do UsuÃ¡rio) */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detalhamento â€” Timeline do usuÃ¡rio</h2>
+        {selectedUserForTimeline ? (
+          (() => {
+            const timeline = userTimelineMap[selectedUserForTimeline] || []
+            const u = userStats.find(us => us.id === selectedUserForTimeline)
+            return (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  UsuÃ¡rio: <span className="font-semibold text-gray-900 dark:text-white">{u?.nome || selectedUserForTimeline}</span>
+                  <button onClick={() => setSelectedUserForTimeline(null)} className="ml-3 text-indigo-600 dark:text-indigo-400 hover:underline text-sm">Fechar</button>
+                </p>
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {timeline.map((act, i) => (
+                    <div key={i} className="flex items-center gap-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                      <span className="text-sm font-mono text-gray-500 dark:text-gray-400 w-24 shrink-0">
+                        {formatBrasiliaDate(act.horario, 'time')}
+                      </span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white">{act.application}</span>
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                        act.classificacao === 'Produtivo' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                        act.classificacao === 'NÃ£o produtivo' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                        'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
                       }`}>
-                        {activity.categoria || 
-                         (activity.produtividade === 'productive' ? 'Produtivo' :
-                          activity.produtividade === 'nonproductive' ? 'Não Produtivo' : 'Neutro')}
+                        {act.classificacao}
                       </span>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-12">
-              <div className="text-gray-400 dark:text-gray-500">
-                <ChartBarIcon className="mx-auto h-16 w-16 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Nenhuma atividade encontrada</h3>
-                <p className="text-sm">Ajuste os filtros ou período para ver as atividades</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+                {timeline.length === 0 && <p className="text-gray-500 dark:text-gray-400 text-sm">Nenhuma atividade no perÃ­odo.</p>}
+              </>
+            )
+          })()
+        ) : (
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Clique em &quot;Ver&quot; na tabela Produtividade por usuÃ¡rio para exibir a timeline.</p>
+        )}
+      </section>
+
+      {/* 7. Insights automÃ¡ticos */}
+      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Insights automÃ¡ticos</h2>
+        <AIInsights data={dashboardData} onAnalyze={loadDashboardData} />
+      </section>
     </div>
   )
 }
