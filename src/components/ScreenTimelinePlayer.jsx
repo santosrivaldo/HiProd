@@ -11,11 +11,20 @@ import {
 } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 
+const toMinutes = (hhmm) => {
+  const [h, m] = (hhmm || '00:00').split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+const slotTimeMinutes = (slotTime) => {
+  const t = String(slotTime).slice(11, 16)
+  return toMinutes(t)
+}
+
 /**
- * Player de timeline de telas (embed). Recebe userId, date e opcionalmente initialAt.
+ * Player de timeline de telas (embed). Recebe userId, date, opcionalmente initialAt e filtro por horário.
  * Usado na página de detalhes do usuário para exibir o frame no horário do processo.
  */
-export default function ScreenTimelinePlayer({ userId, date, initialAt = null, onClose, compact = true }) {
+export default function ScreenTimelinePlayer({ userId, date, initialAt = null, filterStartTime = '00:00', filterEndTime = '23:59', onClose, compact = true }) {
   const [frames, setFrames] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -40,7 +49,26 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
     })
   }, [frames])
 
-  const currentSlot = framesBySecond[currentIndex]
+  const framesBySecondFiltered = React.useMemo(() => {
+    const startM = toMinutes(filterStartTime)
+    const endM = toMinutes(filterEndTime)
+    if (startM <= endM) {
+      return framesBySecond.filter((s) => {
+        const m = slotTimeMinutes(s.time)
+        return m >= startM && m <= endM
+      })
+    }
+    return framesBySecond.filter((s) => {
+      const m = slotTimeMinutes(s.time)
+      return m >= startM || m <= endM
+    })
+  }, [framesBySecond, filterStartTime, filterEndTime])
+
+  const currentSlot = framesBySecondFiltered[currentIndex]
+
+  useEffect(() => {
+    setCurrentIndex((i) => Math.min(i, Math.max(0, framesBySecondFiltered.length - 1)))
+  }, [framesBySecondFiltered.length])
 
   const loadFrames = useCallback(async () => {
     if (!userId || !date) return
@@ -67,12 +95,12 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
   }, [loadFrames])
 
   useEffect(() => {
-    if (!initialAt || framesBySecond.length === 0) return
+    if (!initialAt || framesBySecondFiltered.length === 0) return
     const atTime = new Date(initialAt).getTime()
     if (isNaN(atTime)) return
     let bestIdx = 0
     let bestDiff = Infinity
-    framesBySecond.forEach((slot, i) => {
+    framesBySecondFiltered.forEach((slot, i) => {
       const slotTime = new Date(slot.time.replace(' ', 'T')).getTime()
       const diff = Math.abs(slotTime - atTime)
       if (diff < bestDiff) {
@@ -81,7 +109,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
       }
     })
     setCurrentIndex(bestIdx)
-  }, [initialAt, framesBySecond])
+  }, [initialAt, framesBySecondFiltered])
 
   const fetchImageUrls = useCallback(async (frameIds) => {
     if (!frameIds?.length) {
@@ -107,17 +135,17 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
   }, [])
 
   useEffect(() => {
-    const slot = framesBySecond[currentIndex]
+    const slot = framesBySecondFiltered[currentIndex]
     const ids = slot?.items?.length ? slot.items.map((f) => f.id).filter(Boolean) : []
     if (ids.length) fetchImageUrls(ids)
     else setImageUrls([])
-  }, [currentIndex, framesBySecond, fetchImageUrls])
+  }, [currentIndex, framesBySecondFiltered, fetchImageUrls])
 
   useEffect(() => {
-    if (!playing || framesBySecond.length === 0) return
+    if (!playing || framesBySecondFiltered.length === 0) return
     playRef.current = setInterval(() => {
       setCurrentIndex((i) => {
-        if (i >= framesBySecond.length - 1) {
+        if (i >= framesBySecondFiltered.length - 1) {
           setPlaying(false)
           return i
         }
@@ -127,7 +155,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
     return () => {
       if (playRef.current) clearInterval(playRef.current)
     }
-  }, [playing, framesBySecond.length])
+  }, [playing, framesBySecondFiltered.length])
 
   useEffect(() => {
     return () => {
@@ -137,7 +165,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
   }, [])
 
   const goPrev = () => setCurrentIndex((i) => Math.max(0, i - 1))
-  const goNext = () => setCurrentIndex((i) => Math.min(framesBySecond.length - 1, i + 1))
+  const goNext = () => setCurrentIndex((i) => Math.min(framesBySecondFiltered.length - 1, i + 1))
 
   if (!userId || !date) return null
 
@@ -208,7 +236,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
               <button
                 type="button"
                 onClick={goNext}
-                disabled={currentIndex >= framesBySecond.length - 1}
+                disabled={currentIndex >= framesBySecondFiltered.length - 1}
                 className="p-2 rounded-full bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Próximo"
               >
@@ -219,12 +247,15 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
               {currentSlot && (
                 <>
                   {format(parseISO(currentSlot.time), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })} —{' '}
-                  {currentIndex + 1} / {framesBySecond.length} (segundos)
+                  {currentIndex + 1} / {framesBySecondFiltered.length} (segundos)
+                  {framesBySecondFiltered.length < framesBySecond.length && (
+                    <span className="ml-1 text-gray-500">(filtrado de {framesBySecond.length})</span>
+                  )}
                 </>
               )}
             </div>
             <div className="flex flex-wrap gap-0.5 justify-center pt-2">
-              {framesBySecond.slice(0, 80).map((slot, i) => (
+              {framesBySecondFiltered.slice(0, 80).map((slot, i) => (
                 <button
                   key={slot.time}
                   type="button"
@@ -235,8 +266,8 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, o
                   title={format(parseISO(slot.time), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR })}
                 />
               ))}
-              {framesBySecond.length > 80 && (
-                <span className="text-gray-500 text-xs self-center ml-1">+{framesBySecond.length - 80}s</span>
+              {framesBySecondFiltered.length > 80 && (
+                <span className="text-gray-500 text-xs self-center ml-1">+{framesBySecondFiltered.length - 80}s</span>
               )}
             </div>
           </>

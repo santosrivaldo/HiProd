@@ -86,16 +86,16 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div className="h-screen flex bg-gray-100 dark:bg-gray-900">
+    <div className="h-screen flex app-bg">
       {/* Mobile sidebar */}
       <div
         className={`fixed inset-0 flex z-40 md:hidden ${sidebarOpen ? "" : "hidden"}`}
       >
         <div
-          className="fixed inset-0 bg-gray-600 bg-opacity-75"
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
         />
-        <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-gray-800">
+        <div className="relative flex-1 flex flex-col max-w-xs w-full glass border-r border-white/10">
           <div className="absolute top-0 right-0 -mr-12 pt-2">
             <button
               type="button"
@@ -126,10 +126,10 @@ export default function Layout({ children }) {
                           else setCurrentView(item.component);
                           setSidebarOpen(false);
                         }}
-                        className={`w-full group flex items-center px-2 py-2 text-base font-medium rounded-md ${
+                        className={`w-full group flex items-center px-2 py-2 text-base font-medium rounded-xl transition-colors ${
                           isActive(item)
-                            ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
-                            : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            ? "bg-white/60 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm"
+                            : "text-gray-600 dark:text-gray-300 hover:bg-white/40 dark:hover:bg-white/5"
                         }`}
                       >
                         <item.icon className="mr-4 flex-shrink-0 h-6 w-6" />
@@ -141,7 +141,7 @@ export default function Layout({ children }) {
               ))}
             </nav>
           </div>
-          <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
+          <div className="flex-shrink-0 flex border-t border-white/10 dark:border-white/5 p-4">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center">
                 <div className="ml-3">
@@ -153,7 +153,7 @@ export default function Layout({ children }) {
               <div className="flex items-center space-x-2">
                 <button
                   onClick={toggleTheme}
-                  className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-white/40 dark:hover:bg-white/10 transition-colors"
                 >
                   {isDark ? (
                     <SunIcon className="h-5 w-5" />
@@ -163,7 +163,7 @@ export default function Layout({ children }) {
                 </button>
                 <button
                   onClick={logout}
-                  className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-white/40 dark:hover:bg-white/10 transition-colors"
                 >
                   <ArrowRightOnRectangleIcon className="h-5 w-5" />
                 </button>
@@ -176,7 +176,7 @@ export default function Layout({ children }) {
       {/* Static sidebar for desktop */}
       <div className="hidden md:flex md:flex-shrink-0">
         <div className="flex flex-col w-64">
-          <div className="flex flex-col h-0 flex-1 bg-white dark:bg-gray-800">
+          <div className="flex flex-col h-0 flex-1 glass border-r border-white/10">
             <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
               <div className="flex items-center flex-shrink-0 px-4">
                 <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -197,10 +197,10 @@ export default function Layout({ children }) {
                             if (item.path) navigate(item.path);
                             else setCurrentView(item.component);
                           }}
-                          className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                          className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-xl transition-colors ${
                             isActive(item)
-                              ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
-                              : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              ? "bg-white/60 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm"
+                              : "text-gray-600 dark:text-gray-300 hover:bg-white/40 dark:hover:bg-white/5"
                           }`}
                         >
                           <item.icon className="mr-3 flex-shrink-0 h-6 w-6" />
@@ -212,7 +212,7 @@ export default function Layout({ children }) {
                 ))}
               </nav>
             </div>
-            <div className="flex-shrink-0 flex border-t border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex-shrink-0 flex border-t border-white/10 dark:border-white/5 p-4">
               <div className="flex items-center justify-between w-full">
                 <div className="flex items-center">
                   <div className="ml-3">
@@ -224,7 +224,7 @@ export default function Layout({ children }) {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={toggleTheme}
-                    className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-white/40 dark:hover:bg-white/10 transition-colors"
                   >
                     {isDark ? (
                       <SunIcon className="h-5 w-5" />
@@ -234,7 +234,7 @@ export default function Layout({ children }) {
                   </button>
                   <button
                     onClick={logout}
-                    className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-white/40 dark:hover:bg-white/10 transition-colors"
                   >
                     <ArrowRightOnRectangleIcon className="h-5 w-5" />
                   </button>
@@ -249,7 +249,7 @@ export default function Layout({ children }) {
         <div className="md:hidden pl-1 pt-1 sm:pl-3 sm:pt-3">
           <button
             type="button"
-            className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+            className="-ml-0.5 -mt-0.5 h-12 w-12 inline-flex items-center justify-center rounded-xl text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/30 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500/50 transition-colors"
             onClick={() => setSidebarOpen(true)}
           >
             <Bars3Icon className="h-6 w-6" />

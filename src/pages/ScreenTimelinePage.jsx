@@ -237,20 +237,22 @@ export default function ScreenTimelinePage() {
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <FilmIcon className="w-8 h-8" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
+          <span className="p-2 rounded-xl glass">
+            <FilmIcon className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />
+          </span>
           Timeline de telas
         </h1>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-4">
+      <div className="glass-card p-5 space-y-4">
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Usuário</label>
             <select
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 min-w-[200px]"
+              className="glass-input text-gray-900 dark:text-white px-3 py-2 min-w-[200px] focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
             >
               <option value="">Selecione</option>
               {users.map((u) => (
@@ -264,7 +266,7 @@ export default function ScreenTimelinePage() {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+              className="glass-input text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
             />
           </div>
           <div>
@@ -273,7 +275,7 @@ export default function ScreenTimelinePage() {
               type="time"
               value={filterStartTime}
               onChange={(e) => setFilterStartTime(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+              className="glass-input text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
             />
           </div>
           <div>
@@ -282,13 +284,13 @@ export default function ScreenTimelinePage() {
               type="time"
               value={filterEndTime}
               onChange={(e) => setFilterEndTime(e.target.value)}
-              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+              className="glass-input text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
             />
           </div>
           <button
             onClick={loadFrames}
             disabled={loading || !selectedUser}
-            className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-medium shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 hover:shadow-indigo-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {loading ? 'Carregando...' : 'Carregar'}
           </button>
@@ -296,28 +298,28 @@ export default function ScreenTimelinePage() {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4">
+        <div className="glass-card p-4 border-red-200/50 dark:border-red-500/20 bg-red-50/80 dark:bg-red-900/20 text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
 
       {!loading && frames.length === 0 && selectedUser && !error && (
-        <div className="rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 p-8 text-center">
+        <div className="glass-card p-8 text-center text-gray-600 dark:text-gray-400">
           Nenhum frame encontrado para esta data. Verifique se o agente está enviando frames.
         </div>
       )}
 
       {framesBySecond.length > 0 && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-4 py-2">
+          <div className="glass-card flex flex-wrap items-center justify-between gap-4 p-4">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Telas para seleção:</span>
               <button
                 onClick={() => setViewMode('one')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
                   viewMode === 'one'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                    : 'bg-white/50 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-white/15 border border-white/20'
                 }`}
                 title="Uma tela apenas"
               >
@@ -326,10 +328,10 @@ export default function ScreenTimelinePage() {
               </button>
               <button
                 onClick={() => setViewMode('two')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-all ${
                   viewMode === 'two'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                    : 'bg-white/50 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-white/15 border border-white/20'
                 }`}
                 title="Duas telas (quando houver 2 monitores)"
               >
@@ -343,7 +345,7 @@ export default function ScreenTimelinePage() {
                   <select
                     value={selectedMonitorIndex}
                     onChange={(e) => setSelectedMonitorIndex(Number(e.target.value))}
-                    className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1.5 text-sm"
+                    className="glass-input text-gray-900 dark:text-white px-2 py-1.5 text-sm"
                     title="Escolha qual monitor exibir"
                   >
                     {Array.from({ length: maxMonitors }, (_, i) => (
@@ -357,7 +359,8 @@ export default function ScreenTimelinePage() {
             </div>
           </div>
 
-          <div className="bg-black/90 rounded-lg overflow-hidden flex items-center justify-center min-h-[400px] relative">
+          <div className="glass-card overflow-hidden rounded-2xl min-h-[400px] relative">
+            <div className="bg-black/95 flex items-center justify-center min-h-[400px] w-full">
             {imageUrls.length > 0 ? (
               <div
                 className={`flex gap-2 p-2 w-full justify-center items-center ${
@@ -378,20 +381,21 @@ export default function ScreenTimelinePage() {
             ) : (
               <span className="text-gray-500">Selecione um instante na timeline</span>
             )}
+            </div>
           </div>
 
-          <div className="flex items-center justify-center gap-4 py-2">
+          <div className="glass-card flex items-center justify-center gap-4 p-3">
             <button
               onClick={goPrev}
               disabled={currentIndex === 0}
-              className="p-2 rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2.5 rounded-xl bg-white/60 dark:bg-white/10 hover:bg-white/80 dark:hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-white/20"
               title="Anterior"
             >
-              <ChevronLeftIcon className="w-6 h-6" />
+              <ChevronLeftIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
             </button>
             <button
               onClick={() => setPlaying(!playing)}
-              className="p-3 rounded-full bg-indigo-600 text-white hover:bg-indigo-700"
+              className="p-3 rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/40 hover:bg-indigo-500 hover:shadow-indigo-500/50 transition-all"
               title={playing ? 'Pausar' : 'Reproduzir (1 frame/s)'}
             >
               {playing ? <PauseIcon className="w-8 h-8" /> : <PlayIcon className="w-8 h-8" />}
@@ -399,10 +403,10 @@ export default function ScreenTimelinePage() {
             <button
               onClick={goNext}
               disabled={currentIndex >= framesBySecondFiltered.length - 1}
-              className="p-2 rounded-full bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2.5 rounded-xl bg-white/60 dark:bg-white/10 hover:bg-white/80 dark:hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border border-white/20"
               title="Próximo"
             >
-              <ChevronRightIcon className="w-6 h-6" />
+              <ChevronRightIcon className="w-6 h-6 text-gray-700 dark:text-gray-200" />
             </button>
           </div>
 
@@ -419,7 +423,7 @@ export default function ScreenTimelinePage() {
           </div>
 
           {/* Scrubber: barra com pontos por segundo (lista filtrada) */}
-          <div className="flex flex-wrap gap-1 justify-center py-2">
+          <div className="glass-card flex flex-wrap gap-1 justify-center p-3">
             {framesBySecondFiltered.slice(0, 120).map((slot, i) => (
               <button
                 key={slot.time}
@@ -427,10 +431,10 @@ export default function ScreenTimelinePage() {
                   setCurrentIndex(i)
                   setPlaying(false)
                 }}
-                className={`w-2 h-6 rounded transition-colors ${
+                className={`w-2 h-6 rounded-md transition-all ${
                   i === currentIndex
-                    ? 'bg-indigo-600'
-                    : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                    ? 'bg-indigo-600 shadow-md shadow-indigo-500/40'
+                    : 'bg-white/50 dark:bg-white/20 hover:bg-white/70 dark:hover:bg-white/30 border border-white/20'
                 }`}
                 title={format(parseISO(slot.time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
               />

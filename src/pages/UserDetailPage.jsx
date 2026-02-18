@@ -280,6 +280,8 @@ export default function UserDetailPage() {
   const [expandedApp, setExpandedApp] = useState(null)
   const [inlineTimelineAt, setInlineTimelineAt] = useState(null)
   const [showInlineTimeline, setShowInlineTimeline] = useState(false)
+  const [timelineFilterStartTime, setTimelineFilterStartTime] = useState('00:00')
+  const [timelineFilterEndTime, setTimelineFilterEndTime] = useState('23:59')
 
   const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
   const timelineSearch = `?userId=${id}&date=${selectedDate}`
@@ -331,7 +333,7 @@ export default function UserDetailPage() {
       </div>
 
       {/* Perfil: avatar + dados em grid */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+      <section className="glass-card p-6">
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="flex-shrink-0">
             <div className="w-24 h-24 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-3xl font-bold text-indigo-700 dark:text-indigo-300">
@@ -380,14 +382,14 @@ export default function UserDetailPage() {
       </section>
 
       {/* Filtro de data + Reconsolidar */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-4">
+      <section className="glass-card p-4">
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dia</label>
             <select
               value={diaPreset}
               onChange={(e) => setDiaPreset(e.target.value)}
-              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+              className="glass-input text-gray-900 dark:text-white px-3 py-2"
             >
               <option value="yesterday">Ontem</option>
               <option value="today">Hoje</option>
@@ -401,7 +403,7 @@ export default function UserDetailPage() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2"
+                className="glass-input text-gray-900 dark:text-white px-3 py-2"
               />
             </div>
           )}
@@ -423,7 +425,7 @@ export default function UserDetailPage() {
       </section>
 
       {/* Preview / Timeline de telas */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+      <section className="glass-card p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
           <FilmIcon className="w-5 h-5" />
           Timeline de telas
@@ -470,11 +472,39 @@ export default function UserDetailPage() {
           OBS: O tamanho do período pode variar conforme a atividade no período selecionado.
         </div>
         {showInlineTimeline && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-wrap items-end gap-4 p-3 rounded-xl bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filtro do preview:</span>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Data (dia)</label>
+                <span className="text-sm text-gray-700 dark:text-gray-200">{selectedDate}</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Altere o dia no seletor acima na página.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Horário (início)</label>
+                <input
+                  type="time"
+                  value={timelineFilterStartTime}
+                  onChange={(e) => setTimelineFilterStartTime(e.target.value)}
+                  className="glass-input text-gray-900 dark:text-white px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Horário (fim)</label>
+                <input
+                  type="time"
+                  value={timelineFilterEndTime}
+                  onChange={(e) => setTimelineFilterEndTime(e.target.value)}
+                  className="glass-input text-gray-900 dark:text-white px-2 py-1.5 text-sm"
+                />
+              </div>
+            </div>
             <ScreenTimelinePlayer
               userId={id}
               date={selectedDate}
               initialAt={inlineTimelineAt}
+              filterStartTime={timelineFilterStartTime}
+              filterEndTime={timelineFilterEndTime}
               onClose={() => {
                 setShowInlineTimeline(false)
                 setInlineTimelineAt(null)
@@ -486,7 +516,7 @@ export default function UserDetailPage() {
       </section>
 
       {/* Aplicações e processos utilizados (expandível por aplicação) */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <section className="glass-card overflow-hidden">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-4 border-b border-gray-200 dark:border-gray-700">
           Aplicações e processos utilizados
         </h2>
@@ -593,6 +623,11 @@ export default function UserDetailPage() {
                                           onClick={() => {
                                             setInlineTimelineAt(proc.horario)
                                             setShowInlineTimeline(true)
+                                            const atDate = new Date(proc.horario)
+                                            const startDate = new Date(atDate.getTime() - 30 * 60 * 1000)
+                                            const endDate = new Date(atDate.getTime() + 30 * 60 * 1000)
+                                            setTimelineFilterStartTime(format(startDate, 'HH:mm'))
+                                            setTimelineFilterEndTime(format(endDate, 'HH:mm'))
                                           }}
                                           className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
                                           title="Ver momento na timeline de telas (na mesma tela)"
@@ -706,7 +741,7 @@ export default function UserDetailPage() {
           </ChartCard>
         </div>
         <div className="flex flex-col">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow border-2 border-indigo-200 dark:border-indigo-800 p-6 flex flex-col items-center justify-center min-h-[280px]">
+          <div className="glass-card border-2 border-indigo-200/50 dark:border-indigo-500/30 p-6 flex flex-col items-center justify-center min-h-[280px]">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
               Produtividade consolidada
             </h3>
@@ -741,7 +776,7 @@ export default function UserDetailPage() {
 
 function SummaryCard({ label, value, valueClassName = '', withInfo = false }) {
   return (
-    <div className="bg-white dark:bg-gray-800/80 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+    <div className="glass-card p-3">
       <div className="flex items-center gap-1">
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
           {label}
@@ -759,7 +794,7 @@ function SummaryCard({ label, value, valueClassName = '', withInfo = false }) {
 
 function ChartCard({ title, children }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-4">
+    <div className="glass-card p-4">
       <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">{title}</h3>
       {children}
     </div>

@@ -730,7 +730,7 @@ export default function Dashboard() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <button
           onClick={() => setFiltersOpen(!filtersOpen)}
           className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
@@ -814,7 +814,7 @@ export default function Dashboard() {
       </div>
 
       {/* Tabela Produtividade Consolidada */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <section className="glass-card overflow-hidden">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-4 border-b border-gray-200 dark:border-gray-700">Produtividade consolidada</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -897,7 +897,7 @@ export default function Dashboard() {
 
       {/* Painéis: Produtividade da Empresa + Top 5 produtivos + Top 5 improdutivos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <div className="glass-card p-6">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Produtividade da empresa</h3>
           {pieData.length > 0 ? (
             <div className="flex flex-col items-center">
@@ -915,7 +915,7 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>
           )}
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <div className="glass-card p-6">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Top 5 usuários produtivos</h3>
           <div className="space-y-2">
             {top5Produtivos.map((u) => (
@@ -932,7 +932,7 @@ export default function Dashboard() {
           </div>
           {top5Produtivos.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-400">Sem dados</p>}
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <div className="glass-card p-6">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Top 5 usuários improdutivos</h3>
           <div className="space-y-2">
             {top5Improdutivos.map((u) => (
@@ -952,7 +952,7 @@ export default function Dashboard() {
       </div>
 
       {/* 4. Tempo por AplicaÃ§Ã£o (com Print) */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <section className="glass-card overflow-hidden">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-6 pb-0">Tempo por aplicaÃ§Ã£o</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1005,7 +1005,7 @@ export default function Dashboard() {
       </section>
 
       {/* 5. Agrupamento de PÃ¡ginas por Funcionalidade (referÃªncia) */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <section className="glass-card overflow-hidden">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white p-6 pb-0">Agrupamento de pÃ¡ginas por funcionalidade</h2>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -1030,7 +1030,7 @@ export default function Dashboard() {
       </section>
 
       {/* 6. Detalhamento (Timeline do UsuÃ¡rio) */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+      <section className="glass-card p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detalhamento â€” Timeline do usuÃ¡rio</h2>
         {selectedUserForTimeline ? (
           (() => {
@@ -1069,7 +1069,7 @@ export default function Dashboard() {
       </section>
 
       {/* 7. Insights automÃ¡ticos */}
-      <section className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+      <section className="glass-card p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Insights automÃ¡ticos</h2>
         <AIInsights data={dashboardData} onAnalyze={loadDashboardData} />
       </section>
