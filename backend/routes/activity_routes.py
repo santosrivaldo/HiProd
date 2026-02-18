@@ -827,10 +827,12 @@ def list_screen_frames(current_user):
             return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
 
         with DatabaseConnection() as db:
+            # Filtro por data no fuso de São Paulo (evita diferença de 11h com UTC)
             where = "WHERE usuario_monitorado_id = %s"
             params = [usuario_monitorado_id]
             if date:
-                where += " AND captured_at::date = %s"
+                # Filtro por data no fuso de São Paulo (captured_at no DB está em UTC)
+                where += " AND (captured_at AT TIME ZONE 'America/Sao_Paulo')::date = %s::date"
                 params.append(date)
             params.append(limit)
             db.cursor.execute(f'''
@@ -842,13 +844,14 @@ def list_screen_frames(current_user):
             ''', params)
             rows = db.cursor.fetchall()
 
-        # URL relativa para o frontend (assumindo que a API está em /api)
+        # Retornar captured_at sempre em horário de São Paulo
         frames = []
         for r in rows:
             frame_id, captured_at, monitor_index, file_path = r
+            captured_at_brasilia = format_datetime_brasilia(captured_at) if captured_at else None
             frames.append({
                 'id': frame_id,
-                'captured_at': captured_at.isoformat() if hasattr(captured_at, 'isoformat') else str(captured_at),
+                'captured_at': captured_at_brasilia or (captured_at.isoformat() if hasattr(captured_at, 'isoformat') else str(captured_at)),
                 'monitor_index': monitor_index,
                 'url': f"/api/screen-frames/{frame_id}/image"
             })
