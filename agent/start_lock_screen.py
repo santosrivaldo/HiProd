@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Arquivo principal para iniciar a tela de bloqueio do HiProd Agent
-Execute este arquivo para abrir a interface gráfica
-"""
-
 import sys
 import os
 
