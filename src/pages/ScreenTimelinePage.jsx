@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../services/api'
-import { formatBrasiliaDate } from '../utils/timezoneUtils'
 import { formatBrasiliaDate, getTodayIsoDate, formatBrasiliaTimeHHMM } from '../utils/timezoneUtils'
 import {
   PlayIcon,
