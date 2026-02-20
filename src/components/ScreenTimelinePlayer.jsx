@@ -8,7 +8,9 @@ import {
   ChevronRightIcon,
   XMarkIcon,
   ArrowsPointingOutIcon,
-  ArrowsPointingInIcon
+  ArrowsPointingInIcon,
+  MagnifyingGlassPlusIcon,
+  MagnifyingGlassMinusIcon
 } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 
@@ -33,6 +35,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
   const [playing, setPlaying] = useState(false)
   const [imageUrls, setImageUrls] = useState([])
   const [expanded, setExpanded] = useState(false)
+  const [zoom, setZoom] = useState(1)
   const playRef = useRef(null)
   const imageCache = useRef({})
 
@@ -162,6 +165,12 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
 
   const canExpand = compact && framesBySecond.length > 0
   const previewMaxH = expanded ? 'max-h-[85vh]' : 'max-h-[50vh]'
+  const zoomMin = 0.5
+  const zoomMax = 3
+  const zoomStep = 0.25
+  const zoomIn = () => setZoom((z) => Math.min(zoomMax, z + zoomStep))
+  const zoomOut = () => setZoom((z) => Math.max(zoomMin, z - zoomStep))
+  const zoomReset = () => setZoom(1)
 
   const content = (
     <div className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 overflow-hidden ${compact && !expanded ? 'max-w-4xl' : ''}`}>
@@ -215,22 +224,65 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
         )}
         {!loading && !error && framesBySecond.length > 0 && (
           <>
-            <div className={`rounded-lg overflow-hidden bg-black flex flex-wrap items-center justify-center gap-2 min-h-[280px] ${previewMaxH} p-2`}>
+            <div className={`rounded-lg overflow-auto bg-black min-h-[280px] ${previewMaxH} p-2`}>
               {imageUrls.length > 0 ? (
-                imageUrls.map((url, i) => (
-                  <div key={i} className="flex-1 min-w-0 flex justify-center">
-                    <img
-                      src={url}
-                      alt={`Tela ${i + 1}`}
-                      className={`max-w-full w-auto h-auto object-contain ${previewMaxH}`}
-                    />
+                <div
+                  className="inline-block align-top"
+                  style={{ width: `${zoom * 100}%`, minHeight: `${zoom * 100}%` }}
+                >
+                  <div
+                    className="flex flex-wrap items-center justify-center gap-2 w-full transition-transform"
+                    style={{
+                      width: `${(100 / zoom) * 100}%`,
+                      minHeight: `${(100 / zoom) * 100}%`,
+                      transform: `scale(${zoom})`,
+                      transformOrigin: '0 0',
+                    }}
+                  >
+                    {imageUrls.map((url, i) => (
+                      <div key={i} className="flex-1 min-w-0 flex justify-center">
+                        <img
+                          src={url}
+                          alt={`Tela ${i + 1}`}
+                          className="max-w-full w-auto h-auto object-contain max-h-[70vh]"
+                          draggable={false}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))
+                </div>
               ) : (
-                <span className="text-gray-500 text-sm">Carregando frame...</span>
+                <span className="text-gray-500 text-sm block py-8 text-center">Carregando frame...</span>
               )}
             </div>
-            <div className="flex items-center justify-center gap-3 py-2">
+            <div className="flex items-center justify-center gap-2 flex-wrap py-2">
+              <button
+                type="button"
+                onClick={zoomOut}
+                disabled={zoom <= zoomMin}
+                className="p-2 rounded-lg bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Menos zoom"
+              >
+                <MagnifyingGlassMinusIcon className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={zoomReset}
+                className="px-2 py-1 rounded-lg bg-gray-700 text-gray-200 hover:bg-gray-600 text-xs font-medium min-w-[3rem]"
+                title="Zoom 100%"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={zoomIn}
+                disabled={zoom >= zoomMax}
+                className="p-2 rounded-lg bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Mais zoom"
+              >
+                <MagnifyingGlassPlusIcon className="w-5 h-5" />
+              </button>
+              <span className="w-px h-6 bg-gray-600 self-center" aria-hidden />
               <button
                 type="button"
                 onClick={goPrev}
