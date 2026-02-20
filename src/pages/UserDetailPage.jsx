@@ -625,8 +625,8 @@ export default function UserDetailPage() {
                                               setShowInlineTimeline(true)
                                               const atDate = parseBrasiliaDate(proc.horario)
                                               if (atDate) {
-                                                const startDate = new Date(atDate.getTime() - 30 * 60 * 1000)
-                                                const endDate = new Date(atDate.getTime() + 30 * 60 * 1000)
+                                                const startDate = new Date(atDate.getTime() - 30 * 1000)
+                                                const endDate = new Date(atDate.getTime() + 30 * 1000)
                                                 setTimelineFilterStartTime(formatBrasiliaTimeHHMM(startDate))
                                                 setTimelineFilterEndTime(formatBrasiliaTimeHHMM(endDate))
                                               }

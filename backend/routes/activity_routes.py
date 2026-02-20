@@ -948,7 +948,7 @@ def search_keylog(current_user):
     """
     Busca keylog por palavra, usuário, departamento e período.
     Query: q=, usuario_monitorado_id=, departamento_id=, date_from=, date_to=, limit=
-    Retorna lista com captured_at (Brasília), usuario_monitorado_nome, window_title, text_snippet, link para timeline (userId, date, at).
+    Para janela por minuto (timeline): at= (ISO datetime) e window_seconds=60 → retorna keylog entre at-30s e at+30s.
     """
     try:
         q = (request.args.get('q') or '').strip()
@@ -956,6 +956,8 @@ def search_keylog(current_user):
         departamento_id = request.args.get('departamento_id', type=int)
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
+        at_iso = request.args.get('at')
+        window_seconds = request.args.get('window_seconds', type=int) or 60
         limit = min(request.args.get('limit', type=int) or 50, 200)
 
         with DatabaseConnection() as db:
@@ -970,10 +972,23 @@ def search_keylog(current_user):
             if departamento_id:
                 where_parts.append('um.departamento_id = %s')
                 params.append(departamento_id)
-            if date_from:
+            if at_iso and usuario_monitorado_id:
+                try:
+                    at_dt = datetime.fromisoformat(at_iso.replace('Z', '+00:00'))
+                    if at_dt.tzinfo:
+                        at_dt = at_dt.astimezone(timezone.utc)
+                    at_utc = at_dt.replace(tzinfo=None)
+                    half = window_seconds // 2
+                    start_utc = at_utc - timedelta(seconds=half)
+                    end_utc = at_utc + timedelta(seconds=half)
+                    where_parts.append('k.captured_at >= %s AND k.captured_at <= %s')
+                    params.extend([start_utc, end_utc])
+                except Exception:
+                    pass
+            if date_from and not at_iso:
                 where_parts.append("(k.captured_at AT TIME ZONE 'UTC')::date >= %s::date")
                 params.append(date_from)
-            if date_to:
+            if date_to and not at_iso:
                 where_parts.append("(k.captured_at AT TIME ZONE 'UTC')::date <= %s::date")
                 params.append(date_to)
             params.append(limit)

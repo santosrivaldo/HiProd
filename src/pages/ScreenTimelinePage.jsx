@@ -30,6 +30,7 @@ export default function ScreenTimelinePage() {
   const [error, setError] = useState(null)
   const [atividades, setAtividades] = useState([])
   const [showAtividades, setShowAtividades] = useState(true)
+  const [keylogInMinute, setKeylogInMinute] = useState([])
   const playRef = useRef(null)
   const imageCache = useRef({})
 
@@ -140,6 +141,18 @@ export default function ScreenTimelinePage() {
     }
   }, [selectedUser, selectedDate])
 
+  const loadKeylogForMinute = useCallback(async (atIso) => {
+    if (!selectedUser || !atIso) return
+    try {
+      const res = await api.get(
+        `/keylog/search?usuario_monitorado_id=${selectedUser}&at=${encodeURIComponent(atIso)}&window_seconds=60&limit=50`
+      )
+      setKeylogInMinute(res.data?.results ?? [])
+    } catch (e) {
+      setKeylogInMinute([])
+    }
+  }, [selectedUser])
+
   const fetchImageUrls = useCallback(async (frameIds) => {
     if (!frameIds?.length) {
       setImageUrls([])
@@ -189,11 +202,17 @@ export default function ScreenTimelinePage() {
   const atParam = searchParams.get('at')
 
   useEffect(() => {
+    if (atParam && selectedUser) loadKeylogForMinute(atParam)
+    else setKeylogInMinute([])
+  }, [atParam, selectedUser, loadKeylogForMinute])
+
+  useEffect(() => {
     if (!atParam || framesBySecond.length === 0) return
     const atTime = new Date(atParam).getTime()
     if (isNaN(atTime)) return
-    const startDate = new Date(atTime - 30 * 60 * 1000)
-    const endDate = new Date(atTime + 30 * 60 * 1000)
+    // Janela de 1 minuto: 30 segundos antes e 30 segundos depois da atividade
+    const startDate = new Date(atTime - 30 * 1000)
+    const endDate = new Date(atTime + 30 * 1000)
     setFilterStartTime(formatBrasiliaTimeHHMM(startDate))
     setFilterEndTime(formatBrasiliaTimeHHMM(endDate))
     const startM = toMinutes(formatBrasiliaTimeHHMM(startDate))
@@ -467,6 +486,31 @@ export default function ScreenTimelinePage() {
               </span>
             )}
           </div>
+
+          {atParam && (
+            <div className="glass-card p-4 mt-4">
+              <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                Texto digitado neste minuto (30s antes e depois da atividade)
+              </h3>
+              {keylogInMinute.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum keylog neste intervalo.</p>
+              ) : (
+                <ul className="space-y-2 max-h-40 overflow-y-auto">
+                  {keylogInMinute.map((k) => (
+                    <li key={k.id} className="text-sm border-b border-gray-200/50 dark:border-gray-700/50 pb-2 last:border-0">
+                      <span className="text-gray-500 dark:text-gray-400">{formatBrasiliaDate(k.captured_at, 'time')}</span>
+                      {k.window_title && (
+                        <span className="ml-2 text-gray-400 dark:text-gray-500 truncate max-w-xs inline-block align-bottom" title={k.window_title}>
+                          — {k.window_title}
+                        </span>
+                      )}
+                      <p className="mt-0.5 text-gray-700 dark:text-gray-300 break-words">{k.text_content || '—'}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {atividades.length > 0 && (
             <div className="glass-card p-4 mt-4">
