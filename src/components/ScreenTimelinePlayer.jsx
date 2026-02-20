@@ -126,7 +126,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
     let best = 0
     let bestDiff = Infinity
     framesBySecondFiltered.forEach((slot, i) => {
-      const slotStr = (slot.displayTime ?? slot.time || '').slice(0, 19)
+      const slotStr = (slot.displayTime ?? (slot.time || '')).slice(0, 19)
       if (!slotStr) return
       const diff = Math.abs(new Date(slotStr).getTime() - atMs)
       if (diff < bestDiff) {
