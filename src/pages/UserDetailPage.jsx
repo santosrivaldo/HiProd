@@ -486,10 +486,10 @@ export default function UserDetailPage() {
               window.open(`${window.location.origin}${base}/preview?${params.toString()}`, '_blank', 'noopener,noreferrer')
             }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-600 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-            title="Abre o preview em outra aba com seletor de tela, zoom e exportar imagem"
+            title="Abre o preview em nova guia com seletor de tela, zoom e exportar imagem"
           >
             <ArrowTopRightOnSquareIcon className="w-5 h-5" />
-            Abrir preview em nova aba
+            Abrir preview em nova guia
           </button>
           <button
             type="button"
