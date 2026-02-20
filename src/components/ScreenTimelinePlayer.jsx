@@ -96,19 +96,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
 
   useEffect(() => {
     if (!initialAt || framesBySecondFiltered.length === 0) return
-    const atTime = new Date(initialAt).getTime()
-    if (isNaN(atTime)) return
-    let bestIdx = 0
-    let bestDiff = Infinity
-    framesBySecondFiltered.forEach((slot, i) => {
-      const slotTime = new Date(slot.time.replace(' ', 'T')).getTime()
-      const diff = Math.abs(slotTime - atTime)
-      if (diff < bestDiff) {
-        bestDiff = diff
-        bestIdx = i
-      }
-    })
-    setCurrentIndex(bestIdx)
+    setCurrentIndex(0)
   }, [initialAt, framesBySecondFiltered])
 
   const fetchImageUrls = useCallback(async (frameIds) => {
@@ -204,13 +192,17 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
         )}
         {!loading && !error && framesBySecond.length > 0 && (
           <>
-            <div className="rounded-lg overflow-hidden bg-black flex items-center justify-center min-h-[280px] max-h-[50vh]">
+            <div className="rounded-lg overflow-hidden bg-black flex flex-wrap items-center justify-center gap-2 min-h-[280px] max-h-[50vh] p-2">
               {imageUrls.length > 0 ? (
-                <img
-                  src={imageUrls[0]}
-                  alt="Frame"
-                  className="max-w-full max-h-[50vh] w-auto h-auto object-contain"
-                />
+                imageUrls.map((url, i) => (
+                  <div key={i} className="flex-1 min-w-0 flex justify-center">
+                    <img
+                      src={url}
+                      alt={`Tela ${i + 1}`}
+                      className="max-w-full max-h-[50vh] w-auto h-auto object-contain"
+                    />
+                  </div>
+                ))
               ) : (
                 <span className="text-gray-500 text-sm">Carregando frame...</span>
               )}

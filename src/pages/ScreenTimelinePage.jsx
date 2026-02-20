@@ -215,24 +215,7 @@ export default function ScreenTimelinePage() {
     const endDate = new Date(atTime + 30 * 1000)
     setFilterStartTime(formatBrasiliaTimeHHMM(startDate))
     setFilterEndTime(formatBrasiliaTimeHHMM(endDate))
-    const startM = toMinutes(formatBrasiliaTimeHHMM(startDate))
-    const endM = toMinutes(formatBrasiliaTimeHHMM(endDate))
-    const filtered = startM <= endM
-      ? framesBySecond.filter((s) => { const m = slotTimeMinutes(s.time); return m >= startM && m <= endM })
-      : framesBySecond.filter((s) => { const m = slotTimeMinutes(s.time); return m >= startM || m <= endM })
-    let bestIdx = 0
-    let bestDiff = Infinity
-    filtered.forEach((slot, i) => {
-      const slotTimeStr = slot.displayTime || slot.time || ''
-      const slotTime = slotTimeStr ? new Date(slotTimeStr.replace(' ', 'T')).getTime() : 0
-      if (!slotTime) return
-      const diff = Math.abs(slotTime - atTime)
-      if (diff < bestDiff) {
-        bestDiff = diff
-        bestIdx = i
-      }
-    })
-    setCurrentIndex(bestIdx)
+    setCurrentIndex(0)
   }, [atParam, framesBySecond])
 
   useEffect(() => {
