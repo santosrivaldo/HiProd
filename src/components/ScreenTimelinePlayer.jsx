@@ -84,9 +84,20 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
     setImageUrls([])
     setCurrentIndex(0)
     try {
-      const res = await api.get(
-        `/screen-frames?usuario_monitorado_id=${userId}&date=${date}&limit=2000`
-      )
+      const isFullDay = (filterStartTime === '00:00' || !filterStartTime) && (filterEndTime === '23:59' || !filterEndTime)
+      const params = new URLSearchParams({
+        usuario_monitorado_id: userId,
+        date,
+        limit: isFullDay ? '5000' : '500',
+      })
+      if (!isFullDay && filterStartTime && filterEndTime) {
+        params.set('start_time', filterStartTime.length >= 5 ? filterStartTime.slice(0, 5) : filterStartTime)
+        const endM = toMinutes(filterEndTime)
+        const endNextM = endM + 1
+        const endNext = `${String(Math.floor(endNextM / 60) % 24).padStart(2, '0')}:${String(endNextM % 60).padStart(2, '0')}`
+        params.set('end_time', endNext)
+      }
+      const res = await api.get(`/screen-frames?${params.toString()}`)
       setFrames(res.data?.frames ?? [])
     } catch (e) {
       console.error(e)
@@ -94,7 +105,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
     } finally {
       setLoading(false)
     }
-  }, [userId, date])
+  }, [userId, date, filterStartTime, filterEndTime])
 
   useEffect(() => {
     loadFrames()
@@ -102,7 +113,28 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
 
   useEffect(() => {
     if (!initialAt || framesBySecondFiltered.length === 0) return
-    setCurrentIndex(0)
+    const atStr = String(initialAt).slice(0, 19)
+    if (!atStr || atStr.length < 19) {
+      setCurrentIndex(0)
+      return
+    }
+    const atMs = new Date(atStr).getTime()
+    if (Number.isNaN(atMs)) {
+      setCurrentIndex(0)
+      return
+    }
+    let best = 0
+    let bestDiff = Infinity
+    framesBySecondFiltered.forEach((slot, i) => {
+      const slotStr = (slot.displayTime ?? slot.time || '').slice(0, 19)
+      if (!slotStr) return
+      const diff = Math.abs(new Date(slotStr).getTime() - atMs)
+      if (diff < bestDiff) {
+        bestDiff = diff
+        best = i
+      }
+    })
+    setCurrentIndex(best)
   }, [initialAt, framesBySecondFiltered])
 
   const fetchImageUrls = useCallback(async (frameIds) => {

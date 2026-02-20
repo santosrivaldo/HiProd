@@ -821,6 +821,8 @@ def list_screen_frames(current_user):
         date = request.args.get('date')  # YYYY-MM-DD
         limit = request.args.get('limit', type=int) or 500
         order = (request.args.get('order') or 'asc').lower()  # 'asc' (timeline) ou 'desc' (DVR/latest)
+        start_time = request.args.get('start_time', '').strip()  # HH:MM ou HH:MM:SS (Brasília)
+        end_time = request.args.get('end_time', '').strip()
 
         if not usuario_monitorado_id:
             return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
@@ -835,6 +837,11 @@ def list_screen_frames(current_user):
                 # captured_at no DB está em UTC (naive); filtrar por data em Brasília
                 where += " AND ((captured_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::date = %s::date"
                 params.append(date)
+            # Filtro opcional por faixa de horário (Brasília) para preview por tarefa
+            if start_time and end_time and re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', start_time) and re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', end_time):
+                where += " AND ((captured_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::time >= %s::time AND ((captured_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::time <= %s::time"
+                params.append(start_time)
+                params.append(end_time)
             params.append(limit)
             db.cursor.execute(f'''
                 SELECT id, captured_at, monitor_index, file_path
