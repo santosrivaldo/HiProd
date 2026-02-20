@@ -259,6 +259,59 @@ def delete_tag(current_user, tag_id):
         print(f"Erro ao deletar tag: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
 
+
+@tag_bp.route('/tags/export', methods=['GET'])
+@token_required
+def export_tags_csv(current_user):
+    """
+    Exporta todas as tags (ativas e inativas) em CSV para backup/importação.
+    Formato: nome, descricao, cor, produtividade, departamento_nome, tier, ativo, palavras_chave
+    palavras_chave = palavra1|peso1;palavra2|peso2 (para não perder nada na reimportação).
+    """
+    try:
+        from flask import Response
+        with DatabaseConnection() as db:
+            db.cursor.execute('''
+                SELECT t.id, t.nome, t.descricao, t.cor, t.produtividade, t.departamento_id,
+                       t.tier, t.ativo, d.nome as departamento_nome
+                FROM tags t
+                LEFT JOIN departamentos d ON t.departamento_id = d.id
+                ORDER BY t.nome, t.departamento_id NULLS LAST;
+            ''')
+            tags = db.cursor.fetchall()
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow([
+                'nome', 'descricao', 'cor', 'produtividade', 'departamento_nome', 'tier', 'ativo', 'palavras_chave'
+            ])
+            for tag in tags:
+                tag_id, nome, descricao, cor, produtividade, dept_id, tier, ativo, dept_nome = tag
+                db.cursor.execute('''
+                    SELECT palavra_chave, peso FROM tag_palavras_chave WHERE tag_id = %s ORDER BY peso DESC, palavra_chave;
+                ''', (tag_id,))
+                palavras = db.cursor.fetchall()
+                palavras_str = ';'.join(f'{p[0]}|{p[1]}' for p in palavras) if palavras else ''
+                writer.writerow([
+                    nome or '',
+                    descricao or '',
+                    cor or '#6B7280',
+                    produtividade or 'neutral',
+                    dept_nome or '',
+                    tier if tier is not None else 3,
+                    'true' if ativo else 'false',
+                    palavras_str
+                ])
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={'Content-Disposition': 'attachment; filename=tags_export.csv'}
+            )
+    except Exception as e:
+        print(f"Erro ao exportar tags: {e}")
+        return jsonify({'message': 'Erro ao exportar tags!'}), 500
+
+
 @tag_bp.route('/tags/import-csv', methods=['POST'])
 @token_required
 def import_tags_csv(current_user):
@@ -404,35 +457,35 @@ def import_tags_csv(current_user):
                         tag_id = db.cursor.fetchone()[0]
                         tags_criadas += 1
                     
-                    # Processar palavras-chave
+                    # Processar palavras-chave (formato: palavra1|peso1;palavra2|peso2 ou palavra1,palavra2)
                     palavras_chave_str = row.get('palavras_chave', '').strip()
                     if palavras_chave_str:
-                        # Remover palavras-chave existentes
                         db.cursor.execute('DELETE FROM tag_palavras_chave WHERE tag_id = %s', (tag_id,))
-                        
-                        # Separar por vírgula ou ponto-e-vírgula
-                        separadores = [',', ';']
-                        palavras = palavras_chave_str
-                        for sep in separadores:
-                            if sep in palavras:
-                                palavras = palavras.split(sep)
-                                break
-                        else:
-                            palavras = [palavras]
-                        
                         palavras_adicionadas = set()
-                        for palavra in palavras:
-                            palavra = palavra.strip()
-                            if palavra and palavra not in palavras_adicionadas:
+                        for parte in palavras_chave_str.replace(',', ';').split(';'):
+                            parte = parte.strip()
+                            if not parte:
+                                continue
+                            if '|' in parte:
+                                pal, _, peso_str = parte.partition('|')
+                                pal = pal.strip()
+                                try:
+                                    peso = int(peso_str.strip()) if peso_str.strip() else 1
+                                except ValueError:
+                                    peso = 1
+                            else:
+                                pal = parte
+                                peso = 1
+                            if pal and pal not in palavras_adicionadas:
                                 try:
                                     db.cursor.execute('''
                                         INSERT INTO tag_palavras_chave (tag_id, palavra_chave, peso)
-                                        VALUES (%s, %s, 1)
-                                        ON CONFLICT (tag_id, palavra_chave) DO NOTHING
-                                    ''', (tag_id, palavra))
-                                    palavras_adicionadas.add(palavra)
+                                        VALUES (%s, %s, %s)
+                                        ON CONFLICT (tag_id, palavra_chave) DO UPDATE SET peso = EXCLUDED.peso
+                                    ''', (tag_id, pal, peso))
+                                    palavras_adicionadas.add(pal)
                                 except Exception as e:
-                                    print(f"Erro ao inserir palavra-chave '{palavra}': {e}")
+                                    print(f"Erro ao inserir palavra-chave '{pal}': {e}")
                 
                 except Exception as e:
                     erros.append(f'Linha {row_num}: Erro ao processar - {str(e)}')

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
-import { PrinterIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { PrinterIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 import { exportToCSV, printData } from "../utils/exportUtils";
 
 const TagManagement = () => {
@@ -13,10 +13,12 @@ const TagManagement = () => {
   const [editingTag, setEditingTag] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategoria, setFilterCategoria] = useState("");
   const [filterProdutividade, setFilterProdutividade] = useState("");
   const [filterAtivo, setFilterAtivo] = useState("");
+  const fileInputRef = React.useRef(null);
   const [formData, setFormData] = useState({
     nome: "",
     descricao: "",
@@ -303,6 +305,51 @@ const TagManagement = () => {
     printData("Relatório de Tags", filteredTags, columns);
   };
 
+  const handleExportBackup = async () => {
+    try {
+      const res = await api.get("/tags/export", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", "tags_export.csv");
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setMessage("Backup exportado com sucesso!");
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err) {
+      setMessage("Erro ao exportar: " + (err.response?.data?.message || err.message));
+      setTimeout(() => setMessage(""), 5000);
+    }
+  };
+
+  const handleImportCSV = async (e) => {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await api.post("/tags/import-csv", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const data = res.data || {};
+      const criadas = data.criadas ?? 0;
+      const atualizadas = data.atualizadas ?? 0;
+      setMessage(`${criadas} tag(s) criada(s), ${atualizadas} atualizada(s).`);
+      fetchData();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setTimeout(() => setMessage(""), 5000);
+    } catch (err) {
+      setMessage("Erro ao importar: " + (err.response?.data?.message || err.message));
+      setTimeout(() => setMessage(""), 5000);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -331,6 +378,31 @@ const TagManagement = () => {
           >
             <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
             Exportar CSV
+          </button>
+          <button
+            type="button"
+            onClick={handleExportBackup}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+            Exportar backup (CSV completo)
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleImportCSV}
+            disabled={importLoading}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importLoading}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            <ArrowUpTrayIcon className="h-4 w-4 mr-2" />
+            {importLoading ? "Importando…" : "Importar do CSV"}
           </button>
           <button
             onClick={handlePrintTags}

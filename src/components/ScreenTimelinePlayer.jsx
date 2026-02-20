@@ -6,7 +6,9 @@ import {
   PauseIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon
 } from '@heroicons/react/24/outline'
 import LoadingSpinner from './LoadingSpinner'
 
@@ -30,6 +32,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
   const [currentIndex, setCurrentIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [imageUrls, setImageUrls] = useState([])
+  const [expanded, setExpanded] = useState(false)
   const playRef = useRef(null)
   const imageCache = useRef({})
 
@@ -157,22 +160,42 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
 
   if (!userId || !date) return null
 
-  return (
-    <div className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 overflow-hidden ${compact ? 'max-w-4xl' : ''}`}>
+  const canExpand = compact && framesBySecond.length > 0
+  const previewMaxH = expanded ? 'max-h-[85vh]' : 'max-h-[50vh]'
+
+  const content = (
+    <div className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-900 overflow-hidden ${compact && !expanded ? 'max-w-4xl' : ''}`}>
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
         <span className="text-sm font-medium text-gray-200">
           Timeline de telas — {date} {initialAt ? `• ${formatBrasiliaDate(initialAt, 'time')}` : ''}
         </span>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700"
-            aria-label="Fechar"
-          >
-            <XMarkIcon className="w-5 h-5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {canExpand && (
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700"
+              title={expanded ? 'Recolher' : 'Expandir preview'}
+              aria-label={expanded ? 'Recolher' : 'Expandir'}
+            >
+              {expanded ? (
+                <ArrowsPointingInIcon className="w-5 h-5" />
+              ) : (
+                <ArrowsPointingOutIcon className="w-5 h-5" />
+              )}
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-700"
+              aria-label="Fechar"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="p-3">
         {loading && (
@@ -192,14 +215,14 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
         )}
         {!loading && !error && framesBySecond.length > 0 && (
           <>
-            <div className="rounded-lg overflow-hidden bg-black flex flex-wrap items-center justify-center gap-2 min-h-[280px] max-h-[50vh] p-2">
+            <div className={`rounded-lg overflow-hidden bg-black flex flex-wrap items-center justify-center gap-2 min-h-[280px] ${previewMaxH} p-2`}>
               {imageUrls.length > 0 ? (
                 imageUrls.map((url, i) => (
                   <div key={i} className="flex-1 min-w-0 flex justify-center">
                     <img
                       src={url}
                       alt={`Tela ${i + 1}`}
-                      className="max-w-full max-h-[50vh] w-auto h-auto object-contain"
+                      className={`max-w-full w-auto h-auto object-contain ${previewMaxH}`}
                     />
                   </div>
                 ))
@@ -267,4 +290,25 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
       </div>
     </div>
   )
+
+  if (expanded) {
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+        onClick={() => setExpanded(false)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Preview expandido"
+      >
+        <div
+          className="w-full max-w-7xl max-h-[90vh] overflow-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {content}
+        </div>
+      </div>
+    )
+  }
+
+  return content
 }
