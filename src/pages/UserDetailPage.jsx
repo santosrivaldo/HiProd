@@ -22,8 +22,9 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   PlayIcon,
-  ArrowTopRightOnSquareIcon
+  SignalIcon
 } from '@heroicons/react/24/outline'
+import DvrConsoleWindow from '../components/DvrConsoleWindow'
 
 const getActivityDurationSeconds = (activity) => {
   if (!activity) return 0
@@ -293,6 +294,7 @@ export default function UserDetailPage() {
   const [timelineFilterStartTime, setTimelineFilterStartTime] = useState('00:00')
   const [timelineFilterEndTime, setTimelineFilterEndTime] = useState('23:59')
   const [keylogPreview, setKeylogPreview] = useState([])
+  const [showDvrConsole, setShowDvrConsole] = useState(false)
 
   const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
   const timelineSearch = `?userId=${id}&date=${selectedDate}`
@@ -474,34 +476,12 @@ export default function UserDetailPage() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              const params = new URLSearchParams({
-                userId: id,
-                date: selectedDate,
-                filterStartTime: timelineFilterStartTime,
-                filterEndTime: timelineFilterEndTime,
-              })
-              if (inlineTimelineAt) params.set('at', inlineTimelineAt)
-              const base = window.location.pathname.replace(/\/users\/.*$/, '') || '/'
-              window.open(`${window.location.origin}${base}/preview?${params.toString()}`, '_blank', 'noopener,noreferrer')
-            }}
+            onClick={() => setShowDvrConsole(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-600 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-            title="Abre o preview em nova guia com seletor de tela, zoom e exportar imagem"
+            title="Abre o console DVR (telas ao vivo) em janela estilo VNC"
           >
-            <ArrowTopRightOnSquareIcon className="w-5 h-5" />
-            Abrir preview em nova guia
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const base = window.location.pathname.replace(/\/users\/.*$/, '') || '/'
-              window.open(`${window.location.origin}${base}/dvr?userId=${id}`, '_blank', 'noopener,noreferrer')
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-600 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-            title="Abre as telas ao vivo (DVR) em nova guia"
-          >
-            <ArrowTopRightOnSquareIcon className="w-5 h-5" />
-            Abrir DVR ao vivo em nova guia
+            <SignalIcon className="w-5 h-5" />
+            Abrir DVR (telas ao vivo)
           </button>
           <button
             type="button"
@@ -872,6 +852,14 @@ export default function UserDetailPage() {
           Abrir player
         </Link>
       </div>
+
+      {showDvrConsole && (
+        <DvrConsoleWindow
+          userId={id}
+          userName={user?.nome}
+          onClose={() => setShowDvrConsole(false)}
+        />
+      )}
     </div>
   )
 }

@@ -8,8 +8,8 @@
     ],
     "first_seen": "2025-11-27T10:02:36.504770-03:00",
     "window_title_sample": "HiProd - Cursor",
-    "usage_count": 296,
-    "last_used": "2026-02-20T09:19:01.042783-03:00"
+    "usage_count": 332,
+    "last_used": "2026-02-20T09:31:58.023412-03:00"
   },
   "applicationframehost.exe": {
     "name": "ApplicationFrameHost",
@@ -44,8 +44,8 @@
     ],
     "first_seen": "2025-11-27T13:00:27.875203-03:00",
     "window_title_sample": "Como estou me sentindo hoje?",
-    "usage_count": 604,
-    "last_used": "2026-02-20T08:58:53.384184-03:00"
+    "usage_count": 609,
+    "last_used": "2026-02-20T09:26:37.444440-03:00"
   },
   "lockapp.exe": {
     "name": "LockApp",
@@ -80,8 +80,8 @@
     ],
     "first_seen": "2025-11-27T14:41:11.985150-03:00",
     "window_title_sample": null,
-    "usage_count": 571,
-    "last_used": "2026-02-20T09:19:21.901811-03:00"
+    "usage_count": 572,
+    "last_used": "2026-02-20T09:27:53.169228-03:00"
   },
   "startmenuexperiencehost.exe": {
     "name": "StartMenuExperienceHost",
@@ -188,8 +188,8 @@
     ],
     "first_seen": "2025-12-03T10:56:48.150149-03:00",
     "window_title_sample": "Nova notificação",
-    "usage_count": 13,
-    "last_used": "2025-12-03T15:00:11.824570-03:00"
+    "usage_count": 14,
+    "last_used": "2026-02-20T09:30:11.805922-03:00"
   },
   "simplay.exe": {
     "name": "SimPlay",
