@@ -291,6 +291,7 @@ export default function UserDetailPage() {
   const [showInlineTimeline, setShowInlineTimeline] = useState(false)
   const [timelineFilterStartTime, setTimelineFilterStartTime] = useState('00:00')
   const [timelineFilterEndTime, setTimelineFilterEndTime] = useState('23:59')
+  const [keylogPreview, setKeylogPreview] = useState([])
 
   const timelineUrl = `/timeline?userId=${id}&date=${selectedDate}`
   const timelineSearch = `?userId=${id}&date=${selectedDate}`
@@ -298,6 +299,20 @@ export default function UserDetailPage() {
     atIso
       ? `/timeline?userId=${id}&date=${selectedDate}&at=${encodeURIComponent(atIso)}`
       : timelineUrl
+
+  useEffect(() => {
+    if (!id || !inlineTimelineAt) {
+      setKeylogPreview([])
+      return
+    }
+    let cancelled = false
+    api.get(`/keylog/search?usuario_monitorado_id=${id}&at=${encodeURIComponent(inlineTimelineAt)}&window_seconds=60&limit=50`)
+      .then((res) => {
+        if (!cancelled) setKeylogPreview(res.data?.results ?? [])
+      })
+      .catch(() => { if (!cancelled) setKeylogPreview([]) })
+    return () => { cancelled = true }
+  }, [id, inlineTimelineAt])
 
   if (loading) {
     return (
@@ -517,9 +532,40 @@ export default function UserDetailPage() {
               onClose={() => {
                 setShowInlineTimeline(false)
                 setInlineTimelineAt(null)
+                setKeylogPreview([])
               }}
               compact
             />
+            {inlineTimelineAt && (
+              <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+                <h3 className="font-medium text-gray-900 dark:text-white mb-2">
+                  Texto digitado neste minuto (30s antes e depois da tarefa)
+                </h3>
+                {keylogPreview.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum keylog neste intervalo.</p>
+                ) : (
+                  <ul className="space-y-2 max-h-40 overflow-y-auto">
+                    {keylogPreview.map((k) => (
+                      <li key={k.id} className="text-sm border-b border-gray-200/50 dark:border-gray-700/50 pb-2 last:border-0">
+                        <span className="text-gray-500 dark:text-gray-400">{formatBrasiliaDate(k.captured_at, 'time')}</span>
+                        {k.window_title && (
+                          <span className="ml-2 text-gray-400 dark:text-gray-500 truncate max-w-xs inline-block align-bottom" title={k.window_title}>
+                            — {k.window_title}
+                          </span>
+                        )}
+                        <p className="mt-0.5 text-gray-700 dark:text-gray-300 break-words">{k.text_content || '—'}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Link
+                  to={timelineUrlAt(inlineTimelineAt)}
+                  className="inline-flex items-center gap-1 mt-3 text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  <FilmIcon className="w-4 h-4" /> Abrir timeline completa neste momento
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </section>
