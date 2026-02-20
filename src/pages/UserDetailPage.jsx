@@ -508,7 +508,7 @@ export default function UserDetailPage() {
           OBS: O tamanho do período pode variar conforme a atividade no período selecionado.
         </div>
         {showInlineTimeline && (
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 space-y-4 pb-24">
             <div className="flex flex-wrap items-end gap-4 p-3 rounded-xl bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filtro do preview:</span>
               <div>
