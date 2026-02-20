@@ -56,7 +56,7 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <div className="min-h-full h-full min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
             <AppContent />
           </div>
         </AuthProvider>
