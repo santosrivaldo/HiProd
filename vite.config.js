@@ -64,16 +64,11 @@ const IS_HTTPS = process.env.VITE_HTTPS === '1' || process.env.HTTPS === '1' ||
                  process.env.NODE_ENV === 'production' // Assumir HTTPS em produção
 const PUBLIC_HOST = process.env.VITE_PUBLIC_HOST || 'hiprod.grupohi.com.br'
 
-// Desabilitar HMR completamente em produção HTTPS para evitar problemas de WebSocket
-// O HMR não é necessário em produção e causa problemas de mixed content
-const hmrConfig = IS_HTTPS 
-  ? false  // Desabilitar completamente em HTTPS
-  : IS_PROXY && !IS_HTTPS
-  ? { 
-      protocol: 'ws', 
-      host: PUBLIC_HOST, 
-      clientPort: 8010 
-    }
+// Desabilitar HMR quando a página for servida por HTTPS para evitar Mixed Content (ws:// bloqueado)
+// O navegador bloqueia WebSocket inseguro (ws://) em páginas carregadas por HTTPS; exige wss://
+const isProductionOrHttps = IS_HTTPS || IS_PROXY || PUBLIC_HOST.includes('grupohi.com.br')
+const hmrConfig = isProductionOrHttps
+  ? false
   : undefined
 
 export default defineConfig({
