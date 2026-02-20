@@ -820,9 +820,12 @@ def list_screen_frames(current_user):
         usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
         date = request.args.get('date')  # YYYY-MM-DD
         limit = request.args.get('limit', type=int) or 500
+        order = (request.args.get('order') or 'asc').lower()  # 'asc' (timeline) ou 'desc' (DVR/latest)
 
         if not usuario_monitorado_id:
             return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
+
+        order_clause = "ORDER BY captured_at DESC, monitor_index ASC LIMIT %s" if order == 'desc' else "ORDER BY captured_at ASC, monitor_index ASC LIMIT %s"
 
         with DatabaseConnection() as db:
             # Filtro por data no fuso de São Paulo (evita diferença de 11h com UTC)
@@ -837,8 +840,7 @@ def list_screen_frames(current_user):
                 SELECT id, captured_at, monitor_index, file_path
                 FROM screen_frames
                 {where}
-                ORDER BY captured_at ASC, monitor_index ASC
-                LIMIT %s;
+                {order_clause};
             ''', params)
             rows = db.cursor.fetchall()
 

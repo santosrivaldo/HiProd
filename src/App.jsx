@@ -18,11 +18,13 @@ import ScreenTimelinePage from './pages/ScreenTimelinePage'
 import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
 import ScreenPreviewPage from './pages/ScreenPreviewPage'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-
+import DvrPage from './pages/DvrPage'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth()
+  const location = useLocation()
+  const isStandaloneView = location.pathname === '/preview' || location.pathname === '/dvr'
 
   if (loading) {
     return <LoadingSpinner size="xl" text="Carregando..." fullScreen />
@@ -30,6 +32,16 @@ function AppContent() {
 
   if (!isAuthenticated) {
     return <Login />
+  }
+
+  // Preview e DVR: guia só com a tela (estilo VNC), sem sidebar/layout
+  if (isStandaloneView) {
+    return (
+      <Routes>
+        <Route path="/preview" element={<ScreenPreviewPage />} />
+        <Route path="/dvr" element={<DvrPage />} />
+      </Routes>
+    )
   }
 
   return (
@@ -45,6 +57,7 @@ function AppContent() {
         <Route path="/screenshots/:activityId" element={<ScreenshotPage />} />
         <Route path="/face-presence" element={<FacePresencePage />} />
         <Route path="/timeline" element={<ScreenTimelinePage />} />
+        <Route path="/dvr" element={<DvrPage />} />
         <Route path="/keylog" element={<KeylogSearchPage />} />
         <Route path="/users/:id" element={<UserDetailPage />} />
         <Route path="/preview" element={<ScreenPreviewPage />} />

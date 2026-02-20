@@ -494,6 +494,18 @@ export default function UserDetailPage() {
           <button
             type="button"
             onClick={() => {
+              const base = window.location.pathname.replace(/\/users\/.*$/, '') || '/'
+              window.open(`${window.location.origin}${base}/dvr?userId=${id}`, '_blank', 'noopener,noreferrer')
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-amber-600 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+            title="Abre as telas ao vivo (DVR) em nova guia"
+          >
+            <ArrowTopRightOnSquareIcon className="w-5 h-5" />
+            Abrir DVR ao vivo em nova guia
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               setShowInlineTimeline(true)
               setInlineTimelineAt(null)
             }}
