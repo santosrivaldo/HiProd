@@ -340,6 +340,7 @@ def init_db():
             print("✅ Tabela face_presence_checks criada")
 
             # Tabela para frames de tela (timeline por segundo, múltiplos monitores)
+            # Imagens armazenadas no banco (BYTEA) para evitar milhares de arquivos no disco (Docker/ENOSPC).
             print("📋 Criando tabela screen_frames...")
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS screen_frames (
@@ -347,7 +348,9 @@ def init_db():
                 usuario_monitorado_id INTEGER NOT NULL,
                 captured_at TIMESTAMP NOT NULL,
                 monitor_index INTEGER NOT NULL DEFAULT 0,
-                file_path VARCHAR(512) NOT NULL,
+                file_path VARCHAR(512),
+                image_data BYTEA,
+                content_type VARCHAR(50) DEFAULT 'image/jpeg',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
             );
@@ -360,6 +363,21 @@ def init_db():
             ''')
             db.cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_screen_frames_usuario_date ON screen_frames(usuario_monitorado_id, (captured_at::date));
+            ''')
+            # Migração: adicionar image_data/content_type em instalações antigas e tornar file_path nullable
+            db.cursor.execute('''
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='screen_frames' AND column_name='image_data') THEN
+                ALTER TABLE screen_frames ADD COLUMN image_data BYTEA;
+              END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='screen_frames' AND column_name='content_type') THEN
+                ALTER TABLE screen_frames ADD COLUMN content_type VARCHAR(50) DEFAULT 'image/jpeg';
+              END IF;
+            END $$;
+            ''')
+            db.cursor.execute('''
+            ALTER TABLE screen_frames ALTER COLUMN file_path DROP NOT NULL;
             ''')
             print("✅ Tabela screen_frames criada")
 

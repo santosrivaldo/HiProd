@@ -119,6 +119,10 @@ export default defineConfig({
     fs: {
       // Permitir servir arquivos do diretório do projeto
       strict: false
+    },
+    // Evitar ENOSPC: não observar pastas com muitos arquivos (uploads, node_modules, .git)
+    watch: {
+      ignored: ['**/uploads/**', '**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**']
     }
   },
   // Configurar para produção HTTPS

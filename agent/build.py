@@ -28,6 +28,7 @@ class AgentBuilder:
         self.dist_dir = self.agent_dir / "dist"
         self.build_dir = self.agent_dir / "build"
         self.spec_file = self.agent_dir / "hiprod-agent.spec"
+        self.spec_service = self.agent_dir / "hiprod-agent-service.spec"
         
         # Determinar caminhos baseado no OS
         system = platform.system()
@@ -202,6 +203,23 @@ class AgentBuilder:
         
         self.print_success("Executavel compilado com sucesso!")
         return True
+
+    def build_service_executable(self):
+        """Compila o executável do serviço Windows (HiProd-Agent-Service.exe) para instalação sem Python."""
+        self.print_step("Compilando executavel do servico (HiProd-Agent-Service.exe)")
+        if not self.spec_service.exists():
+            self.print_error(f"Arquivo spec do servico nao encontrado: {self.spec_service}")
+            return False
+        if PYINSTALLER_AVAILABLE:
+            command = f'"{sys.executable}" -m PyInstaller --clean --noconfirm "{self.spec_service}"'
+        elif self.pyinstaller_path.exists():
+            command = f'"{self.pyinstaller_path}" --clean --noconfirm "{self.spec_service}"'
+        else:
+            command = f'pyinstaller --clean --noconfirm "{self.spec_service}"'
+        if not self.run_command(command, "Executando PyInstaller (servico)"):
+            return False
+        self.print_success("Executavel do servico compilado.")
+        return True
     
     def create_installer_package(self):
         """Cria um pacote de instalação"""
@@ -213,7 +231,7 @@ class AgentBuilder:
             shutil.rmtree(release_dir)
         release_dir.mkdir()
         
-        # Copiar executável
+        # Copiar executável principal
         exe_name = "HiProd-Agent.exe" if platform.system() == "Windows" else "HiProd-Agent"
         exe_source = self.dist_dir / exe_name
         exe_dest = release_dir / exe_name
@@ -224,6 +242,13 @@ class AgentBuilder:
         else:
             self.print_error(f"Executavel nao encontrado: {exe_source}")
             return False
+
+        # Copiar executável do serviço (instalação sem Python)
+        svc_name = "HiProd-Agent-Service.exe" if platform.system() == "Windows" else "HiProd-Agent-Service"
+        svc_source = self.dist_dir / svc_name
+        if svc_source.exists():
+            shutil.copy2(svc_source, release_dir / svc_name)
+            print(f"[OK] Executavel do servico copiado: {release_dir / svc_name}")
         
         # Copiar arquivo de configuração
         config_source = self.agent_dir / "config.example"
@@ -253,11 +278,16 @@ class AgentBuilder:
    - Verifique os logs para confirmar funcionamento
 
 3. **Instalação como Serviço (Opcional):**
-   - Execute como Administrador
-   - O agent pode ser configurado para iniciar com o Windows
+   - Com Python: execute como Administrador o install_service.bat ou
+     python agent_service.py install
+   - Sem Python: coloque HiProd-Agent.exe e HiProd-Agent-Service.exe na mesma pasta.
+     Abra o prompt como Administrador nessa pasta e execute:
+     HiProd-Agent-Service.exe install
+   - Iniciar/parar: net start HiProdAgent / net stop HiProdAgent
 
 ## Arquivos inclusos:
 - `{exe_name}`: Executável principal
+- `HiProd-Agent-Service.exe`: Instalador do serviço Windows (para iniciar com o sistema, sem precisar de Python)
 - `config.example`: Exemplo de configuração
 - `README.txt`: Este arquivo
 
@@ -296,10 +326,14 @@ Data: {time.strftime('%d/%m/%Y %H:%M')}
         # Limpar builds anteriores
         self.clean_build_dirs()
         
-        # Compilar executável
+        # Compilar executável principal
         if not self.build_executable():
             return False
-        
+
+        # Compilar executável do serviço (Windows) para instalação sem Python
+        if platform.system() == "Windows" and self.spec_service.exists():
+            self.build_service_executable()
+
         # Criar pacote de distribuição
         if not self.create_installer_package():
             return False

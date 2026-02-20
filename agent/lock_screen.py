@@ -2715,7 +2715,7 @@ def main():
                     _tk._default_root = None
             except Exception:
                 print("[WARN] Você possui mais de 10h de tempo em serviço. Finalize seu dia no Bitrix24.")
-
+        
         # Função auxiliar para iniciar agent sem tela de bloqueio
         def start_agent_directly(start_time=None):
             print("[FLUXO] start_agent_directly() iniciado.")
@@ -2748,7 +2748,7 @@ def main():
                 # Criar ou reutilizar botão flutuante
                 print("[FLUXO] Chamando create_floating_button()...")
                 try:
-                    floating_btn = create_floating_button(user_id=user_id, start_time=start_time)
+                floating_btn = create_floating_button(user_id=user_id, start_time=start_time)
                 except Exception as e_btn:
                     print(f"[ERROR] Falha ao criar botão flutuante: {e_btn}")
                     import traceback
@@ -2780,7 +2780,7 @@ def main():
                 
                 def load_agent_in_background():
                     print("[INFO] Importando módulo agent em background...")
-                    agent_module = import_agent_module()
+                agent_module = import_agent_module()
                     if floating_btn and floating_btn.root:
                         try:
                             floating_btn.root.after(0, lambda: start_agent_after_import(agent_module))
@@ -2788,9 +2788,9 @@ def main():
                             pass
                 
                 # Agendar carregamento do agent em thread (não bloqueia a janela)
-                if floating_btn and floating_btn.root:
+                    if floating_btn and floating_btn.root:
                     floating_btn.root.after(0, lambda: threading.Thread(target=load_agent_in_background, daemon=True).start())
-                    floating_btn.root.mainloop()
+                        floating_btn.root.mainloop()
                 
                 # Janela fechada: parar o agent de forma ordenada antes de encerrar o processo
                 try:
@@ -2865,7 +2865,7 @@ def main():
         import traceback
         print(f"Erro ao iniciar interface: {e}")
         try:
-            print(traceback.format_exc())
+        print(traceback.format_exc())
         except UnicodeEncodeError:
             traceback.print_exc()
         sys.exit(1)

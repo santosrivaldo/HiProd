@@ -727,9 +727,15 @@ def get_screenshots_batch(current_user):
 
 
 # ========== Screen Frames (Timeline - frames por segundo, múltiplos monitores) ==========
+# Imagens armazenadas no banco (BYTEA) para evitar milhares de arquivos no disco (Docker/ENOSPC).
+
+def _mimetype_from_filename(filename):
+    ext = (os.path.splitext(filename or '')[-1] or '').lower()
+    return {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp'}.get(ext, 'image/jpeg')
+
 
 def _ensure_screen_frames_dir():
-    """Garante que o diretório de upload de frames existe."""
+    """Garante que o diretório de upload existe (apenas para leitura de registros legados com file_path)."""
     upload_dir = getattr(Config, 'UPLOAD_FOLDER', None) or os.path.join(
         os.path.dirname(os.path.dirname(__file__)), 'uploads', 'screen_frames'
     )
@@ -742,14 +748,13 @@ def _ensure_screen_frames_dir():
 def add_screen_frames(current_user):
     """
     Recebe frames de tela (screenshots) do agente.
+    Armazena no banco (BYTEA); não grava mais em disco.
     multipart/form-data: usuario_monitorado_id (opcional se X-User-Name), captured_at (opcional), arquivos em 'frames' ou 'frames[]'.
-    Um frame por monitor, enviados a cada segundo.
     """
     try:
-        # usuario_monitorado_id: do agente (X-User-Name) é current_user[0]
         usuario_monitorado_id = request.form.get('usuario_monitorado_id', type=int)
         if usuario_monitorado_id is None and current_user and len(current_user) > 0:
-            usuario_monitorado_id = current_user[0]  # id do usuario_monitorado quando autenticado por X-User-Name
+            usuario_monitorado_id = current_user[0]
         if not usuario_monitorado_id:
             return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
 
@@ -764,39 +769,28 @@ def add_screen_frames(current_user):
         else:
             captured_at = get_brasilia_now()
 
-        # Arquivos: request.files.getlist('frames') ou request.files.getlist('frames[]')
         files = request.files.getlist('frames') or request.files.getlist('frames[]')
         if not files or not any(f and f.filename for f in files):
             return jsonify({'message': 'Envie pelo menos um frame em "frames" ou "frames[]"!'}), 400
-
-        upload_base = _ensure_screen_frames_dir()
-        date_dir = captured_at.strftime('%Y-%m-%d')
-        user_dir = str(usuario_monitorado_id)
-        target_dir = os.path.join(upload_base, date_dir, user_dir)
-        os.makedirs(target_dir, exist_ok=True)
 
         saved = []
         with DatabaseConnection() as db:
             for monitor_index, f in enumerate(files):
                 if not f or not f.filename:
                     continue
-                ext = os.path.splitext(f.filename)[1] or '.jpg'
-                if ext.lower() not in ('.jpg', '.jpeg', '.png', '.webp'):
-                    ext = '.jpg'
-                unique = uuid.uuid4().hex[:12]
-                filename = f"{captured_at.strftime('%H-%M-%S')}_{monitor_index}_{unique}{ext}"
-                file_path = os.path.join(target_dir, filename)
-                rel_path = os.path.join(date_dir, user_dir, filename).replace('\\', '/')
-                f.save(file_path)
+                image_bytes = f.read()
+                if not image_bytes:
+                    continue
+                content_type = _mimetype_from_filename(f.filename)
 
                 db.cursor.execute('''
-                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, file_path)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id;
-                ''', (usuario_monitorado_id, captured_at, monitor_index, rel_path))
+                ''', (usuario_monitorado_id, captured_at, monitor_index, image_bytes, content_type))
                 row_id = db.cursor.fetchone()[0]
-                saved.append({'id': row_id, 'monitor_index': monitor_index, 'file_path': rel_path})
-        print(f"📥 Screen frames: {len(saved)} frames salvos para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
+                saved.append({'id': row_id, 'monitor_index': monitor_index})
+        print(f"📥 Screen frames: {len(saved)} frames salvos (DB) para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
         return jsonify({
             'message': 'Frames recebidos com sucesso!',
             'count': len(saved),
@@ -866,22 +860,27 @@ def list_screen_frames(current_user):
 @activity_bp.route('/screen-frames/<int:frame_id>/image', methods=['GET'])
 @token_required
 def get_screen_frame_image(current_user, frame_id):
-    """Serve a imagem de um frame para exibição na timeline."""
+    """Serve a imagem de um frame (do banco ou do disco para registros legados)."""
     try:
         with DatabaseConnection() as db:
             db.cursor.execute(
-                'SELECT file_path FROM screen_frames WHERE id = %s;',
+                'SELECT image_data, content_type, file_path FROM screen_frames WHERE id = %s;',
                 (frame_id,)
             )
             row = db.cursor.fetchone()
         if not row:
             return jsonify({'message': 'Frame não encontrado!'}), 404
-        file_path = row[0]
-        upload_base = _ensure_screen_frames_dir()
-        full_path = os.path.join(upload_base, file_path)
-        if not os.path.isfile(full_path):
-            return jsonify({'message': 'Arquivo de frame não encontrado!'}), 404
-        return send_file(full_path, mimetype='image/jpeg', max_age=3600)
+        image_data, content_type, file_path = row
+        if image_data:
+            from io import BytesIO
+            mimetype = (content_type or 'image/jpeg').strip() or 'image/jpeg'
+            return send_file(BytesIO(image_data), mimetype=mimetype, max_age=3600)
+        if file_path:
+            upload_base = _ensure_screen_frames_dir()
+            full_path = os.path.join(upload_base, file_path)
+            if os.path.isfile(full_path):
+                return send_file(full_path, mimetype='image/jpeg', max_age=3600)
+        return jsonify({'message': 'Arquivo de frame não encontrado!'}), 404
     except Exception as e:
         print(f"❌ Erro ao servir frame {frame_id}: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
