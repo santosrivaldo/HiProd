@@ -17,6 +17,7 @@ import FacePresencePage from './pages/FacePresencePage'
 import ScreenTimelinePage from './pages/ScreenTimelinePage'
 import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
+import ScreenPreviewPage from './pages/ScreenPreviewPage'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 
@@ -46,6 +47,7 @@ function AppContent() {
         <Route path="/timeline" element={<ScreenTimelinePage />} />
         <Route path="/keylog" element={<KeylogSearchPage />} />
         <Route path="/users/:id" element={<UserDetailPage />} />
+        <Route path="/preview" element={<ScreenPreviewPage />} />
       </Routes>
     </Layout>
   )

@@ -21,7 +21,8 @@ import {
   InformationCircleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  PlayIcon
+  PlayIcon,
+  ArrowTopRightOnSquareIcon
 } from '@heroicons/react/24/outline'
 
 const getActivityDurationSeconds = (activity) => {
@@ -470,6 +471,25 @@ export default function UserDetailPage() {
           >
             <FilmIcon className="w-5 h-5" />
             Abrir timeline de telas
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const params = new URLSearchParams({
+                userId: id,
+                date: selectedDate,
+                filterStartTime: timelineFilterStartTime,
+                filterEndTime: timelineFilterEndTime,
+              })
+              if (inlineTimelineAt) params.set('at', inlineTimelineAt)
+              const base = window.location.pathname.replace(/\/users\/.*$/, '') || '/'
+              window.open(`${window.location.origin}${base}/preview?${params.toString()}`, '_blank', 'noopener,noreferrer')
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-600 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+            title="Abre o preview em outra aba com seletor de tela, zoom e exportar imagem"
+          >
+            <ArrowTopRightOnSquareIcon className="w-5 h-5" />
+            Abrir preview em nova aba
           </button>
           <button
             type="button"
