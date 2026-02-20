@@ -44,7 +44,8 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
     const keys = Array.from(byTime.keys()).sort()
     return keys.map((k) => {
       const items = (byTime.get(k) || []).sort((a, b) => (a.monitor_index ?? 0) - (b.monitor_index ?? 0))
-      return { time: k, items }
+      const displayTime = items[0]?.captured_at || k
+      return { time: k, displayTime, items }
     })
   }, [frames])
 
@@ -245,7 +246,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
             <div className="text-center text-xs text-gray-500">
               {currentSlot && (
                 <>
-                  {formatBrasiliaDate(currentSlot.time, 'datetime')} —{' '}
+                  {formatBrasiliaDate(currentSlot.displayTime ?? currentSlot.time, 'datetime')} —{' '}
                   {currentIndex + 1} / {framesBySecondFiltered.length} (segundos)
                   {framesBySecondFiltered.length < framesBySecond.length && (
                     <span className="ml-1 text-gray-500">(filtrado de {framesBySecond.length})</span>
@@ -262,7 +263,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
                   className={`w-1.5 h-4 rounded-sm transition-colors ${
                     i === currentIndex ? 'bg-indigo-500' : 'bg-gray-600 hover:bg-gray-500'
                   }`}
-                  title={formatBrasiliaDate(slot.time, 'datetime')}
+                  title={formatBrasiliaDate(slot.displayTime ?? slot.time, 'datetime')}
                 />
               ))}
               {framesBySecondFiltered.length > 80 && (

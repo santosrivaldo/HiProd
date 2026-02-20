@@ -10,16 +10,23 @@ def get_brasilia_now():
     return datetime.now(BRASILIA_TZ)
 
 def format_datetime_brasilia(dt):
-    """Formata datetime para string no timezone de Brasília"""
+    """Formata datetime para string no timezone de Brasília (ISO com -03:00 para o frontend exibir certo)."""
     if dt is None:
         return None
-    if dt.tzinfo is None:
-        # Se não tem timezone, assume que é UTC e converte para Brasília
-        dt = dt.replace(tzinfo=timezone.utc).astimezone(BRASILIA_TZ)
-    elif dt.tzinfo != BRASILIA_TZ:
-        # Converte para Brasília se não estiver no timezone correto
-        dt = dt.astimezone(BRASILIA_TZ)
-    return dt.isoformat()
+    try:
+        if hasattr(dt, 'tzinfo') and dt.tzinfo is None:
+            # Valor vindo do DB (TIMESTAMP sem TZ): considerar como UTC e converter para Brasília
+            dt = dt.replace(tzinfo=timezone.utc).astimezone(BRASILIA_TZ)
+        elif getattr(dt, 'tzinfo', None) and dt.tzinfo != BRASILIA_TZ:
+            dt = dt.astimezone(BRASILIA_TZ)
+        s = dt.isoformat()
+        # Garantir que o frontend receba sempre ISO com timezone (evita ser interpretado como UTC/local errado)
+        has_tz = s.endswith('Z') or s.endswith('z') or (len(s) >= 6 and s[-6] in '+-' and s[-3] == ':')
+        if s and 'T' in s and not has_tz:
+            s = s + '-03:00'
+        return s
+    except Exception:
+        return None
 
 def classify_activity_with_tags(active_window, ociosidade, user_department_id=None, activity_id=None, domain=None):
     """Função para classificar atividade automaticamente usando tags com prioridade para domínio"""

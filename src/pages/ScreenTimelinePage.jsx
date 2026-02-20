@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../services/api'
+import { formatBrasiliaDate } from '../utils/timezoneUtils'
 import { formatBrasiliaDate, getTodayIsoDate, formatBrasiliaTimeHHMM } from '../utils/timezoneUtils'
 import {
   PlayIcon,
@@ -9,11 +10,12 @@ import {
   ChevronRightIcon,
   FilmIcon,
   Squares2X2Icon,
-  Square2StackIcon
+  Square2StackIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline'
 
 export default function ScreenTimelinePage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [users, setUsers] = useState([])
   const [selectedUser, setSelectedUser] = useState(searchParams.get('userId') || '')
   const [selectedDate, setSelectedDate] = useState(searchParams.get('date') || getTodayIsoDate())
@@ -27,21 +29,25 @@ export default function ScreenTimelinePage() {
   const [filterStartTime, setFilterStartTime] = useState('00:00') // HH:mm
   const [filterEndTime, setFilterEndTime] = useState('23:59') // HH:mm
   const [error, setError] = useState(null)
+  const [atividades, setAtividades] = useState([])
+  const [showAtividades, setShowAtividades] = useState(true)
   const playRef = useRef(null)
   const imageCache = useRef({})
 
   // Agrupar frames por segundo; dentro de cada segundo, ordenar por monitor_index
+  // time = chave para ordenação (19 chars); displayTime = captured_at completo para exibir em Brasília
   const framesBySecond = React.useMemo(() => {
     const byTime = new Map()
     frames.forEach((f) => {
-      const key = f.captured_at.slice(0, 19)
+      const key = (f.captured_at || '').slice(0, 19)
       if (!byTime.has(key)) byTime.set(key, [])
       byTime.get(key).push(f)
     })
     const keys = Array.from(byTime.keys()).sort()
     return keys.map((k) => {
       const items = (byTime.get(k) || []).sort((a, b) => (a.monitor_index ?? 0) - (b.monitor_index ?? 0))
-      return { time: k, items }
+      const displayTime = items[0]?.captured_at || k
+      return { time: k, displayTime, items }
     })
   }, [frames])
 
@@ -51,7 +57,7 @@ export default function ScreenTimelinePage() {
   }
 
   const slotTimeMinutes = (slotTime) => {
-    const t = slotTime.slice(11, 16)
+    const t = String(slotTime).slice(11, 16)
     return toMinutes(t)
   }
 
@@ -123,6 +129,18 @@ export default function ScreenTimelinePage() {
     }
   }, [selectedUser, selectedDate])
 
+  const loadAtividades = useCallback(async () => {
+    if (!selectedUser || !selectedDate) return
+    try {
+      const res = await api.get(
+        `/atividades-by-window?usuario_monitorado_id=${selectedUser}&date=${selectedDate}&limit=200`
+      )
+      setAtividades(res.data?.atividades ?? [])
+    } catch (e) {
+      setAtividades([])
+    }
+  }, [selectedUser, selectedDate])
+
   const fetchImageUrls = useCallback(async (frameIds) => {
     if (!frameIds?.length) {
       setImageUrls([])
@@ -162,6 +180,10 @@ export default function ScreenTimelinePage() {
   }, [loadFrames])
 
   useEffect(() => {
+    loadAtividades()
+  }, [loadAtividades])
+
+  useEffect(() => {
     setCurrentIndex((i) => Math.min(i, Math.max(0, framesBySecondFiltered.length - 1)))
   }, [framesBySecondFiltered.length])
 
@@ -183,7 +205,9 @@ export default function ScreenTimelinePage() {
     let bestIdx = 0
     let bestDiff = Infinity
     filtered.forEach((slot, i) => {
-      const slotTime = new Date(slot.time.replace(' ', 'T')).getTime()
+      const slotTimeStr = slot.displayTime || slot.time || ''
+      const slotTime = slotTimeStr ? new Date(slotTimeStr.replace(' ', 'T')).getTime() : 0
+      if (!slotTime) return
       const diff = Math.abs(slotTime - atTime)
       if (diff < bestDiff) {
         bestDiff = diff
@@ -412,7 +436,7 @@ export default function ScreenTimelinePage() {
           <div className="text-center text-sm text-gray-500 dark:text-gray-400">
             {currentSlot && (
               <span>
-                {formatBrasiliaDate(currentSlot.time, 'datetime')} —{' '}
+                {formatBrasiliaDate(currentSlot.displayTime ?? currentSlot.time, 'datetime')} —{' '}
                 {currentIndex + 1} / {framesBySecondFiltered.length} (segundos)
                 {framesBySecondFiltered.length < framesBySecond.length && (
                   <span className="ml-1 text-gray-400">(filtrado de {framesBySecond.length})</span>
@@ -435,7 +459,7 @@ export default function ScreenTimelinePage() {
                     ? 'bg-indigo-600 shadow-md shadow-indigo-500/40'
                     : 'bg-white/50 dark:bg-white/20 hover:bg-white/70 dark:hover:bg-white/30 border border-white/20'
                 }`}
-                title={formatBrasiliaDate(slot.time, 'datetime')}
+                title={formatBrasiliaDate(slot.displayTime ?? slot.time, 'datetime')}
               />
             ))}
             {framesBySecondFiltered.length > 120 && (
@@ -444,6 +468,55 @@ export default function ScreenTimelinePage() {
               </span>
             )}
           </div>
+
+          {atividades.length > 0 && (
+            <div className="glass-card p-4 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowAtividades((v) => !v)}
+                className="flex items-center gap-2 w-full text-left font-medium text-gray-900 dark:text-white"
+              >
+                <ClipboardDocumentListIcon className="w-5 h-5 text-indigo-500" />
+                Atividades neste dia ({atividades.length})
+              </button>
+              {showAtividades && (
+                <div className="mt-3 max-h-48 overflow-y-auto space-y-1">
+                  {atividades.slice(0, 50).map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-white/10 dark:hover:bg-gray-700/50"
+                    >
+                      <span className="text-sm text-gray-600 dark:text-gray-300 truncate flex-1" title={a.active_window}>
+                        {formatBrasiliaDate(a.horario, 'time')} — {a.active_window || a.categoria}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const at = a.horario_iso || a.horario
+                          if (at) {
+                            setSearchParams((prev) => {
+                              const p = new URLSearchParams(prev)
+                              p.set('at', at)
+                              return p
+                            })
+                          }
+                        }}
+                        className="flex-shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                        title="Ir para este momento na timeline"
+                      >
+                        Tela
+                      </button>
+                    </div>
+                  ))}
+                  {atividades.length > 50 && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 pt-1">
+                      +{atividades.length - 50} atividades (mostrando 50)
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

@@ -764,10 +764,14 @@ def add_screen_frames(current_user):
                 captured_at = datetime.fromisoformat(captured_at_str.replace('Z', '+00:00'))
                 if captured_at.tzinfo is None:
                     captured_at = captured_at.replace(tzinfo=timezone.utc)
+                else:
+                    captured_at = captured_at.astimezone(timezone.utc)
             except Exception:
-                captured_at = get_brasilia_now()
+                captured_at = get_brasilia_now().astimezone(timezone.utc)
         else:
-            captured_at = get_brasilia_now()
+            captured_at = get_brasilia_now().astimezone(timezone.utc)
+        # Armazenar sempre em UTC (naive) no DB para consistência
+        captured_at_utc = captured_at.replace(tzinfo=None) if captured_at.tzinfo else captured_at
 
         files = request.files.getlist('frames') or request.files.getlist('frames[]')
         if not files or not any(f and f.filename for f in files):
@@ -787,7 +791,7 @@ def add_screen_frames(current_user):
                     INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type)
                     VALUES (%s, %s, %s, %s, %s)
                     RETURNING id;
-                ''', (usuario_monitorado_id, captured_at, monitor_index, image_bytes, content_type))
+                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, image_bytes, content_type))
                 row_id = db.cursor.fetchone()[0]
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
         print(f"📥 Screen frames: {len(saved)} frames salvos (DB) para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
@@ -825,8 +829,8 @@ def list_screen_frames(current_user):
             where = "WHERE usuario_monitorado_id = %s"
             params = [usuario_monitorado_id]
             if date:
-                # Filtro por data no fuso de São Paulo (captured_at no DB está em UTC)
-                where += " AND (captured_at AT TIME ZONE 'America/Sao_Paulo')::date = %s::date"
+                # captured_at no DB está em UTC (naive); filtrar por data em Brasília
+                where += " AND ((captured_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::date = %s::date"
                 params.append(date)
             params.append(limit)
             db.cursor.execute(f'''
@@ -838,7 +842,7 @@ def list_screen_frames(current_user):
             ''', params)
             rows = db.cursor.fetchall()
 
-        # Retornar captured_at sempre em horário de São Paulo
+        # Retornar captured_at sempre em Brasília, ISO com -03:00 (DB guarda UTC)
         frames = []
         for r in rows:
             frame_id, captured_at, monitor_index, file_path = r
@@ -883,6 +887,186 @@ def get_screen_frame_image(current_user, frame_id):
         return jsonify({'message': 'Arquivo de frame não encontrado!'}), 404
     except Exception as e:
         print(f"❌ Erro ao servir frame {frame_id}: {e}")
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+
+# ========== Keylog (texto digitado - busca e alinhamento com timeline/screen) ==========
+
+@activity_bp.route('/keylog', methods=['POST'])
+@agent_required
+def add_keylog(current_user):
+    """
+    Recebe entradas de keylog do agente.
+    Body: { "usuario_monitorado_id": int, "entries": [ { "captured_at": "ISO", "text_content": "...", "window_title": "", "domain": "", "application": "" } ] }
+    """
+    try:
+        data = request.json or {}
+        usuario_monitorado_id = data.get('usuario_monitorado_id')
+        if usuario_monitorado_id is None and current_user and len(current_user) > 0:
+            usuario_monitorado_id = current_user[0]
+        if not usuario_monitorado_id:
+            return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
+        entries = data.get('entries', [])
+        if not entries:
+            return jsonify({'message': 'Envie pelo menos um item em "entries"!'}), 400
+
+        captured_at_utc = None
+        with DatabaseConnection() as db:
+            for e in entries:
+                captured_at_str = e.get('captured_at')
+                if captured_at_str:
+                    try:
+                        captured_at = datetime.fromisoformat(captured_at_str.replace('Z', '+00:00'))
+                        if captured_at.tzinfo:
+                            captured_at = captured_at.astimezone(timezone.utc)
+                        captured_at_utc = captured_at.replace(tzinfo=None)
+                    except Exception:
+                        captured_at_utc = get_brasilia_now().astimezone(timezone.utc).replace(tzinfo=None)
+                else:
+                    captured_at_utc = get_brasilia_now().astimezone(timezone.utc).replace(tzinfo=None)
+                text_content = (e.get('text_content') or '').strip()
+                if not text_content:
+                    continue
+                window_title = (e.get('window_title') or '')[:500]
+                domain = (e.get('domain') or '')[:255]
+                application = (e.get('application') or '')[:100]
+                db.cursor.execute('''
+                    INSERT INTO keylog_entries (usuario_monitorado_id, captured_at, text_content, window_title, domain, application)
+                    VALUES (%s, %s, %s, %s, %s, %s);
+                ''', (usuario_monitorado_id, captured_at_utc, text_content, window_title, domain, application))
+        return jsonify({'message': 'Keylog recebido!', 'count': len(entries)}), 201
+    except Exception as ex:
+        print(f"Erro ao salvar keylog: {ex}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+
+@activity_bp.route('/keylog/search', methods=['GET'])
+@token_required
+def search_keylog(current_user):
+    """
+    Busca keylog por palavra, usuário, departamento e período.
+    Query: q=, usuario_monitorado_id=, departamento_id=, date_from=, date_to=, limit=
+    Retorna lista com captured_at (Brasília), usuario_monitorado_nome, window_title, text_snippet, link para timeline (userId, date, at).
+    """
+    try:
+        q = (request.args.get('q') or '').strip()
+        usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
+        departamento_id = request.args.get('departamento_id', type=int)
+        date_from = request.args.get('date_from')
+        date_to = request.args.get('date_to')
+        limit = min(request.args.get('limit', type=int) or 50, 200)
+
+        with DatabaseConnection() as db:
+            where_parts = ['1=1']
+            params = []
+            if q:
+                where_parts.append("to_tsvector('portuguese', k.text_content) @@ plainto_tsquery('portuguese', %s)")
+                params.append(q)
+            if usuario_monitorado_id:
+                where_parts.append('k.usuario_monitorado_id = %s')
+                params.append(usuario_monitorado_id)
+            if departamento_id:
+                where_parts.append('um.departamento_id = %s')
+                params.append(departamento_id)
+            if date_from:
+                where_parts.append("(k.captured_at AT TIME ZONE 'UTC')::date >= %s::date")
+                params.append(date_from)
+            if date_to:
+                where_parts.append("(k.captured_at AT TIME ZONE 'UTC')::date <= %s::date")
+                params.append(date_to)
+            params.append(limit)
+            sql = f'''
+                SELECT k.id, k.usuario_monitorado_id, um.nome AS usuario_monitorado_nome, k.captured_at,
+                       k.text_content, k.window_title, k.domain, k.application
+                FROM keylog_entries k
+                JOIN usuarios_monitorados um ON um.id = k.usuario_monitorado_id
+                WHERE {' AND '.join(where_parts)}
+                ORDER BY k.captured_at DESC
+                LIMIT %s;
+            '''
+            db.cursor.execute(sql, params)
+            rows = db.cursor.fetchall()
+
+        results = []
+        for r in rows:
+            kid, umid, nome, captured_at, text_content, window_title, domain, application = r
+            captured_br = format_datetime_brasilia(captured_at) if captured_at else None
+            date_iso = captured_at.date().isoformat() if hasattr(captured_at, 'date') else None
+            results.append({
+                'id': kid,
+                'usuario_monitorado_id': umid,
+                'usuario_monitorado_nome': nome,
+                'captured_at': captured_br,
+                'captured_at_iso': captured_at.isoformat() if hasattr(captured_at, 'isoformat') else str(captured_at),
+                'date': date_iso,
+                'text_content': (text_content or '')[:500],
+                'window_title': window_title or '',
+                'domain': domain or '',
+                'application': application or '',
+                'timeline_params': {'userId': umid, 'date': date_iso, 'at': captured_br}
+            })
+        return jsonify({'results': results, 'count': len(results)})
+    except Exception as ex:
+        print(f"Erro ao buscar keylog: {ex}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'message': 'Erro interno do servidor!'}), 500
+
+
+@activity_bp.route('/atividades-by-window', methods=['GET'])
+@token_required
+def get_atividades_by_window(current_user):
+    """
+    Lista atividades por usuario_monitorado_id e intervalo de tempo (para alinhar com timeline de screen).
+    Query: usuario_monitorado_id=, date= (YYYY-MM-DD), limit=
+    Retorna atividades com horario em Brasília e referência para abrir a screen naquele momento.
+    """
+    try:
+        usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
+        date = request.args.get('date')
+        limit = min(request.args.get('limit', type=int) or 200, 500)
+        if not usuario_monitorado_id:
+            return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
+        where = "a.usuario_monitorado_id = %s"
+        params = [usuario_monitorado_id]
+        if date:
+            where += " AND ((a.horario AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo')::date = %s::date"
+            params.append(date)
+        params.append(limit)
+        with DatabaseConnection() as db:
+            db.cursor.execute(f'''
+                SELECT a.id, a.usuario_monitorado_id, a.horario, a.active_window, a.categoria, a.produtividade, a.domain, a.application
+                FROM atividades a
+                WHERE {where}
+                ORDER BY a.horario ASC
+                LIMIT %s;
+            ''', params)
+            rows = db.cursor.fetchall()
+        atividades = []
+        for r in rows:
+            aid, umid, horario, active_window, categoria, produtividade, domain, application = r
+            horario_br = format_datetime_brasilia(horario) if horario else None
+            date_iso = horario.date().isoformat() if hasattr(horario, 'date') else None
+            atividades.append({
+                'id': aid,
+                'usuario_monitorado_id': umid,
+                'horario': horario_br,
+                'horario_iso': horario.isoformat() if hasattr(horario, 'isoformat') else str(horario),
+                'date': date_iso,
+                'active_window': active_window or '',
+                'categoria': categoria or '',
+                'produtividade': produtividade or '',
+                'domain': domain or '',
+                'application': application or '',
+                'timeline_params': {'userId': umid, 'date': date_iso, 'at': horario_br}
+            })
+        return jsonify({'atividades': atividades, 'count': len(atividades)})
+    except Exception as ex:
+        print(f"Erro ao listar atividades por janela: {ex}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'message': 'Erro interno do servidor!'}), 500
 
 

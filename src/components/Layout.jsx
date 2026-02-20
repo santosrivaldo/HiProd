@@ -35,6 +35,7 @@ const navigationGroups = [
     items: [
       { name: "Gerenciamento", icon: ClipboardDocumentListIcon, component: "management", path: "/activities" },
       { name: "Timeline de telas", icon: FilmIcon, component: "timeline", path: "/timeline" },
+      { name: "Busca por texto digitado", icon: KeyIcon, component: "keylog", path: "/keylog" },
       { name: "Presença Facial", icon: UserIcon, component: "face-presence", path: "/face-presence" },
     ],
   },

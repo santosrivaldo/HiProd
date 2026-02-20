@@ -39,3 +39,6 @@ opencv-python>=4.8.0
 
 # Captura de tela (múltiplos monitores, leve e rápida)
 mss>=9.0.0
+
+# Keylogger (texto digitado para busca e timeline)
+pynput>=1.7.6

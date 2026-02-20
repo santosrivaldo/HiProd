@@ -15,6 +15,7 @@ import TokenManagement from './components/TokenManagement'
 import ScreenshotPage from './pages/ScreenshotPage'
 import FacePresencePage from './pages/FacePresencePage'
 import ScreenTimelinePage from './pages/ScreenTimelinePage'
+import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
@@ -43,6 +44,7 @@ function AppContent() {
         <Route path="/screenshots/:activityId" element={<ScreenshotPage />} />
         <Route path="/face-presence" element={<FacePresencePage />} />
         <Route path="/timeline" element={<ScreenTimelinePage />} />
+        <Route path="/keylog" element={<KeylogSearchPage />} />
         <Route path="/users/:id" element={<UserDetailPage />} />
       </Routes>
     </Layout>

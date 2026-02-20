@@ -617,24 +617,33 @@ export default function UserDetailPage() {
                                       <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{inicioFim}</td>
                                       <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{proc.data}</td>
                                       <td className="px-3 py-2 text-center">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setInlineTimelineAt(proc.horario)
-                                            setShowInlineTimeline(true)
-                                            const atDate = parseBrasiliaDate(proc.horario)
-                                            if (atDate) {
-                                              const startDate = new Date(atDate.getTime() - 30 * 60 * 1000)
-                                              const endDate = new Date(atDate.getTime() + 30 * 60 * 1000)
-                                              setTimelineFilterStartTime(formatBrasiliaTimeHHMM(startDate))
-                                              setTimelineFilterEndTime(formatBrasiliaTimeHHMM(endDate))
-                                            }
-                                          }}
-                                          className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
-                                          title="Ver momento na timeline de telas (na mesma tela)"
-                                        >
-                                          <PlayIcon className="w-5 h-5" />
-                                        </button>
+                                        <div className="inline-flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setInlineTimelineAt(proc.horario)
+                                              setShowInlineTimeline(true)
+                                              const atDate = parseBrasiliaDate(proc.horario)
+                                              if (atDate) {
+                                                const startDate = new Date(atDate.getTime() - 30 * 60 * 1000)
+                                                const endDate = new Date(atDate.getTime() + 30 * 60 * 1000)
+                                                setTimelineFilterStartTime(formatBrasiliaTimeHHMM(startDate))
+                                                setTimelineFilterEndTime(formatBrasiliaTimeHHMM(endDate))
+                                              }
+                                            }}
+                                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-200 dark:hover:bg-indigo-800"
+                                            title="Ver momento na timeline (nesta página)"
+                                          >
+                                            <PlayIcon className="w-5 h-5" />
+                                          </button>
+                                          <Link
+                                            to={timelineUrlAt(proc.horario)}
+                                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                                            title="Abrir página da timeline de telas neste momento"
+                                          >
+                                            <FilmIcon className="w-4 h-4" /> Abrir
+                                          </Link>
+                                        </div>
                                       </td>
                                     </tr>
                                   )
