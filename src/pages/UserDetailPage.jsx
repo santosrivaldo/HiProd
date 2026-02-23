@@ -196,7 +196,11 @@ export default function UserDetailPage() {
     ? `${(user.horario_inicio_trabalho || '09:00').slice(0, 5)}-${(user.horario_fim_trabalho || '18:00').slice(0, 5)} (Almoço: 12h-13h)`
     : '09h-18h (Almoço: 12h-13h)'
 
-  const custoColaboradorDia = 166.67
+  const custoColaboradorDia =
+    user?.valor_contrato != null && Number(user.valor_contrato) > 0
+      ? Number(user.valor_contrato)
+      : 166.67
+  const usaValorContratoCadastrado = user?.valor_contrato != null && Number(user.valor_contrato) > 0
   const totalProd = daySummary.total
   const custoProdutivo =
     totalProd > 0 ? (daySummary.productive / totalProd) * custoColaboradorDia : 0
@@ -744,7 +748,14 @@ export default function UserDetailPage() {
               value={formatTime(daySummary.nonproductive)}
               valueClassName="text-red-700 dark:text-red-300 bg-red-50/50 dark:bg-red-900/10 px-2 py-1 rounded"
             />
-            <SummaryCard label="Custo do colaborador no dia" value={`${custoColaboradorDia.toFixed(2)} BRL`} />
+            <div>
+              <SummaryCard label="Custo do colaborador no dia (custo de produtividade)" value={`${custoColaboradorDia.toFixed(2)} BRL`} />
+              {!usaValorContratoCadastrado && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  Valor padrão. Cadastre o valor de contrato no usuário monitorado para usar no custo de produtividade.
+                </p>
+              )}
+            </div>
             <SummaryCard
               label={`Custo produtivo (${formatTime(daySummary.productive)})`}
               value={`${custoProdutivo.toFixed(2)} BRL`}

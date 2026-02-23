@@ -320,6 +320,7 @@ def get_monitored_users():
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
                            um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
+                           um.valor_contrato,
                            d.nome as departamento_nome, d.cor as departamento_cor
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
@@ -332,13 +333,23 @@ def get_monitored_users():
                 if usuarios_monitorados:
                     for usuario in usuarios_monitorados:
                         try:
-                            # Verificar se campos do departamento existem
+                            # Índices: 0=id, 1=nome, 2=departamento_id, 3=cargo, 4=ativo, 5=created_at, 6=updated_at,
+                            # 7=horario_inicio, 8=horario_fim, 9=dias_trabalho, 10=monitoramento_ativo, 11=valor_contrato, 12=dept_nome, 13=dept_cor
                             departamento_info = None
-                            if len(usuario) > 11 and usuario[11]:
+                            if len(usuario) > 12 and usuario[12]:
                                 departamento_info = {
-                                    'nome': usuario[11],
-                                    'cor': usuario[12] if len(usuario) > 12 else None
+                                    'nome': usuario[12],
+                                    'cor': usuario[13] if len(usuario) > 13 else None
                                 }
+                            valor_contrato = float(usuario[11]) if len(usuario) > 11 and usuario[11] is not None else None
+                            # Pendências: dados cadastrais (cargo), setor (departamento), valor de contrato (custo de produtividade)
+                            pendencias = []
+                            if not (usuario[3] and str(usuario[3]).strip()):
+                                pendencias.append('dados_cadastrais')
+                            if usuario[2] is None:
+                                pendencias.append('setor')
+                            if valor_contrato is None or valor_contrato <= 0:
+                                pendencias.append('valor_contrato')
 
                             result.append({
                                 'id': usuario[0],
@@ -352,7 +363,9 @@ def get_monitored_users():
                                 'horario_fim_trabalho': str(usuario[8]) if len(usuario) > 8 and usuario[8] else '18:00:00',
                                 'dias_trabalho': usuario[9] if len(usuario) > 9 and usuario[9] else '1,2,3,4,5',
                                 'monitoramento_ativo': usuario[10] if len(usuario) > 10 and usuario[10] is not None else True,
-                                'departamento': departamento_info
+                                'valor_contrato': valor_contrato,
+                                'departamento': departamento_info,
+                                'pendencias': pendencias
                             })
                         except (IndexError, AttributeError) as e:
                             print(f"Erro ao processar usuário monitorado: {e}")
@@ -374,6 +387,14 @@ def create_monitored_user(current_user):
     nome = data['nome'].strip()
     cargo = data.get('cargo', 'Usuário')
     departamento_id = data.get('departamento_id')
+    valor_contrato = data.get('valor_contrato')
+    if valor_contrato is not None and valor_contrato != '':
+        try:
+            valor_contrato = float(valor_contrato)
+        except (ValueError, TypeError):
+            valor_contrato = None
+    else:
+        valor_contrato = None
 
     try:
         with DatabaseConnection() as db:
@@ -395,10 +416,10 @@ def create_monitored_user(current_user):
             escala_padrao_id = escala_padrao[0] if escala_padrao else None
 
             db.cursor.execute('''
-                INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho, valor_contrato)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-            ''', (nome, departamento_id, cargo, escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
+            ''', (nome, dept_id, cargo, escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5', valor_contrato))
 
             usuario = db.cursor.fetchone()
             return jsonify({
@@ -487,6 +508,11 @@ def update_monitored_user(current_user, user_id):
             if 'monitoramento_ativo' in data:
                 update_fields.append('monitoramento_ativo = %s')
                 update_values.append(data['monitoramento_ativo'])
+            if 'valor_contrato' in data:
+                vc = data.get('valor_contrato')
+                vc = float(vc) if vc is not None and vc != '' else None
+                update_fields.append('valor_contrato = %s')
+                update_values.append(vc)
 
             if not update_fields:
                 return jsonify({'message': 'Nenhum campo válido para atualizar!'}), 400

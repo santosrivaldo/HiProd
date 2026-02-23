@@ -17,7 +17,8 @@ const UserManagement = () => {
   const [formData, setFormData] = useState({
     nome: '',
     cargo: '',
-    departamento_id: ''
+    departamento_id: '',
+    valor_contrato: ''
   })
   
   // Estado para usuários do sistema
@@ -96,7 +97,8 @@ const UserManagement = () => {
     setFormData({
       nome: usuario.nome,
       cargo: usuario.cargo || '',
-      departamento_id: usuario.departamento_id || ''
+      departamento_id: usuario.departamento_id || '',
+      valor_contrato: usuario.valor_contrato != null && usuario.valor_contrato !== '' ? String(usuario.valor_contrato) : ''
     })
     setShowForm(true)
   }
@@ -120,7 +122,8 @@ const UserManagement = () => {
     setFormData({
       nome: '',
       cargo: '',
-      departamento_id: ''
+      departamento_id: '',
+      valor_contrato: ''
     })
     setEditingUser(null)
     setShowForm(false)
@@ -352,7 +355,7 @@ const UserManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Departamento
+                  Departamento (setor)
                 </label>
                 <select
                   value={formData.departamento_id}
@@ -364,6 +367,24 @@ const UserManagement = () => {
                     <option key={dept.id} value={dept.id}>{dept.nome}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Valor de contrato (R$/dia)
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  Para cálculo do custo de produtividade
+                </p>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.valor_contrato}
+                  onChange={(e) => setFormData({ ...formData, valor_contrato: e.target.value })}
+                  placeholder="Ex: 166.67"
+                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
               </div>
             </div>
 
@@ -385,6 +406,47 @@ const UserManagement = () => {
           </form>
         </div>
       )}
+
+      {/* Pendências de usuários monitorados */}
+      {activeTab === 'monitorados' && (() => {
+        const comPendencias = (usuariosMonitorados || []).filter(u => u.pendencias && u.pendencias.length > 0)
+        const labelPendencia = (p) => {
+          if (p === 'dados_cadastrais') return 'Dados cadastrais (cargo)'
+          if (p === 'setor') return 'Setor'
+          if (p === 'valor_contrato') return 'Valor de contrato (custo produtividade)'
+          return p
+        }
+        return comPendencias.length > 0 ? (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2">
+              Pendências de usuários monitorados
+            </h3>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
+              Falta de dados cadastrais, setor ou valor de contrato (usado no custo de produtividade). Clique em Editar para preencher.
+            </p>
+            <ul className="space-y-2">
+              {comPendencias.map((usuario) => (
+                <li key={usuario.id} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium text-gray-900 dark:text-white">{usuario.nome}</span>
+                  <span className="text-amber-700 dark:text-amber-300">—</span>
+                  {usuario.pendencias.map((p) => (
+                    <span key={p} className="inline-flex items-center px-2 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 text-xs">
+                      {labelPendencia(p)}
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleEditMonitorado(usuario)}
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs font-medium"
+                  >
+                    Editar
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null
+      })()}
 
       {/* Lista de Usuários Monitorados */}
       {activeTab === 'monitorados' && (

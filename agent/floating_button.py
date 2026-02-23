@@ -611,12 +611,12 @@ class FloatingButton:
         self.bitrix_duration = self._format_time_safe(self.bitrix_duration)
         self.bitrix_pause_duration = self._format_time_safe(self.bitrix_pause_duration)
         
-        # Usar a classe Popup unificada
+        # Usar a classe Popup unificada (apenas informações de tempo, sem botões de intervalo/finalizar)
         self.popup = Popup(
             parent=self.root,
             title="HiProd Agent",
-            width=320,  # Largura maior
-            height=420,  # Altura maior
+            width=320,
+            height=280,
             position='auto'
         )
         
@@ -741,81 +741,6 @@ class FloatingButton:
             bg='#1a1a2e'
         )
         self.update_label.pack(anchor='e', pady=(0, 5))
-        
-        # Separador
-        tk.Frame(main_frame, height=1, bg='#3d3d5c').pack(fill='x', pady=5)
-        
-        # Só mostrar botões se o expediente NÃO foi finalizado
-        if not self.workday_ended:
-            # Botão de Pausa/Retomar - MAIOR E MAIS VISÍVEL
-            btn_text = "INICIAR INTERVALO" if not self.is_paused else "RETOMAR TRABALHO"
-            btn_bg = '#f59e0b' if not self.is_paused else '#22c55e'
-            btn_active = '#d97706' if not self.is_paused else '#16a34a'
-            
-            self.pause_btn = tk.Button(
-                main_frame,
-                text=btn_text,
-                font=('Segoe UI', 12, 'bold'),
-                bg=btn_bg,
-                fg='white',
-                activebackground=btn_active,
-                activeforeground='white',
-                relief='flat',
-                cursor='hand2',
-                command=self._toggle_pause,
-                pady=12
-            )
-            self.pause_btn.pack(fill='x', pady=(0, 8))
-            
-            # Hover effect para botão de pausa
-            def on_enter_pause(e):
-                self.pause_btn.config(bg=btn_active)
-            def on_leave_pause(e):
-                current_bg = '#f59e0b' if not self.is_paused else '#22c55e'
-                self.pause_btn.config(bg=current_bg)
-            self.pause_btn.bind('<Enter>', on_enter_pause)
-            self.pause_btn.bind('<Leave>', on_leave_pause)
-            
-            # Botão de Finalizar Expediente - MAIOR E MAIS VISÍVEL
-            self.end_day_btn = tk.Button(
-                main_frame,
-                text="FINALIZAR EXPEDIENTE",
-                font=('Segoe UI', 12, 'bold'),
-                bg='#dc2626',
-                fg='white',
-                activebackground='#b91c1c',
-                activeforeground='white',
-                relief='flat',
-                cursor='hand2',
-                command=self._end_workday,
-                pady=12
-            )
-            self.end_day_btn.pack(fill='x', pady=(0, 5))
-            
-            # Hover effect para botão de finalizar
-            def on_enter_end(e):
-                self.end_day_btn.config(bg='#b91c1c')
-            def on_leave_end(e):
-                self.end_day_btn.config(bg='#dc2626')
-            self.end_day_btn.bind('<Enter>', on_enter_end)
-            self.end_day_btn.bind('<Leave>', on_leave_end)
-        else:
-            # Expediente finalizado - mostrar mensagem
-            tk.Label(
-                main_frame,
-                text="Expediente Finalizado",
-                font=('Segoe UI', 12, 'bold'),
-                fg='#4ade80',
-                bg='#1a1a2e'
-            ).pack(fill='x', pady=(5, 10))
-            
-            tk.Label(
-                main_frame,
-                text="Aguardando bloqueio automático...",
-                font=('Segoe UI', 10),
-                fg='#8b8b9e',
-                bg='#1a1a2e'
-            ).pack(fill='x', pady=(0, 5))
         
         # Fechar ao clicar fora
         self.popup.root.bind('<FocusOut>', lambda e: self._schedule_close_check())
