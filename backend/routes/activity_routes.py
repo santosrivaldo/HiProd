@@ -133,6 +133,11 @@ def add_activity(current_user):
                 'received_data': list(data.keys()) if data else []
             }), 400
 
+        # Classificação (categoria/produtividade) é sempre feita pelo servidor e pode ser editada no frontend.
+        # Ignorar qualquer valor enviado pelo agent para evitar que a aplicação seja marcada como útil/não útil no cliente.
+        data.pop('categoria', None)
+        data.pop('produtividade', None)
+
         usuario_monitorado_id = data['usuario_monitorado_id']
 
         with DatabaseConnection() as db:

@@ -2131,86 +2131,19 @@ class LockScreen:
             
             print(f"[INFO] USER_ID para abertura: {user_id}")
             
-            # 2. Verificar status atual antes de tentar abrir
+            # 2. Apenas consultar dados de ponto no Bitrix24 (não abrir expediente)
             timeman_info = check_timeman_status(user_id)
-            status = timeman_info.get('status')
-            can_open = timeman_info.get('can_open', True)
-            worked_today = timeman_info.get('worked_today', False)
-            time_start = timeman_info.get('time_start')
+            status = timeman_info.get('status', '')
+            print(f"[INFO] Status do expediente (Bitrix, só leitura): {status}")
             
-            print(f"[INFO] Status do expediente: {status}")
-            print(f"[INFO] Pode abrir: {can_open}")
-            print(f"[INFO] Trabalhou hoje: {worked_today}")
-            print(f"[INFO] TIME_START: {time_start}")
-            
-            # 3. Abrir o expediente no Bitrix24 via API (apenas se permitido)
-            expediente_aberto = False
-            if status == 'OPENED':
-                print("[INFO] ✓ Expediente já está aberto no Bitrix24!")
-                expediente_aberto = True
-            elif worked_today and not can_open:
-                print("[INFO] ⚠ Expediente já foi trabalhado hoje e não pode ser reaberto.")
-                print(f"[INFO] Horário trabalhado: {time_start} - {timeman_info.get('time_finish')}")
-                print("[WARN] Expediente já finalizado. Agente de atividades não será iniciado.")
-                expediente_aberto = False
-            elif can_open:
-                # Se pode abrir, tentar abrir (pode ser novo dia ou expediente não iniciado)
-                if status == 'CLOSED' and time_start:
-                    # Verificar se TIME_START é do dia anterior (novo dia)
-                    try:
-                        start_datetime = datetime.fromisoformat(time_start.replace('Z', '+00:00'))
-                        today = datetime.now().date()
-                        start_date = start_datetime.date()
-                        is_new_day = start_date < today
-                        
-                        if is_new_day:
-                            print(f"[INFO] 📅 Detectado novo dia! TIME_START ({start_date}) é anterior a hoje ({today})")
-                            print("[INFO] Abrindo novo expediente no Bitrix24...")
-                        else:
-                            print("[INFO] Abrindo expediente no Bitrix24...")
-                    except Exception as e:
-                        print(f"[WARN] Erro ao verificar data: {e}")
-                        print("[INFO] Abrindo expediente no Bitrix24...")
-                else:
-                    print("[INFO] Abrindo expediente no Bitrix24...")
-                
-                if open_timeman(user_id=user_id, report="Início do expediente via HiProd Agent"):
-                    print("[INFO] ✓ Expediente aberto com sucesso no Bitrix24!")
-                    expediente_aberto = True
-                else:
-                    # Mesmo com erro na API, permitir continuar (pode estar offline)
-                    print("[WARN] Não foi possível registrar abertura no Bitrix24, continuando...")
-                    # Verificar novamente o status após tentar abrir
-                    timeman_info_after = check_timeman_status(user_id)
-                    if timeman_info_after.get('status') == 'OPENED':
-                        expediente_aberto = True
-                        print("[INFO] ✓ Expediente confirmado como aberto após verificação")
-            else:
-                print("[WARN] ⚠ Não é possível abrir expediente no momento.")
-                print(f"[WARN] Status: {status}, can_open: {can_open}, worked_today: {worked_today}")
-                expediente_aberto = False
-            
-            # 4. Só iniciar o agente se o expediente estiver aberto
-            if not expediente_aberto:
-                print("[WARN] ⚠ Expediente não está aberto. Agente de atividades NÃO será iniciado.")
-                print("[INFO] Apenas liberando a máquina sem iniciar o agente de envio de dados.")
-                # Atualizar UI para indicar que não há agente rodando
-                self.status_label.config(
-                    text="✅ Máquina Liberada\n(Agente não iniciado - expediente não aberto)",
-                    fg='#f0ad4e'
-                )
-                # Esconder telas de bloqueio mesmo sem agente
-                self.hide_all_lock_screens()
-                return  # Não iniciar o agente
-            
-            # 5. Importar o agent apenas quando o expediente estiver aberto
+            # 3. Importar o agent
             agent_module = import_agent_module()
             
             if agent_module is None:
                 raise FileNotFoundError("Não foi possível importar o módulo agent")
             
-            # 6. Atualizar estado compartilhado e iniciar agente
-            print("[INFO] ✓ Expediente aberto. Iniciando agente de atividades...")
+            # 4. Atualizar estado compartilhado e iniciar agente
+            print("[INFO] Iniciando agente de atividades...")
             self.shared_state['agent_running'] = True
             self.shared_state['agent_thread'] = threading.Thread(
                 target=self.run_agent,
@@ -2259,19 +2192,8 @@ class LockScreen:
             print(f"Erro ao executar agent: {traceback.format_exc()}")
     
     def stop_agent(self):
-        """Para o agent e bloqueia a estação novamente"""
-        # Nota: Esta é uma implementação básica
-        # Em produção, seria necessário um mecanismo de parada mais robusto
+        """Para o agent (não bate ponto no Bitrix e não bloqueia a máquina)"""
         self.shared_state['agent_running'] = False
-        
-        # Fechar expediente no Bitrix24
-        print("[INFO] Fechando expediente no Bitrix24...")
-        if not close_timeman("Fim do expediente via HiProd Agent"):
-            print("[WARN] Não foi possível registrar fechamento no Bitrix24")
-        
-        # Mostrar telas de bloqueio novamente
-        self.show_all_lock_screens()
-        
         # Atualizar UI em todas as janelas
         self.update_all_windows_ui()
     

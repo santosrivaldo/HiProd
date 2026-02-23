@@ -2754,6 +2754,8 @@ def main():
                     except:
                         pass
                 
+                # Payload para a API: não enviar categoria/produtividade. A indicação de útil ou não
+                # é feita pelo servidor (API) e pode ser ajustada no frontend.
                 registro = {
                     'usuario_monitorado_id': usuario_monitorado_id,
                     'ociosidade': ociosidade,

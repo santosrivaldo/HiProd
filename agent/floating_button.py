@@ -887,12 +887,11 @@ class FloatingButton:
             self._end_pause()
     
     def _start_pause(self):
-        """Inicia a pausa"""
+        """Inicia a pausa (apenas local e agente; não bate ponto no Bitrix)"""
         import lock_screen
-        from lock_screen import pause_timeman
 
-        # 1. Primeiro, buscar dados atualizados do Bitrix24
-        print("[INFO] Buscando dados atualizados do Bitrix24 antes de pausar...")
+        # 1. Buscar dados de ponto do Bitrix24 (só leitura)
+        print("[INFO] Buscando dados do Bitrix24...")
         self._fetch_bitrix_data()
         
         # 2. Atualizar estado local
@@ -900,15 +899,7 @@ class FloatingButton:
         self.pause_start_time = datetime.now()
         self.current_pause_seconds = 0
         
-        # 3. Chamar API do Bitrix24 para pausar
-        if self.user_id:
-            print("[INFO] Pausando expediente no Bitrix24...")
-            if pause_timeman(self.user_id):
-                print("[INFO] ✓ Pausa registrada no Bitrix24")
-            else:
-                print("[WARN] Não foi possível registrar pausa no Bitrix24")
-        
-        # 4. Pausar o agente de envio de informações
+        # 3. Pausar o agente de envio de informações
         print("[INFO] Pausando agente de envio de informações...")
         lock_screen.AGENT_PAUSED = True
         try:
@@ -921,23 +912,20 @@ class FloatingButton:
         except Exception as e:
             print(f"[WARN] Não foi possível criar flag de pausa: {e}")
         
-        # 5. Buscar dados atualizados novamente após pausar
-        print("[INFO] Atualizando dados após pausa...")
+        # 4. Buscar dados do Bitrix novamente
         self._fetch_bitrix_data()
         
-        # 6. Atualizar UI
+        # 5. Atualizar UI
         self._update_popup_ui()
         
         if self.on_pause_callback:
             self.on_pause_callback(True)
     
     def _end_pause(self):
-        """Encerra a pausa"""
+        """Encerra a pausa (apenas local e agente; não bate ponto no Bitrix)"""
         import lock_screen
-        from lock_screen import resume_timeman
 
-        # 1. Primeiro, buscar dados atualizados do Bitrix24
-        print("[INFO] Buscando dados atualizados do Bitrix24 antes de retomar...")
+        # 1. Buscar dados de ponto do Bitrix24 (só leitura)
         self._fetch_bitrix_data()
         
         # 2. Calcular duração da pausa local
@@ -950,17 +938,7 @@ class FloatingButton:
         self.pause_start_time = None
         self.current_pause_seconds = 0
         
-        # 4. Chamar API do Bitrix24 para retomar
-        if self.user_id:
-            # Usar tempo de pausa do Bitrix se disponível
-            pause_time_str = self.bitrix_pause_duration
-            print(f"[INFO] Retomando expediente no Bitrix24 (pausas acumuladas: {pause_time_str})...")
-            if resume_timeman(self.user_id, f"Retorno do intervalo via HiProd Agent. Pausas acumuladas: {pause_time_str}"):
-                print("[INFO] ✓ Retomada registrada no Bitrix24")
-            else:
-                print("[WARN] Não foi possível registrar retomada no Bitrix24")
-        
-        # 5. Retomar o agente de envio de informações
+        # 4. Retomar o agente de envio de informações
         print("[INFO] Retomando agente de envio de informações...")
         lock_screen.AGENT_PAUSED = False
         try:
@@ -975,11 +953,10 @@ class FloatingButton:
         except Exception as e:
             print(f"[WARN] Não foi possível remover flag de pausa: {e}")
         
-        # 6. Buscar dados atualizados novamente após retomar
-        print("[INFO] Atualizando dados após retomada...")
+        # 5. Buscar dados do Bitrix novamente
         self._fetch_bitrix_data()
         
-        # 7. Atualizar UI
+        # 6. Atualizar UI
         self._update_popup_ui()
         
         if self.on_pause_callback:
@@ -1181,8 +1158,8 @@ class FloatingButton:
         print("[DEBUG] Popup de confirmação criado e exibido")
     
     def _do_end_workday(self):
-        """Executa o encerramento do expediente"""
-        from lock_screen import check_timeman_status, close_timeman, get_user_manager, request_manager_approval
+        """Executa o encerramento do expediente (não bate ponto no Bitrix; só para o agente)"""
+        from lock_screen import check_timeman_status, get_user_manager, request_manager_approval
 
         print("[INFO] Preparando para finalizar expediente...")
         
@@ -1198,8 +1175,8 @@ class FloatingButton:
             except:
                 pass
         
-        # 1. Buscar dados atualizados do Bitrix24 ANTES de finalizar
-        print("[INFO] Buscando dados atualizados do Bitrix24...")
+        # 1. Buscar dados de ponto do Bitrix24 (só leitura)
+        print("[INFO] Buscando dados do Bitrix24...")
         self._fetch_bitrix_data(update_ui=False)
         
         # Verificar se o expediente já foi finalizado
@@ -1510,28 +1487,11 @@ class FloatingButton:
         api_sent = [False]  # Flag para garantir que API só seja enviada uma vez
         
         def send_close_api():
-            """Envia comando de fechar expediente pela API"""
+            """Não bate ponto no Bitrix; apenas marca que finalizou localmente."""
             if api_sent[0]:
-                return  # Já enviou
-            
-            # Se já foi finalizado, não finalizar novamente
-            if already_closed:
-                print("[INFO] Expediente já foi finalizado anteriormente. Não será finalizado novamente.")
                 return
-            
             api_sent[0] = True
-            print("[INFO] Enviando comando de finalização pela API...")
-            
-            if self.user_id:
-                report = f"Expediente finalizado via HiProd Agent às {current_time_str}. Tempo trabalhado: {work_time_str}. Pausas: {pause_time_str}"
-                print(f"[INFO] {report}")
-                result = close_timeman(self.user_id, report)
-                if result:
-                    print("[INFO] ✓ Comando enviado com sucesso!")
-                else:
-                    print("[ERROR] ❌ Falha ao enviar comando de finalização!")
-            else:
-                print("[ERROR] ❌ USER_ID não disponível para finalizar expediente!")
+            print("[INFO] Expediente finalizado localmente (ponto não é registrado no Bitrix).")
         
         # Parar o agente quando finalizar o expediente
         def stop_agent():
@@ -1631,17 +1591,23 @@ class FloatingButton:
                 countdown_seconds[0] -= 1
                 countdown_popup.after(1000, update_countdown)
             else:
-                # Tempo esgotado - bloquear máquina
+                # Tempo esgotado - apenas fechar o popup (não bloquear a máquina)
                 countdown_label.config(text="00:00:00", fg='#f85149')
                 alert_label.config(
-                    text="🔒 Máquina será bloqueada agora!",
-                    fg='#f85149',
+                    text="✅ Expediente finalizado",
+                    fg='#4ade80',
                     font=('Segoe UI', 12, 'bold')
                 )
-                show_windows_notification("HiProd - Bloqueio", "Tempo esgotado! Máquina será bloqueada.", 5)
-                
-                # Aguardar 2 segundos e bloquear
-                countdown_popup.after(2000, lambda: self._lock_machine_after_countdown(countdown_popup))
+                show_windows_notification("HiProd", "Expediente finalizado. Máquina permanece liberada.", 5)
+                # Fechar o popup após 2 segundos (sem bloquear)
+                def close_popup_only():
+                    if hasattr(self, '_countdown_window') and self._countdown_window is countdown_popup:
+                        self._countdown_window = None
+                    try:
+                        countdown_popup.destroy()
+                    except Exception:
+                        pass
+                countdown_popup.after(2000, close_popup_only)
         
         # Iniciar contador
         update_countdown()

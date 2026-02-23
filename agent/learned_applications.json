@@ -8,8 +8,8 @@
     ],
     "first_seen": "2025-11-27T10:02:36.504770-03:00",
     "window_title_sample": "HiProd - Cursor",
-    "usage_count": 400,
-    "last_used": "2026-02-20T10:05:58.476105-03:00"
+    "usage_count": 447,
+    "last_used": "2026-02-20T10:15:13.677615-03:00"
   },
   "applicationframehost.exe": {
     "name": "ApplicationFrameHost",
@@ -32,8 +32,8 @@
     ],
     "first_seen": "2025-11-27T12:50:33.169489-03:00",
     "window_title_sample": "HiProd Agent - Tela de Bloqueio",
-    "usage_count": 97,
-    "last_used": "2026-02-20T09:53:04.567517-03:00"
+    "usage_count": 98,
+    "last_used": "2026-02-20T10:08:00.670864-03:00"
   },
   "bitrix24.exe": {
     "name": "Bitrix24",
@@ -80,8 +80,8 @@
     ],
     "first_seen": "2025-11-27T14:41:11.985150-03:00",
     "window_title_sample": null,
-    "usage_count": 574,
-    "last_used": "2026-02-20T09:44:48.585037-03:00"
+    "usage_count": 579,
+    "last_used": "2026-02-20T10:16:30.297311-03:00"
   },
   "startmenuexperiencehost.exe": {
     "name": "StartMenuExperienceHost",
