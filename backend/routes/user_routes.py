@@ -253,25 +253,44 @@ def update_timeman_status():
         return jsonify({'error': str(e)}), 500
 
 
+def _bitrix_work_position_to_perfil(work_position):
+    """
+    Mapeia WORK_POSITION do Bitrix para perfil (nível de acesso).
+    Head, Gerente -> head; Coordenador(a) -> coordenador; Supervisor(a) -> supervisor; demais -> colaborador.
+    """
+    if not work_position or not isinstance(work_position, str):
+        return 'colaborador'
+    p = work_position.strip().lower()
+    if not p:
+        return 'colaborador'
+    if 'head' in p or 'gerente' in p:
+        return 'head'
+    if 'coordenador' in p:
+        return 'coordenador'
+    if 'supervisor' in p:
+        return 'supervisor'
+    return 'colaborador'
+
+
 def _sync_bitrix_photos_by_email():
     """
     Sincroniza fotos dos colaboradores a partir do Bitrix24 (user.get).
     Modelo de URL: https://grupohi.bitrix24.com.br/rest/721611/ek6fo2ern4klo1ua/user.get
-    Resposta: { "result": [ { "ID", "EMAIL", "PERSONAL_PHOTO", ... } ], "next": 50, "total": 250 }
-    Para cada usuário com EMAIL @grupohi.com.br (ou SSO_EMAIL_DOMAIN), encontra usuario_monitorado
-    por nome = parte local do email e grava PERSONAL_PHOTO em foto_url.
+    Resposta: { "result": [ { "ID", "EMAIL", "PERSONAL_PHOTO", "WORK_POSITION", ... } ], "next": 50, "total": 250 }
+    Para cada usuário com EMAIL @grupohi.com.br: atualiza foto_url (PERSONAL_PHOTO), cargo (WORK_POSITION)
+    e perfil do usuario vinculado (Head/Gerente/Supervisor/Coordenador por cargo).
     """
     base = (Config.BITRIX_WEBHOOK_URL or '').rstrip('/')
     if not base:
-        return 0, 'BITRIX_WEBHOOK_URL não configurado'
+        return 0, 0, 'BITRIX_WEBHOOK_URL não configurado'
     domain = (getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br').strip().lower()
     domain_suffix = f'@{domain}'
-    updated = 0
+    updated_photos = 0
+    updated_cargos = 0
     start = 0
     total = None
     while True:
         try:
-            # GET {base}/user.get?start=0 (paginação: next indica próximo start)
             url = f"{base}/user.get"
             r = requests.get(url, params={'start': start}, timeout=15)
             if r.status_code != 200:
@@ -294,23 +313,39 @@ def _sync_bitrix_photos_by_email():
                     local = email[:-len(domain_suffix)].strip().lower()
                     if not local:
                         continue
-                    # PERSONAL_PHOTO = URL da imagem no Bitrix (ex: https://cdn.bitrix24.com.br/...)
-                    photo = (u.get('PERSONAL_PHOTO') or u.get('personal_photo') or '').strip()
-                    if not photo:
-                        continue
                     bitrix_id = u.get('ID') or u.get('id')
                     try:
                         bitrix_id = int(bitrix_id) if bitrix_id is not None else None
                     except (TypeError, ValueError):
                         bitrix_id = None
+                    photo = (u.get('PERSONAL_PHOTO') or u.get('personal_photo') or '').strip()
+                    work_position = (u.get('WORK_POSITION') or u.get('work_position') or '').strip() or None
+                    perfil = _bitrix_work_position_to_perfil(work_position)
+
+                    # Atualizar usuario_monitorado: foto_url, cargo, bitrix_user_id
                     db.cursor.execute('''
                         UPDATE usuarios_monitorados
-                        SET foto_url = %s, bitrix_user_id = COALESCE(bitrix_user_id, %s), updated_at = CURRENT_TIMESTAMP
-                        WHERE LOWER(TRIM(nome)) = %s;
-                    ''', (photo, bitrix_id, local))
-                    if db.cursor.rowcount:
-                        updated += 1
-            # Paginação: usar "next" se existir, senão start + len(result)
+                        SET foto_url = COALESCE(NULLIF(TRIM(%s), ''), foto_url),
+                            cargo = COALESCE(NULLIF(TRIM(%s), ''), cargo),
+                            bitrix_user_id = COALESCE(bitrix_user_id, %s),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE LOWER(TRIM(nome)) = %s
+                        RETURNING id, usuario_id;
+                    ''', (photo or None, work_position, bitrix_id, local))
+                    row = db.cursor.fetchone()
+                    if row:
+                        if photo:
+                            updated_photos += 1
+                        if work_position:
+                            updated_cargos += 1
+                        _, usuario_id = row[0], row[1]
+                        # Atualizar perfil do usuario vinculado (exceto se for admin)
+                        if usuario_id:
+                            db.cursor.execute('''
+                                UPDATE usuarios SET perfil = %s, updated_at = CURRENT_TIMESTAMP
+                                WHERE id = %s AND (perfil IS NULL OR LOWER(perfil) != 'admin');
+                            ''', (perfil, usuario_id))
+
             next_start = data.get('next')
             if next_start is not None:
                 try:
@@ -322,19 +357,24 @@ def _sync_bitrix_photos_by_email():
             if total and start >= total:
                 break
         except Exception as e:
-            print(f"[BITRIX] Erro ao sincronizar fotos: {e}")
-            return updated, str(e)
-    return updated, None
+            print(f"[BITRIX] Erro ao sincronizar: {e}")
+            return updated_photos, updated_cargos, str(e)
+    return updated_photos, updated_cargos, None
 
 
 @user_bp.route('/bitrix-sync-photos', methods=['POST'])
 @token_required
 def bitrix_sync_photos(current_user):
-    """Sincroniza fotos dos colaboradores a partir do Bitrix (user.get), por email nome@grupohi.com.br."""
-    updated, err = _sync_bitrix_photos_by_email()
-    if err is not None and updated == 0:
+    """Sincroniza fotos, cargos (WORK_POSITION) e perfis (Head/Gerente/Supervisor/Coordenador) do Bitrix."""
+    updated_photos, updated_cargos, err = _sync_bitrix_photos_by_email()
+    if err is not None and updated_photos == 0 and updated_cargos == 0:
         return jsonify({'error': err, 'updated': 0}), 400
-    return jsonify({'ok': True, 'updated': updated}), 200
+    return jsonify({
+        'ok': True,
+        'updated_photos': updated_photos,
+        'updated_cargos': updated_cargos,
+        'updated': updated_photos + updated_cargos
+    }), 200
 
 
 @user_bp.route('/usuarios-monitorados', methods=['GET'])
