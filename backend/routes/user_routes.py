@@ -48,6 +48,117 @@ def get_users(current_user):
         print(f"Erro na consulta de usuários: {e}")
         return jsonify([]), 200
 
+
+def _default_timeman_response():
+    """Resposta padrão quando não há status Bitrix (expediente fechado = não enviar dados)."""
+    return {
+        'status': 'CLOSED',
+        'time_start': None,
+        'duration': '00:00:00',
+        'time_leaks': '00:00:00',
+        'worked_today': False,
+    }
+
+
+@user_bp.route('/timeman-status', methods=['GET'])
+def get_timeman_status():
+    """
+    Retorna o status do expediente Bitrix (Timeman) do usuário.
+    Usado pelo agent e pelo botão flutuante para: mostrar status na UI e decidir se envia dados.
+    Parâmetros: nome (nome do usuário Windows) ou usuario_monitorado_id (ID do usuário monitorado).
+    Status: OPENED = expediente ativo (agent envia); PAUSED = intervalo (não envia); CLOSED = dia finalizado (não envia).
+    """
+    nome = request.args.get('nome')
+    usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
+    try:
+        with DatabaseConnection() as db:
+            um_id = None
+            if usuario_monitorado_id:
+                um_id = usuario_monitorado_id
+            elif nome:
+                db.cursor.execute(
+                    'SELECT id FROM usuarios_monitorados WHERE nome = %s LIMIT 1;',
+                    (nome.strip(),)
+                )
+                row = db.cursor.fetchone()
+                if row:
+                    um_id = row[0]
+            if not um_id:
+                return jsonify(_default_timeman_response()), 200
+            db.cursor.execute('''
+                SELECT status, time_start, duration, time_leaks, worked_today, updated_at
+                FROM bitrix_timeman_status
+                WHERE usuario_monitorado_id = %s;
+            ''', (um_id,))
+            row = db.cursor.fetchone()
+            if not row:
+                return jsonify(_default_timeman_response()), 200
+            time_start = row[1]
+            if hasattr(time_start, 'isoformat'):
+                time_start = time_start.isoformat()
+            return jsonify({
+                'status': row[0] or 'CLOSED',
+                'time_start': time_start,
+                'duration': row[2] or '00:00:00',
+                'time_leaks': row[3] or '00:00:00',
+                'worked_today': bool(row[4]) if row[4] is not None else False,
+                'updated_at': format_datetime_brasilia(row[5]) if row[5] else None,
+            }), 200
+    except Exception as e:
+        print(f"Erro ao buscar timeman-status: {e}")
+        return jsonify(_default_timeman_response()), 200
+
+
+@user_bp.route('/timeman-status', methods=['POST'])
+def update_timeman_status():
+    """
+    Atualiza o cache do status Bitrix Timeman para um usuário.
+    Corpo: usuario_monitorado_id ou nome, status (OPENED|PAUSED|CLOSED), time_start, duration, time_leaks, worked_today.
+    Pode ser chamado por integração Bitrix ou pelo painel para refletir a situação do expediente.
+    """
+    data = request.get_json() or {}
+    nome = data.get('nome')
+    usuario_monitorado_id = data.get('usuario_monitorado_id')
+    status = (data.get('status') or 'CLOSED').upper()
+    if status not in ('OPENED', 'PAUSED', 'CLOSED'):
+        status = 'CLOSED'
+    time_start = data.get('time_start')
+    duration = data.get('duration') or '00:00:00'
+    time_leaks = data.get('time_leaks') or '00:00:00'
+    worked_today = bool(data.get('worked_today', False))
+    try:
+        with DatabaseConnection() as db:
+            um_id = None
+            if usuario_monitorado_id:
+                um_id = int(usuario_monitorado_id)
+            elif nome:
+                db.cursor.execute(
+                    'SELECT id FROM usuarios_monitorados WHERE nome = %s LIMIT 1;',
+                    (nome.strip(),)
+                )
+                row = db.cursor.fetchone()
+                if row:
+                    um_id = row[0]
+            if not um_id:
+                return jsonify({'error': 'usuario_monitorado_id ou nome obrigatório'}), 400
+            db.cursor.execute('''
+                INSERT INTO bitrix_timeman_status
+                (usuario_monitorado_id, status, time_start, duration, time_leaks, worked_today, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (usuario_monitorado_id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    time_start = EXCLUDED.time_start,
+                    duration = EXCLUDED.duration,
+                    time_leaks = EXCLUDED.time_leaks,
+                    worked_today = EXCLUDED.worked_today,
+                    updated_at = CURRENT_TIMESTAMP;
+            ''', (um_id, status, time_start, duration, time_leaks, worked_today))
+            return jsonify({'ok': True, 'status': status}), 200
+    except Exception as e:
+        print(f"Erro ao atualizar timeman-status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @user_bp.route('/usuarios-monitorados', methods=['GET'])
 def get_monitored_users():
     """
@@ -585,6 +696,11 @@ def create_system_user(current_user):
     nome = data['nome'].strip()
     senha = data['senha'].strip()
     email = data.get('email', '').strip() or None
+    # SSO: usuários criados com nome no padrão têm email padrão (ex: rivaldo.santos -> rivaldo.santos@grupohi.com.br)
+    if not email and nome:
+        from ..config import Config
+        domain = getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br'
+        email = f"{nome}@{domain}"
     departamento_id = data.get('departamento_id')
 
     # Validações

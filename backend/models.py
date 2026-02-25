@@ -166,6 +166,63 @@ def init_db():
                     db.cursor.execute(f"ALTER TABLE usuarios_monitorados ADD COLUMN {column_name} {column_type};")
                     print(f"✅ Coluna {column_name} adicionada com sucesso!")
 
+            # Coluna perfil na tabela usuarios (tipos de acesso: admin, head, coordenador, supervisor, colaborador)
+            db.cursor.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='usuarios' AND column_name='perfil';
+            """)
+            if not db.cursor.fetchone():
+                print("🔧 Adicionando coluna perfil à tabela usuarios...")
+                db.cursor.execute("""
+                    ALTER TABLE usuarios ADD COLUMN perfil VARCHAR(20) DEFAULT 'colaborador'
+                    CHECK (perfil IN ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'));
+                """)
+                print("✅ Coluna perfil adicionada com sucesso!")
+            else:
+                print("✅ Coluna perfil já existe em usuarios")
+
+            # Tabela de cache do status Bitrix Timeman (expediente: OPENED, PAUSED, CLOSED)
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bitrix_timeman_status (
+                usuario_monitorado_id INTEGER PRIMARY KEY REFERENCES usuarios_monitorados(id) ON DELETE CASCADE,
+                status VARCHAR(20) NOT NULL DEFAULT 'CLOSED',
+                time_start TIMESTAMP,
+                duration VARCHAR(20) DEFAULT '00:00:00',
+                time_leaks VARCHAR(20) DEFAULT '00:00:00',
+                worked_today BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            ''')
+            print("✅ Tabela bitrix_timeman_status criada ou já existe")
+
+            # Tabela de mensagens para o agente (gestor cria; agente busca a cada 10 min e exibe)
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS agent_messages (
+                id SERIAL PRIMARY KEY,
+                titulo VARCHAR(255) NOT NULL,
+                mensagem TEXT NOT NULL,
+                tipo VARCHAR(20) NOT NULL DEFAULT 'info' CHECK (tipo IN ('info', 'alerta', 'urgente')),
+                destino_tipo VARCHAR(20) NOT NULL DEFAULT 'todos' CHECK (destino_tipo IN ('todos', 'usuario', 'departamento')),
+                destino_id INTEGER,
+                created_by UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP
+            );
+            ''')
+            print("✅ Tabela agent_messages criada ou já existe")
+
+            # Entrega de mensagens (quem já recebeu cada mensagem)
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS agent_message_deliveries (
+                id SERIAL PRIMARY KEY,
+                message_id INTEGER NOT NULL REFERENCES agent_messages(id) ON DELETE CASCADE,
+                usuario_monitorado_id INTEGER NOT NULL REFERENCES usuarios_monitorados(id) ON DELETE CASCADE,
+                delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(message_id, usuario_monitorado_id)
+            );
+            ''')
+            print("✅ Tabela agent_message_deliveries criada ou já existe")
+
             # Tabela de categorias de aplicações
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS categorias_app (

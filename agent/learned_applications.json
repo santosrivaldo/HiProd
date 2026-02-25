@@ -8,8 +8,8 @@
     ],
     "first_seen": "2025-11-27T10:02:36.504770-03:00",
     "window_title_sample": "HiProd - Cursor",
-    "usage_count": 447,
-    "last_used": "2026-02-20T10:15:13.677615-03:00"
+    "usage_count": 481,
+    "last_used": "2026-02-25T13:59:07.826392-03:00"
   },
   "applicationframehost.exe": {
     "name": "ApplicationFrameHost",
@@ -20,8 +20,8 @@
     ],
     "first_seen": "2025-11-27T10:02:46.510487-03:00",
     "window_title_sample": "WhatsApp",
-    "usage_count": 135,
-    "last_used": "2026-02-02T13:57:02.484528-03:00"
+    "usage_count": 164,
+    "last_used": "2026-02-25T14:21:02.327866-03:00"
   },
   "python.exe": {
     "name": "python",
@@ -32,8 +32,8 @@
     ],
     "first_seen": "2025-11-27T12:50:33.169489-03:00",
     "window_title_sample": "HiProd Agent - Tela de Bloqueio",
-    "usage_count": 98,
-    "last_used": "2026-02-20T10:08:00.670864-03:00"
+    "usage_count": 105,
+    "last_used": "2026-02-25T14:28:57.617405-03:00"
   },
   "bitrix24.exe": {
     "name": "Bitrix24",
@@ -44,8 +44,8 @@
     ],
     "first_seen": "2025-11-27T13:00:27.875203-03:00",
     "window_title_sample": "Como estou me sentindo hoje?",
-    "usage_count": 613,
-    "last_used": "2026-02-20T09:58:50.646287-03:00"
+    "usage_count": 882,
+    "last_used": "2026-02-25T14:13:55.185396-03:00"
   },
   "lockapp.exe": {
     "name": "LockApp",
@@ -56,8 +56,8 @@
     ],
     "first_seen": "2025-11-27T13:21:37.704731-03:00",
     "window_title_sample": "Tela de Bloqueio padrão do Windows",
-    "usage_count": 2835,
-    "last_used": "2026-02-02T13:45:18.446964-03:00"
+    "usage_count": 2912,
+    "last_used": "2026-02-23T14:20:19.831635-03:00"
   },
   "searchhost.exe": {
     "name": "SearchHost",
@@ -68,8 +68,8 @@
     ],
     "first_seen": "2025-11-27T13:31:47.608526-03:00",
     "window_title_sample": "Pesquisar",
-    "usage_count": 11,
-    "last_used": "2026-02-18T14:11:06.493743-03:00"
+    "usage_count": 14,
+    "last_used": "2026-02-25T14:17:54.444328-03:00"
   },
   "mobaxterm.exe": {
     "name": "MobaXterm",
@@ -80,8 +80,8 @@
     ],
     "first_seen": "2025-11-27T14:41:11.985150-03:00",
     "window_title_sample": null,
-    "usage_count": 579,
-    "last_used": "2026-02-20T10:16:30.297311-03:00"
+    "usage_count": 636,
+    "last_used": "2026-02-23T15:02:11.412414-03:00"
   },
   "startmenuexperiencehost.exe": {
     "name": "StartMenuExperienceHost",
@@ -104,8 +104,8 @@
     ],
     "first_seen": "2025-11-28T10:10:36.788623-03:00",
     "window_title_sample": "Segurança do Windows",
-    "usage_count": 4,
-    "last_used": "2026-02-18T14:11:20.235741-03:00"
+    "usage_count": 20,
+    "last_used": "2026-02-24T11:13:25.558730-03:00"
   },
   "mstsc.exe": {
     "name": "mstsc",
@@ -116,8 +116,8 @@
     ],
     "first_seen": "2025-11-28T10:10:46.795876-03:00",
     "window_title_sample": "10.10.10.2 - Conexão de Área de Trabalho Remota",
-    "usage_count": 69,
-    "last_used": "2026-02-18T14:12:34.540160-03:00"
+    "usage_count": 126,
+    "last_used": "2026-02-24T11:23:14.371297-03:00"
   },
   "shellhost.exe": {
     "name": "ShellHost",
@@ -128,8 +128,8 @@
     ],
     "first_seen": "2025-11-28T12:01:47.463002-03:00",
     "window_title_sample": "Configurações rápidas",
-    "usage_count": 24,
-    "last_used": "2026-02-20T09:38:04.382919-03:00"
+    "usage_count": 33,
+    "last_used": "2026-02-25T14:25:37.667648-03:00"
   },
   "keepassxc.exe": {
     "name": "KeePassXC",
@@ -259,8 +259,8 @@
     ],
     "first_seen": "2025-12-17T10:44:11.624258-03:00",
     "window_title_sample": "Outlook",
-    "usage_count": 4,
-    "last_used": "2025-12-17T10:44:35.439146-03:00"
+    "usage_count": 5,
+    "last_used": "2026-02-24T11:28:05.893208-03:00"
   },
   "gethelp.exe": {
     "name": "GetHelp",
@@ -343,5 +343,17 @@
     "first_seen": "2026-02-19T09:47:25.045482-03:00",
     "window_title_sample": "Python",
     "usage_count": 1
+  },
+  "protonvpn.client.exe": {
+    "name": "ProtonVPN.Client",
+    "category": "sistema",
+    "keywords": [
+      "protonvpn.client",
+      "protonvpn.client.exe"
+    ],
+    "first_seen": "2026-02-25T14:08:24.985533-03:00",
+    "window_title_sample": "H.NotifyIcon_f4c2f46b-3770-41d0-b59f-d64bc9c4c0ff",
+    "usage_count": 32,
+    "last_used": "2026-02-25T14:25:43.438204-03:00"
   }
 }

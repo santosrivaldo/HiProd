@@ -105,19 +105,15 @@ class AgentBuilder:
             return False
         
         # Verificar se os arquivos principais existem
-        # NOTA: face_detection.py está integrado em agent.py, não é necessário como arquivo separado
+        # NOTA: face_detection.py está integrado em agent.py; lock_screen foi removido (opcional)
         main_file = self.agent_dir / "main.py"
         agent_file = self.agent_dir / "agent.py"
-        lock_screen_file = self.agent_dir / "lock_screen.py"
         
         if not main_file.exists():
             self.print_error("Arquivo main.py nao encontrado!")
             return False
         if not agent_file.exists():
             self.print_error("Arquivo agent.py nao encontrado!")
-            return False
-        if not lock_screen_file.exists():
-            self.print_error("Arquivo lock_screen.py nao encontrado!")
             return False
         
         # Verificar se agent.py contém o código de detecção facial integrado
@@ -257,6 +253,19 @@ class AgentBuilder:
         if config_source.exists():
             shutil.copy2(config_source, config_dest)
             print(f"[OK] Configuracao copiada: {config_dest}")
+
+        # Copiar script opcional de aumento de timeout (Erro 1053)
+        timeout_bat = self.agent_dir / "aumentar_timeout_servico.bat"
+        if timeout_bat.exists():
+            shutil.copy2(timeout_bat, release_dir / "aumentar_timeout_servico.bat")
+            print(f"[OK] Script timeout copiado: aumentar_timeout_servico.bat")
+
+        # Copiar scripts "Iniciar com o Windows" (recomendado em vez de serviço)
+        for name in ["iniciar_com_windows_instalar.bat", "iniciar_com_windows_desinstalar.bat"]:
+            src = self.agent_dir / name
+            if src.exists():
+                shutil.copy2(src, release_dir / name)
+                print(f"[OK] Copiado: {name}")
         
         # Criar README de instalação
         readme_content = f"""# HiProd Agent - Instalação
@@ -272,24 +281,29 @@ class AgentBuilder:
    - A API identifica o usuário automaticamente pelo nome do usuário do Windows
    - Salve o arquivo e execute novamente
 
-2. **Execução:**
-   - Execute `{exe_name}`
-   - O agent iniciará automaticamente
-   - Verifique os logs para confirmar funcionamento
+2. **Execução manual:**
+   - Execute `{exe_name}` para iniciar o agent.
 
-3. **Instalação como Serviço (Opcional):**
+3. **Iniciar junto com o Windows (RECOMENDADO):**
+   - Execute: iniciar_com_windows_instalar.bat
+   - Não precisa ser Administrador.
+   - O agent será iniciado automaticamente quando você fizer logon.
+   - Para remover: execute iniciar_com_windows_desinstalar.bat
+
+4. **Instalação como Serviço (Opcional, se preferir):**
    - Com Python: execute como Administrador o install_service.bat ou
      python agent_service.py install
-   - Sem Python: coloque HiProd-Agent.exe e HiProd-Agent-Service.exe na mesma pasta.
-     Abra o prompt como Administrador nessa pasta e execute:
-     HiProd-Agent-Service.exe install
+   - Sem Python: HiProd-Agent-Service.exe install (como Administrador)
    - Iniciar/parar: net start HiProdAgent / net stop HiProdAgent
+   - Se aparecer "Erro 1053": execute como Admin o aumentar_timeout_servico.bat
 
 ## Arquivos inclusos:
 - `{exe_name}`: Executável principal
-- `HiProd-Agent-Service.exe`: Instalador do serviço Windows (para iniciar com o sistema, sem precisar de Python)
-- `config.example`: Exemplo de configuração
-- `README.txt`: Este arquivo
+- iniciar_com_windows_instalar.bat: Configura o agent para iniciar no logon (recomendado)
+- iniciar_com_windows_desinstalar.bat: Remove a inicialização com o Windows
+- HiProd-Agent-Service.exe: Instalador do serviço Windows (opcional)
+- config.example: Exemplo de configuração
+- README.txt: Este arquivo
 
 ## Suporte:
 - Documentação: README.md do projeto

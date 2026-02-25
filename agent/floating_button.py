@@ -2,12 +2,112 @@
 """
 Botao flutuante do HiProd Agent.
 Contem: Popup, FloatingButton, create_floating_button.
+Sem dependência de lock_screen (tela de bloqueio removida).
 """
 
 import tkinter as tk
 import os
+import sys
 import threading
 from datetime import datetime
+
+# Estado do agent (usado para pausa/parada sem lock_screen)
+AGENT_PAUSED = False
+AGENT_RUNNING = True
+AGENT_THREAD = None
+
+
+def check_timeman_status(user_id):
+    """
+    Consulta o status do expediente Bitrix (Timeman) na API.
+    user_id: usuario_monitorado_id (ID do usuário monitorado).
+    Retorna dict com status (OPENED/PAUSED/CLOSED), time_start, duration, time_leaks, worked_today.
+    """
+    api_url = os.getenv('API_URL', 'https://hiprod.grupohi.com.br').rstrip('/')
+    url = f"{api_url}/api/timeman-status"
+    default = {
+        'status': 'CLOSED',
+        'time_start': None,
+        'duration': '00:00:00',
+        'time_leaks': '00:00:00',
+        'worked_today': False,
+    }
+    if not user_id:
+        return default
+    try:
+        import urllib.request
+        import urllib.parse
+        req = urllib.request.Request(
+            f"{url}?{urllib.parse.urlencode({'usuario_monitorado_id': user_id})}",
+            headers={'Accept': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 200:
+                import json
+                data = json.loads(resp.read().decode())
+                return {
+                    'status': data.get('status', 'CLOSED'),
+                    'time_start': data.get('time_start'),
+                    'duration': data.get('duration', '00:00:00'),
+                    'time_leaks': data.get('time_leaks', '00:00:00'),
+                    'worked_today': bool(data.get('worked_today', False)),
+                }
+    except Exception as e:
+        if not getattr(sys, 'frozen', False):
+            print(f"[BITRIX] Erro ao consultar timeman-status: {e}")
+    return default
+
+
+def get_user_manager(user_id):
+    """Stub: retorna dados do gestor quando Bitrix/lock_screen não está disponível."""
+    return None
+
+
+def request_manager_approval(user_id, reason, manager_id):
+    """Stub: solicitação de aprovação quando Bitrix/lock_screen não está disponível."""
+    return {'success': False}
+
+
+def fetch_pending_agent_messages(user_id):
+    """Consulta a API por mensagens pendentes para o agente (exibidas na tela)."""
+    api_url = os.getenv('API_URL', 'https://hiprod.grupohi.com.br').rstrip('/')
+    url = f"{api_url}/agent-messages/pending"
+    if not user_id:
+        return []
+    try:
+        import urllib.request
+        import urllib.parse
+        req = urllib.request.Request(
+            f"{url}?{urllib.parse.urlencode({'usuario_monitorado_id': user_id})}",
+            headers={'Accept': 'application/json'}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            if resp.status == 200:
+                import json
+                return json.loads(resp.read().decode())
+    except Exception as e:
+        if not getattr(sys, 'frozen', False):
+            print(f"[AGENT-MESSAGES] Erro ao buscar pendentes: {e}")
+    return []
+
+
+def mark_agent_message_delivered(message_id, user_id):
+    """Marca mensagem como entregue na API (após exibir na tela)."""
+    api_url = os.getenv('API_URL', 'https://hiprod.grupohi.com.br').rstrip('/')
+    url = f"{api_url}/agent-messages/{message_id}/deliver"
+    if not user_id:
+        return False
+    try:
+        import urllib.request
+        import json
+        data = json.dumps({'usuario_monitorado_id': user_id}).encode()
+        req = urllib.request.Request(url, data=data, method='POST', headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
+    except Exception as e:
+        if not getattr(sys, 'frozen', False):
+            print(f"[AGENT-MESSAGES] Erro ao marcar entrega: {e}")
+    return False
 
 
 class Popup:
@@ -268,8 +368,10 @@ class FloatingButton:
         if self.root:
             self.root.after(0, self._fetch_bitrix_data_async)
         
-        # Agendar atualização do Bitrix a cada 30 minutos (1800000 ms)
+        # Agendar atualização do status Bitrix a cada 2 minutos
         self._schedule_bitrix_update()
+        # Mensagens do gestor: verificar a cada 10 minutos (primeira em 1 min)
+        self._schedule_agent_messages_check()
     
     def _format_time_safe(self, time_str):
         """Formata string de tempo garantindo formato HH:MM:SS"""
@@ -343,8 +445,7 @@ class FloatingButton:
                 self.update_label.config(text="Atualizado: --:--")
     
     def _fetch_bitrix_data(self, update_ui=True):
-        """Busca dados atualizados do Bitrix24"""
-        from lock_screen import check_timeman_status
+        """Busca dados atualizados do Bitrix24 (usa stub se Bitrix não disponível)"""
         try:
             print("[BITRIX] Buscando dados atualizados do Bitrix24...")
             timeman_info = check_timeman_status(self.user_id)
@@ -461,15 +562,65 @@ class FloatingButton:
             pass
     
     def _schedule_bitrix_update(self):
-        """Agenda atualização do Bitrix a cada 30 minutos"""
+        """Agenda atualização do status Bitrix a cada 2 minutos"""
         def update_bitrix():
             self._fetch_bitrix_data_async()
             if self.root:
-                self.root.after(1800000, update_bitrix)  # 30 min = 1800000 ms
+                self.root.after(120000, update_bitrix)  # 2 min
         
-        # Primeira atualização em 30 minutos
         if self.root:
-            self.root.after(1800000, update_bitrix)
+            self.root.after(120000, update_bitrix)
+
+    def _schedule_agent_messages_check(self):
+        """Agenda verificação de mensagens pendentes a cada 10 minutos (primeira em 1 min)."""
+        def check():
+            self._check_agent_messages()
+            if self.root:
+                self.root.after(600000, check)  # 10 min = 600000 ms
+        if self.root:
+            self.root.after(60000, check)  # primeira em 1 min
+
+    def _check_agent_messages(self):
+        """Busca mensagens pendentes na API e exibe uma a uma de forma interativa."""
+        if not self.user_id:
+            return
+        messages = fetch_pending_agent_messages(self.user_id)
+        for msg in messages:
+            mid = msg.get('id')
+            titulo = msg.get('titulo', 'Mensagem')
+            mensagem = msg.get('mensagem', '')
+            tipo = msg.get('tipo', 'info')
+            self._show_agent_message_popup(titulo, mensagem, tipo, mid)
+
+    def _show_agent_message_popup(self, titulo, mensagem, tipo, message_id):
+        """Exibe uma mensagem do gestor em janela interativa; ao fechar marca como entregue."""
+        if not self.root:
+            return
+        colors = {'urgente': ('#dc2626', '#fef2f2'), 'alerta': ('#f59e0b', '#fffbeb'), 'info': ('#2563eb', '#eff6ff')}
+        fg, bg = colors.get(tipo, colors['info'])
+        win = tk.Toplevel(self.root)
+        win.title(titulo)
+        win.attributes('-topmost', True)
+        win.configure(bg='#1a1a2e')
+        win.geometry('420x220')
+        frame = tk.Frame(win, bg='#1a1a2e', padx=16, pady=16)
+        frame.pack(fill='both', expand=True)
+        tk.Label(frame, text=titulo, font=('Segoe UI', 12, 'bold'), fg=fg, bg='#1a1a2e').pack(anchor='w')
+        text = tk.Text(frame, wrap='word', height=6, font=('Segoe UI', 10), fg='#e5e7eb', bg='#252542',
+                      relief='flat', padx=8, pady=8)
+        text.pack(fill='both', expand=True, pady=(8, 12))
+        text.insert('1.0', mensagem)
+        text.config(state='disabled')
+        def on_ok():
+            win.destroy()
+            if message_id and self.user_id:
+                mark_agent_message_delivered(message_id, self.user_id)
+        btn = tk.Button(frame, text='OK', command=on_ok, font=('Segoe UI', 10), bg=fg, fg='white',
+                        activebackground=fg, cursor='hand2', relief='flat', padx=20, pady=6)
+        btn.pack()
+        win.transient(self.root)
+        win.grab_set()
+        win.focus_force()
     
     def _create_floating_button(self):
         """Cria o botão flutuante"""
@@ -635,9 +786,11 @@ class FloatingButton:
             bg='#1a1a2e'
         ).pack(side='left')
         
-        # Status badge
-        status_text = "● Trabalhando" if not self.is_paused else "● Em Pausa"
-        status_color = '#4ade80' if not self.is_paused else '#fbbf24'
+        # Status badge (conforme Bitrix: OPENED = ativo, PAUSED = pausa, CLOSED = finalizado)
+        status_map = {'OPENED': ('● Expediente ativo', '#4ade80'), 'PAUSED': ('● Em pausa', '#fbbf24'), 'CLOSED': ('● Dia finalizado', '#8b8b9e')}
+        st = status_map.get(self.bitrix_status, ('● Dia finalizado', '#8b8b9e'))
+        status_text = st[0] if not self.is_paused else "● Em pausa (local)"
+        status_color = '#fbbf24' if self.is_paused else st[1]
         self.status_label = tk.Label(
             header_frame,
             text=status_text,
@@ -813,8 +966,7 @@ class FloatingButton:
     
     def _start_pause(self):
         """Inicia a pausa (apenas local e agente; não bate ponto no Bitrix)"""
-        import lock_screen
-
+        global AGENT_PAUSED
         # 1. Buscar dados de ponto do Bitrix24 (só leitura)
         print("[INFO] Buscando dados do Bitrix24...")
         self._fetch_bitrix_data()
@@ -826,7 +978,7 @@ class FloatingButton:
         
         # 3. Pausar o agente de envio de informações
         print("[INFO] Pausando agente de envio de informações...")
-        lock_screen.AGENT_PAUSED = True
+        AGENT_PAUSED = True
         try:
             # Usar caminho absoluto para garantir consistência
             flag_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.agent_pause_flag')
@@ -848,8 +1000,7 @@ class FloatingButton:
     
     def _end_pause(self):
         """Encerra a pausa (apenas local e agente; não bate ponto no Bitrix)"""
-        import lock_screen
-
+        global AGENT_PAUSED
         # 1. Buscar dados de ponto do Bitrix24 (só leitura)
         self._fetch_bitrix_data()
         
@@ -865,7 +1016,7 @@ class FloatingButton:
         
         # 4. Retomar o agente de envio de informações
         print("[INFO] Retomando agente de envio de informações...")
-        lock_screen.AGENT_PAUSED = False
+        AGENT_PAUSED = False
         try:
             # Usar caminho absoluto para garantir que encontre a flag
             flag_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.agent_pause_flag')
@@ -1084,8 +1235,6 @@ class FloatingButton:
     
     def _do_end_workday(self):
         """Executa o encerramento do expediente (não bate ponto no Bitrix; só para o agente)"""
-        from lock_screen import check_timeman_status, get_user_manager, request_manager_approval
-
         print("[INFO] Preparando para finalizar expediente...")
         
         # Marcar expediente como finalizado para esconder botões do popup
@@ -1420,23 +1569,13 @@ class FloatingButton:
         
         # Parar o agente quando finalizar o expediente
         def stop_agent():
-            """Para o agente de envio de informações (thread e flags no módulo lock_screen)."""
+            """Para o agente de envio de informações (flags e thread locais)."""
+            global AGENT_RUNNING
             print("[INFO] Parando agente de envio de informações...")
-
-            # Tentar atualizar as flags globais definidas em lock_screen
-            try:
-                import lock_screen
-
-                # Definir flag global para parar o agente
-                lock_screen.AGENT_RUNNING = False
-                print("[INFO] Flag global lock_screen.AGENT_RUNNING definida como False")
-
-                # Verificar thread global do agente
-                agent_thread = getattr(lock_screen, "AGENT_THREAD", None)
-                if agent_thread and agent_thread.is_alive():
-                    print("[INFO] Thread do agente encontrada e ativa. Aguardando finalização...")
-            except Exception as e:
-                print(f"[WARN] Não foi possível acessar flags do agente em lock_screen: {e}")
+            AGENT_RUNNING = False
+            agent_thread = AGENT_THREAD
+            if agent_thread and agent_thread.is_alive():
+                print("[INFO] Thread do agente encontrada e ativa. Aguardando finalização...")
 
             # Criar arquivo de flag para indicar que o agente deve parar
             try:
@@ -1639,70 +1778,27 @@ class FloatingButton:
         print("[DEBUG] Popup de finalização (contador) exibido")
     
     def _lock_machine_after_countdown(self, popup=None):
-        """Bloqueia a máquina após o contador"""
+        """Tempo esgotado: apenas fecha o popup (tela de bloqueio desativada)."""
         if hasattr(self, '_countdown_window') and self._countdown_window is not None:
             self._countdown_window = None
         if popup:
             try:
                 popup.destroy()
-            except:
+            except Exception:
                 pass
-        
-        print("[INFO] Bloqueando máquina após finalização do expediente...")
-        
-        # Criar tela de bloqueio (apenas liberação de máquina, não expediente)
-        try:
-            # Importar e criar tela de bloqueio
-            # is_machine_unlock=True indica que é apenas liberação de máquina, não expediente
-            app = MultiMonitorLockScreen(
-                bitrix_user_id=self.user_id, 
-                needs_approval=True,
-                is_machine_unlock=True  # Indica que é apenas liberação de máquina
-            )
-            app.create_windows()
-            
-            # Esconder (não destruir) botão flutuante para manter o mainloop
-            if self.root:
-                try:
-                    self.root.withdraw()  # Esconder em vez de destruir
-                except:
-                    pass
-            
-            # Executar tela de bloqueio no mesmo mainloop
-            # As janelas já foram criadas, agora precisamos garantir que elas fiquem visíveis
-            for window in app.shared_state.get('windows', []):
-                try:
-                    window.root.deiconify()
-                    window.root.attributes('-topmost', True)
-                    window.root.lift()
-                    window.root.focus_force()
-                    window.root.update()
-                except Exception as e:
-                    print(f"[ERROR] Erro ao mostrar janela: {e}")
-            
-            print("[INFO] Telas de bloqueio exibidas com sucesso!")
-            
-            # Manter o mainloop rodando para as novas janelas
-            if app.shared_state.get('windows'):
-                first_window = app.shared_state['windows'][0]
-                if first_window and first_window.root:
-                    first_window.root.mainloop()
-                    
-        except Exception as e:
-            print(f"[ERROR] Erro ao criar tela de bloqueio: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.exit(0)
+        print("[INFO] Contador finalizado. Tela de bloqueio desativada (nenhum bloqueio de máquina).")
     
     def _update_popup_ui(self):
         """Atualiza a UI do popup"""
         if not self.popup_visible or not self.popup:
             return
         
-        # Atualizar status
+        # Atualizar status (conforme Bitrix)
         if self.status_label:
-            status_text = "● Trabalhando" if not self.is_paused else "● Em Pausa"
-            status_color = Popup.ACCENT_GREEN if not self.is_paused else Popup.ACCENT_YELLOW
+            status_map = {'OPENED': ('● Expediente ativo', Popup.ACCENT_GREEN), 'PAUSED': ('● Em pausa', Popup.ACCENT_YELLOW), 'CLOSED': ('● Dia finalizado', Popup.TEXT_SECONDARY)}
+            st = status_map.get(self.bitrix_status, ('● Dia finalizado', Popup.TEXT_SECONDARY))
+            status_text = st[0] if not self.is_paused else "● Em pausa (local)"
+            status_color = Popup.ACCENT_YELLOW if self.is_paused else st[1]
             self.status_label.config(text=status_text, fg=status_color)
         
         # Atualizar botão de pausa

@@ -19,15 +19,25 @@ import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
 import ScreenPreviewPage from './pages/ScreenPreviewPage'
 import DvrPage from './pages/DvrPage'
+import AuthCallbackPage from './pages/AuthCallbackPage'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth()
   const location = useLocation()
   const isStandaloneView = location.pathname === '/preview' || location.pathname === '/dvr'
+  const isAuthCallback = location.pathname === '/auth/callback'
 
-  if (loading) {
+  if (loading && !isAuthCallback) {
     return <LoadingSpinner size="xl" text="Carregando..." fullScreen />
+  }
+
+  if (isAuthCallback) {
+    return (
+      <Routes>
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      </Routes>
+    )
   }
 
   if (!isAuthenticated) {

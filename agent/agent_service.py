@@ -17,15 +17,20 @@ import os
 import sys
 import time
 import subprocess
+import threading
 from pathlib import Path
 
 # Diretório do agent (onde está main.py e .env) ou do exe (quando rodando como .exe do serviço)
 IS_FROZEN = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
 if IS_FROZEN:
     AGENT_DIR = Path(sys.executable).resolve().parent
+    # Serviço Windows inicia com cwd em System32; usar pasta do exe para evitar falhas (ex.: Erro 1053)
+    try:
+        os.chdir(AGENT_DIR)
+    except Exception:
+        pass
 else:
     AGENT_DIR = Path(__file__).resolve().parent
-if not IS_FROZEN:
     os.chdir(AGENT_DIR)
     if str(AGENT_DIR) not in sys.path:
         sys.path.insert(0, str(AGENT_DIR))
@@ -182,21 +187,28 @@ if HAS_WIN32_SERVICE:
             win32event.SetEvent(self.stop_event)
 
         def SvcDoRun(self):
+            # Reportar RUNNING imediatamente para evitar Erro 1053 (serviço não respondeu a tempo)
+            self.ReportServiceStatus(win32service.SERVICE_RUNNING)
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_INFORMATION_TYPE,
                 servicemanager.PYS_SERVICE_STARTED,
                 (self._svc_name_, ""),
             )
-            self.main()
-
-        def main(self):
-            # Tenta iniciar o agent na sessão do usuário; se não houver sessão, espera e tenta de novo
-            while True:
-                if win32event.WaitForSingleObject(self.stop_event, 30000) == win32event.WAIT_OBJECT_0:
-                    break
-                if not self.agent_started:
-                    if start_agent_in_user_session():
-                        self.agent_started = True
+            # Rodar a lógica de iniciar o agent em thread separada para não bloquear o SCM
+            def worker():
+                while True:
+                    if win32event.WaitForSingleObject(self.stop_event, 30000) == win32event.WAIT_OBJECT_0:
+                        break
+                    if not self.agent_started:
+                        try:
+                            if start_agent_in_user_session():
+                                self.agent_started = True
+                        except Exception:
+                            pass
+            t = threading.Thread(target=worker, daemon=True)
+            t.start()
+            # Main thread só espera o evento de parada (responde ao SCM imediatamente)
+            win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
 
 
 def install_service():

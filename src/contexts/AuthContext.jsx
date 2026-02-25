@@ -5,6 +5,8 @@ const AuthContext = createContext({
   user: null,
   isAuthenticated: false,
   login: () => Promise.resolve({ success: false }),
+  loginWithSSO: () => Promise.resolve({ success: false }),
+  completeSSOCallback: () => Promise.resolve({ success: false }),
   register: () => Promise.resolve({ success: false }),
   logout: () => {},
   loading: true
@@ -85,7 +87,8 @@ export function AuthProvider({ children }) {
       if (response.ok && data.valid) {
         const validUserData = {
           usuario_id: data.usuario_id,
-          usuario: data.usuario
+          usuario: data.usuario,
+          perfil: data.perfil || 'colaborador'
         }
         setUser(validUserData)
         setIsAuthenticated(true)
@@ -102,6 +105,58 @@ export function AuthProvider({ children }) {
     }
   }
 
+  const loginWithSSO = useCallback(async (email) => {
+    try {
+      const response = await api.post('/sso/login', { email: email.trim() })
+      if (response.data && response.data.token) {
+        const userData = {
+          usuario_id: response.data.usuario_id,
+          usuario: response.data.usuario,
+          perfil: response.data.perfil || 'colaborador'
+        }
+        setUser(userData)
+        setIsAuthenticated(true)
+        localStorage.setItem('user', JSON.stringify(userData))
+        localStorage.setItem('token', response.data.token)
+        return { success: true }
+      }
+      return { success: false, error: response.data?.message || 'Resposta inválida' }
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Erro no login SSO'
+      return { success: false, error: msg }
+    }
+  }, [])
+
+  const completeSSOCallback = useCallback(async (token) => {
+    if (!token) return { success: false, error: 'Token não recebido' }
+    localStorage.setItem('token', token)
+    try {
+      const baseURL = window.location.hostname === 'localhost'
+        ? 'http://localhost:8010'
+        : `${window.location.protocol}//${window.location.hostname}/api`
+      const response = await fetch(`${baseURL}/verify-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      })
+      const data = await response.json()
+      if (response.ok && data.valid) {
+        const validUserData = {
+          usuario_id: data.usuario_id,
+          usuario: data.usuario,
+          perfil: data.perfil || 'colaborador'
+        }
+        setUser(validUserData)
+        setIsAuthenticated(true)
+        localStorage.setItem('user', JSON.stringify(validUserData))
+        return { success: true }
+      }
+      return { success: false, error: data.error || 'Token inválido' }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  }, [])
+
   const login = useCallback(async (username, password) => {
     try {
       console.log('Iniciando login...', { username })
@@ -116,7 +171,8 @@ export function AuthProvider({ children }) {
       if (response.data && response.data.token) {
         const userData = {
           usuario_id: response.data.usuario_id,
-          usuario: response.data.usuario
+          usuario: response.data.usuario,
+          perfil: response.data.perfil || 'colaborador'
         }
 
         // Aguardar um pouco antes de definir o estado
@@ -201,10 +257,12 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated,
     login,
+    loginWithSSO,
+    completeSSOCallback,
     register,
     logout,
     loading
-  }), [user, isAuthenticated, loading, login, register, logout])
+  }), [user, isAuthenticated, loading, login, loginWithSSO, completeSSOCallback, register, logout])
 
   return (
     <AuthContext.Provider value={value}>

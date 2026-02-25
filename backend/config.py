@@ -36,3 +36,15 @@ class Config:
 
     # Pasta para upload de frames de tela (timeline)
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'screen_frames'))
+
+    # SSO: domínio de e-mail corporativo (nome do usuário = parte local do e-mail)
+    # Ex.: rivaldo.santos -> rivaldo.santos@grupohi.com.br
+    SSO_EMAIL_DOMAIN = os.getenv('SSO_EMAIL_DOMAIN', 'grupohi.com.br')
+    SSO_ENABLED = os.getenv('SSO_ENABLED', 'true').lower() == 'true'
+
+    # Microsoft Entra (Azure AD) OAuth2
+    SSO_MICROSOFT_CLIENT_ID = os.getenv('SSO_MICROSOFT_CLIENT_ID', '')
+    SSO_MICROSOFT_CLIENT_SECRET = os.getenv('SSO_MICROSOFT_CLIENT_SECRET', '')
+    SSO_MICROSOFT_TENANT = os.getenv('SSO_MICROSOFT_TENANT', 'common')  # common, ou tenant id
+    SSO_REDIRECT_URI = os.getenv('SSO_REDIRECT_URI', '')  # ex: https://hiprod.grupohi.com.br/api/sso/callback
+    FRONTEND_URL = os.getenv('FRONTEND_URL', '')  # ex: https://hiprod.grupohi.com.br para redirecionar após SSO

@@ -7,6 +7,58 @@ from datetime import datetime, timezone, timedelta
 from .config import Config
 from .database import DatabaseConnection
 
+
+def _email_local_part(email):
+    """Retorna a parte local do e-mail (antes do @) ou None."""
+    if not email or '@' not in email:
+        return None
+    return email.strip().split('@')[0].strip().lower()
+
+
+def find_user_by_email_or_sso(email):
+    """
+    Encontra usuário por e-mail SSO.
+    Regra: rivaldo.santos@grupohi.com.br -> usuário com email = esse OU nome = rivaldo.santos.
+    Retorna tupla (id, nome, email, ...) ou None.
+    """
+    if not email or not isinstance(email, str):
+        return None
+    email = email.strip().lower()
+    local = _email_local_part(email)
+    domain = email.split('@')[-1].lower() if '@' in email else ''
+    try:
+        with DatabaseConnection() as db:
+            # 1) Buscar por email exato
+            db.cursor.execute('''
+                SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador')
+                FROM usuarios WHERE LOWER(TRIM(email)) = %s AND ativo = TRUE
+            ''', (email,))
+            row = db.cursor.fetchone()
+            if row:
+                return row
+            # 2) Buscar por nome = parte local do email (SSO: nome = usuario@grupohi.com.br)
+            if local and domain == (Config.SSO_EMAIL_DOMAIN or '').strip().lower():
+                db.cursor.execute('''
+                    SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador')
+                    FROM usuarios WHERE LOWER(TRIM(nome)) = %s AND ativo = TRUE
+                ''', (local,))
+                row = db.cursor.fetchone()
+                if row:
+                    return row
+            # 3) Buscar por nome = parte local (qualquer domínio, para flexibilidade)
+            if local:
+                db.cursor.execute('''
+                    SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador')
+                    FROM usuarios WHERE LOWER(TRIM(nome)) = %s AND ativo = TRUE
+                ''', (local,))
+                row = db.cursor.fetchone()
+                if row:
+                    return row
+    except Exception as e:
+        print(f"find_user_by_email_or_sso error: {e}")
+    return None
+
+
 def generate_jwt_token(user_id):
     """Gera um token JWT para o usuário"""
     payload = {
@@ -44,11 +96,11 @@ def token_required(f):
         if not user_id:
             return jsonify({'message': 'Token inválido ou expirado!'}), 401
         
-        # Buscar dados do usuário
+        # Buscar dados do usuário (inclui perfil para controle de acesso)
         try:
             with DatabaseConnection() as db:
                 db.cursor.execute('''
-                    SELECT id, nome, email, ativo, departamento_id
+                    SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador')
                     FROM usuarios
                     WHERE id = %s
                 ''', (user_id,))
@@ -66,6 +118,45 @@ def token_required(f):
             return jsonify({'message': 'Erro ao validar usuário!'}), 500
     
     return decorated
+
+
+# Perfis que podem gerenciar mensagens ao agente (gestores)
+GESTOR_PERFIS = ('admin', 'head', 'coordenador', 'supervisor')
+
+
+def gestor_required(f):
+    """Decorator: exige que o usuário seja gestor (admin, head, coordenador ou supervisor)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'message': 'Token não fornecido!'}), 401
+        try:
+            if token.startswith('Bearer '):
+                token = token.split(' ')[1]
+        except (IndexError, AttributeError):
+            return jsonify({'message': 'Formato de token inválido!'}), 401
+        user_id = verify_jwt_token(token)
+        if not user_id:
+            return jsonify({'message': 'Token inválido ou expirado!'}), 401
+        try:
+            with DatabaseConnection() as db:
+                db.cursor.execute('''
+                    SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador')
+                    FROM usuarios WHERE id = %s
+                ''', (user_id,))
+                user = db.cursor.fetchone()
+                if not user or not user[3]:
+                    return jsonify({'message': 'Usuário não encontrado ou inativo!'}), 403
+                perfil = (user[5] or 'colaborador').lower()
+                if perfil not in GESTOR_PERFIS:
+                    return jsonify({'message': 'Acesso restrito a gestores (Admin, Head, Coordenador, Supervisor).'}), 403
+                return f(user, *args, **kwargs)
+        except Exception as e:
+            print(f"❌ Erro em gestor_required: {e}")
+            return jsonify({'message': 'Erro ao validar permissão!'}), 500
+    return decorated
+
 
 def generate_api_token():
     """

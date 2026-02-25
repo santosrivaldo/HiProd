@@ -1142,6 +1142,56 @@ def get_headers(usuario_nome=None):
     
     return headers
 
+
+# Cache do status Bitrix Timeman: só envia dados quando status == OPENED
+_TIMEMAN_CACHE = {}  # usuario_nome -> (data_dict, timestamp)
+_TIMEMAN_CACHE_TTL = 60  # segundos
+
+
+def get_timeman_status_from_api(usuario_nome=None):
+    """Consulta a API o status do expediente Bitrix (Timeman). Retorna dict ou None em erro."""
+    if not usuario_nome:
+        usuario_nome = get_logged_user()
+    if not usuario_nome:
+        return None
+    try:
+        url = f"{API_BASE_URL}/api/timeman-status"
+        session = get_secure_session()
+        resp = session.get(url, params={'nome': usuario_nome}, headers=get_headers(usuario_nome), timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        if not IS_EXECUTABLE:
+            safe_print(f"[TIMEMAN] Erro ao consultar status: {e}")
+    return None
+
+
+def bitrix_status_allows_send(usuario_nome=None):
+    """
+    Retorna True apenas quando o expediente no Bitrix está OPENED (ativo).
+    Se PAUSED ou CLOSED, retorna False (não enviar atividades/keylog/frames/face).
+    Usa cache de 60s para não sobrecarregar a API.
+    """
+    if not usuario_nome:
+        usuario_nome = get_logged_user()
+    if not usuario_nome:
+        return False
+    now = time.time()
+    cached = _TIMEMAN_CACHE.get(usuario_nome)
+    if cached:
+        data, ts = cached
+        if now - ts < _TIMEMAN_CACHE_TTL:
+            return (data.get('status') or 'CLOSED') == 'OPENED'
+    data = get_timeman_status_from_api(usuario_nome)
+    if data is None:
+        # Em erro de rede, manter último cache ou não enviar
+        if cached:
+            return (cached[0].get('status') or 'CLOSED') == 'OPENED'
+        return False
+    _TIMEMAN_CACHE[usuario_nome] = (data, now)
+    return (data.get('status') or 'CLOSED') == 'OPENED'
+
+
 def load_learned_applications():
     """Carrega aplicações aprendidas do arquivo JSON"""
     global _LEARNED_APPLICATIONS
@@ -2205,6 +2255,8 @@ def enviar_screen_frames(usuario_monitorado_id, frames_bytes_list, captured_at=N
     """
     if check_stop_flag() or check_pause_flag():
         return False
+    if not bitrix_status_allows_send():
+        return False
     if not frames_bytes_list or not usuario_monitorado_id:
         return False
     try:
@@ -2242,6 +2294,8 @@ def enviar_screen_frames(usuario_monitorado_id, frames_bytes_list, captured_at=N
 def enviar_keylog(usuario_monitorado_id, entries):
     """Envia entradas de keylog para a API."""
     if check_stop_flag() or check_pause_flag() or not entries:
+        return False
+    if not bitrix_status_allows_send():
         return False
     try:
         usuario_nome = get_logged_user()
@@ -2295,6 +2349,12 @@ def enviar_atividade(registro):
     # Verificar se agente está em pausa (intervalo)
     if check_pause_flag():
         safe_print("[AGENT] Agente em pausa (intervalo) - não enviando atividade")
+        return False
+    
+    # Só envia se o expediente Bitrix estiver OPENED (ativo)
+    if not bitrix_status_allows_send(registro.get('usuario_nome') or get_logged_user()):
+        if not IS_EXECUTABLE:
+            safe_print("[AGENT] Expediente não está ativo no Bitrix (PAUSED/CLOSED) - não enviando atividade")
         return False
     
     try:
@@ -2372,6 +2432,8 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
         bool: True se enviado com sucesso, False caso contrário
     """
     if check_stop_flag():
+        return False
+    if not bitrix_status_allows_send():
         return False
     
     # Validar ID antes de enviar
