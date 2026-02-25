@@ -363,12 +363,15 @@ export default function UserDetailPage() {
         </h1>
       </div>
 
-      {/* Perfil: avatar + dados em grid */}
+      {/* Perfil: avatar (foto ou iniciais) + dados em grid */}
       <section className="glass-card p-6">
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="flex-shrink-0">
-            <div className="w-24 h-24 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-3xl font-bold text-indigo-700 dark:text-indigo-300">
-              {(user.nome || 'U').slice(0, 2).toUpperCase()}
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-3xl font-bold text-indigo-700 dark:text-indigo-300 relative">
+              <span className="pointer-events-none">{(user.nome || 'U').slice(0, 2).toUpperCase()}</span>
+              {user.foto_url && (
+                <img src={user.foto_url} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+              )}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">

@@ -502,7 +502,10 @@ const UserManagement = () => {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 relative w-10 h-10 rounded-full overflow-hidden bg-indigo-500 flex items-center justify-center">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden bg-indigo-500 flex items-center justify-center relative">
+                      <span className="text-white font-medium text-sm pointer-events-none select-none">
+                        {usuario.nome.charAt(0).toUpperCase()}
+                      </span>
                       {usuario.foto_url && (
                         <img
                           src={usuario.foto_url}
@@ -511,9 +514,6 @@ const UserManagement = () => {
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       )}
-                      <span className="text-white font-medium text-sm relative z-[0]">
-                        {usuario.nome.charAt(0).toUpperCase()}
-                      </span>
                     </div>
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">

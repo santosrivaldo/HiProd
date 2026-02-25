@@ -404,6 +404,7 @@ export default function Dashboard() {
             id: userId,
             nome: userName,
             departamento: departamentoNome,
+            foto_url: userObj?.foto_url || null,
             productive: 0,
             nonproductive: 0,
             neutral: 0,
@@ -853,8 +854,11 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-sm font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">
-                          {(u.nome || 'U').slice(0, 2).toUpperCase()}
+                        <div className="w-8 h-8 rounded-full overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-sm font-semibold text-indigo-700 dark:text-indigo-300 shrink-0 relative">
+                          <span className="pointer-events-none">{(u.nome || 'U').slice(0, 2).toUpperCase()}</span>
+                          {u.foto_url && (
+                            <img src={u.foto_url} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                          )}
                         </div>
                         <Link to={`/users/${u.id}`} className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
                           {u.nome}
@@ -928,6 +932,10 @@ export default function Dashboard() {
           <div className="space-y-2">
             {top5Produtivos.map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-2">
+                <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-xs font-semibold text-indigo-700 dark:text-indigo-300 shrink-0 relative">
+                  <span className="pointer-events-none">{(u.nome || 'U').slice(0, 1).toUpperCase()}</span>
+                  {u.foto_url && <img src={u.foto_url} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />}
+                </div>
                 <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">{u.nome}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-20 h-2 bg-gray-200 dark:bg-gray-600 rounded overflow-hidden">
@@ -945,6 +953,10 @@ export default function Dashboard() {
           <div className="space-y-2">
             {top5Improdutivos.map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-2">
+                <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-xs font-semibold text-indigo-700 dark:text-indigo-300 shrink-0 relative">
+                  <span className="pointer-events-none">{(u.nome || 'U').slice(0, 1).toUpperCase()}</span>
+                  {u.foto_url && <img src={u.foto_url} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />}
+                </div>
                 <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">{u.nome}</span>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-20 h-2 bg-gray-200 dark:bg-gray-600 rounded overflow-hidden">
