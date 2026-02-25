@@ -375,8 +375,8 @@ const UserManagement = () => {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nível de acesso (perfil)</label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Gestores: Admin, Head/Gerente, Coordenador, Supervisor. Sincronizar com Bitrix atualiza cargo e perfil.</p>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nível de acesso (perfil / cargo)</label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Gestores: Admin, CEO, Head, Gerente, Coordenador, Supervisor. Sincronizar com Bitrix atualiza cargo e perfil.</p>
                 <select
                   value={formData.perfil}
                   onChange={(e) => setFormData({ ...formData, perfil: e.target.value })}
@@ -385,7 +385,9 @@ const UserManagement = () => {
                   <option value="colaborador">Colaborador</option>
                   <option value="supervisor">Supervisor</option>
                   <option value="coordenador">Coordenador</option>
-                  <option value="head">Head / Gerente</option>
+                  <option value="gerente">Gerente</option>
+                  <option value="head">Head</option>
+                  <option value="ceo">CEO</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -534,7 +536,7 @@ const UserManagement = () => {
 
                 <div className="flex items-center space-x-2 flex-shrink-0">
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
-                    {usuario.perfil === 'head' ? 'Head / Gerente' : (usuario.perfil || 'colaborador')}
+                    {({ admin: 'Admin', ceo: 'CEO', head: 'Head', gerente: 'Gerente', coordenador: 'Coordenador', supervisor: 'Supervisor', colaborador: 'Colaborador' })[usuario.perfil] || (usuario.perfil || 'Colaborador')}
                   </span>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     usuario.ativo

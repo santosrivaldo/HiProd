@@ -158,8 +158,8 @@ def token_required(f):
     return decorated
 
 
-# Perfis que podem gerenciar mensagens ao agente (gestores)
-GESTOR_PERFIS = ('admin', 'head', 'coordenador', 'supervisor')
+# Perfis que podem gerenciar mensagens ao agente (gestores): CEO, Head, Gerente, Coordenador, Supervisor, Admin
+GESTOR_PERFIS = ('admin', 'ceo', 'head', 'gerente', 'coordenador', 'supervisor')
 
 
 def gestor_required(f):
@@ -188,7 +188,7 @@ def gestor_required(f):
                     return jsonify({'message': 'Usuário não encontrado ou inativo!'}), 403
                 perfil = (user[5] or 'colaborador').lower()
                 if perfil not in GESTOR_PERFIS:
-                    return jsonify({'message': 'Acesso restrito a gestores (Admin, Head, Coordenador, Supervisor).'}), 403
+                    return jsonify({'message': 'Acesso restrito a gestores (Admin, CEO, Head, Gerente, Coordenador, Supervisor).'}), 403
                 return f(user, *args, **kwargs)
         except Exception as e:
             print(f"❌ Erro em gestor_required: {e}")

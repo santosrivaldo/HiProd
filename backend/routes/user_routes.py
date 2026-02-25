@@ -253,18 +253,27 @@ def update_timeman_status():
         return jsonify({'error': str(e)}), 500
 
 
+# Perfis (cargos de acesso) aceitos no sistema: CEO, Head, Gerente, Coordenador, Supervisor, Colaborador, Admin
+PERFIS_VALIDOS = ('admin', 'ceo', 'head', 'gerente', 'coordenador', 'supervisor', 'colaborador')
+
+
 def _bitrix_work_position_to_perfil(work_position):
     """
-    Mapeia WORK_POSITION do Bitrix para perfil (nível de acesso).
-    Head, Gerente -> head; Coordenador(a) -> coordenador; Supervisor(a) -> supervisor; demais -> colaborador.
+    Mapeia WORK_POSITION do Bitrix para perfil (cargo/nível de acesso).
+    CEO/Diretoria/C-level -> ceo; Head -> head; Gerente -> gerente;
+    Coordenador(a) -> coordenador; Supervisor(a) -> supervisor; demais -> colaborador.
     """
     if not work_position or not isinstance(work_position, str):
         return 'colaborador'
     p = work_position.strip().lower()
     if not p:
         return 'colaborador'
-    if 'head' in p or 'gerente' in p:
+    if any(x in p for x in ('ceo', 'diretor', 'diretoria', 'c-level', 'c level', 'presidente', 'sócio')):
+        return 'ceo'
+    if 'head' in p:
         return 'head'
+    if 'gerente' in p:
+        return 'gerente'
     if 'coordenador' in p:
         return 'coordenador'
     if 'supervisor' in p:
@@ -875,7 +884,7 @@ def update_monitored_user(current_user, user_id):
 
             if 'perfil' in data and u_id_linked:
                 perfil = (data.get('perfil') or 'colaborador').strip().lower()
-                if perfil in ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'):
+                if perfil in PERFIS_VALIDOS:
                     db.cursor.execute('UPDATE usuarios SET perfil = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;', (perfil, u_id_linked))
             if 'email' in data and u_id_linked:
                 db.cursor.execute('UPDATE usuarios SET email = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;', (data.get('email') or '', u_id_linked))
@@ -971,7 +980,7 @@ def create_system_user(current_user):
     senha = data['senha'].strip()
     email = data.get('email', '').strip() or None
     perfil = (data.get('perfil') or 'colaborador').strip().lower()
-    if perfil not in ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'):
+    if perfil not in PERFIS_VALIDOS:
         perfil = 'colaborador'
     # SSO: usuários criados com nome no padrão têm email padrão (ex: rivaldo.santos -> rivaldo.santos@grupohi.com.br)
     if not email and nome:
@@ -1142,7 +1151,7 @@ def update_system_user(current_user, usuario_id):
             # Perfil (nível de acesso)
             if 'perfil' in data:
                 perfil = (data['perfil'] or 'colaborador').strip().lower()
-                if perfil in ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'):
+                if perfil in PERFIS_VALIDOS:
                     update_fields.append('perfil = %s')
                     update_values.append(perfil)
 

@@ -1,6 +1,6 @@
 """
 Mensagens para o agente: a API deixa pendentes e o agente consulta a cada 10 min e exibe na tela.
-Gestores (admin, head, coordenador, supervisor) podem criar/editar/excluir mensagens.
+Gestores (admin, ceo, head, gerente, coordenador, supervisor) podem criar/editar/excluir mensagens.
 """
 from flask import Blueprint, request, jsonify
 from ..auth import token_required, gestor_required

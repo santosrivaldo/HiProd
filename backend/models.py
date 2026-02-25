@@ -179,20 +179,35 @@ def init_db():
                 db.cursor.execute("ALTER TABLE usuarios ADD COLUMN usuario_monitorado_id INTEGER REFERENCES usuarios_monitorados(id) ON DELETE SET NULL;")
                 print("✅ Coluna usuario_monitorado_id adicionada em usuarios")
 
-            # Coluna perfil na tabela usuarios (tipos de acesso: admin, head, coordenador, supervisor, colaborador)
+            # Coluna perfil na tabela usuarios (cargos: admin, ceo, head, gerente, coordenador, supervisor, colaborador)
+            PERFIS_CHECK = "('admin', 'ceo', 'head', 'gerente', 'coordenador', 'supervisor', 'colaborador')"
             db.cursor.execute("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name='usuarios' AND column_name='perfil';
             """)
             if not db.cursor.fetchone():
                 print("🔧 Adicionando coluna perfil à tabela usuarios...")
-                db.cursor.execute("""
+                db.cursor.execute(f"""
                     ALTER TABLE usuarios ADD COLUMN perfil VARCHAR(20) DEFAULT 'colaborador'
-                    CHECK (perfil IN ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'));
+                    CHECK (perfil IN {PERFIS_CHECK});
                 """)
                 print("✅ Coluna perfil adicionada com sucesso!")
             else:
                 print("✅ Coluna perfil já existe em usuarios")
+                # Atualizar CHECK do perfil para incluir ceo e gerente (migração)
+                try:
+                    db.cursor.execute("""
+                        SELECT conname FROM pg_constraint
+                        WHERE conrelid = 'usuarios'::regclass AND contype = 'c'
+                        AND pg_get_constraintdef(oid) LIKE '%perfil%';
+                    """)
+                    old_check = db.cursor.fetchone()
+                    cname = old_check[0] if old_check else 'usuarios_perfil_check'
+                    db.cursor.execute(f'ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS "{cname}";')
+                    db.cursor.execute(f"ALTER TABLE usuarios ADD CONSTRAINT usuarios_perfil_check CHECK (perfil IN {PERFIS_CHECK});")
+                    print("✅ Constraint perfil atualizada (ceo, gerente incluídos)")
+                except Exception as e:
+                    print(f"⚠️ Constraint perfil não atualizada (pode já estar ok): {e}")
 
             # Tabela de cache do status Bitrix Timeman (expediente: OPENED, PAUSED, CLOSED)
             db.cursor.execute('''
