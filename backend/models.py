@@ -153,6 +153,7 @@ def init_db():
                 ('monitoramento_ativo', "BOOLEAN DEFAULT TRUE"),
                 ('valor_contrato', "NUMERIC(12,2) DEFAULT NULL"),
                 ('bitrix_user_id', "INTEGER DEFAULT NULL"),
+                ('foto_url', "VARCHAR(500) DEFAULT NULL"),
             ]
 
             for column_name, column_type in columns_to_add:

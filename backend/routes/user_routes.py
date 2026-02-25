@@ -520,7 +520,7 @@ def get_monitored_users():
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
                            um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
-                           um.valor_contrato,
+                           um.valor_contrato, um.bitrix_user_id, um.foto_url,
                            d.nome as departamento_nome, d.cor as departamento_cor
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
@@ -534,15 +534,14 @@ def get_monitored_users():
                     for usuario in usuarios_monitorados:
                         try:
                             # Índices: 0=id, 1=nome, 2=departamento_id, 3=cargo, 4=ativo, 5=created_at, 6=updated_at,
-                            # 7=horario_inicio, 8=horario_fim, 9=dias_trabalho, 10=monitoramento_ativo, 11=valor_contrato, 12=dept_nome, 13=dept_cor
+                            # 7=horario_inicio, 8=horario_fim, 9=dias_trabalho, 10=monitoramento_ativo, 11=valor_contrato, 12=bitrix_user_id, 13=foto_url, 14=dept_nome, 15=dept_cor
                             departamento_info = None
-                            if len(usuario) > 12 and usuario[12]:
+                            if len(usuario) > 14 and usuario[14]:
                                 departamento_info = {
-                                    'nome': usuario[12],
-                                    'cor': usuario[13] if len(usuario) > 13 else None
+                                    'nome': usuario[14],
+                                    'cor': usuario[15] if len(usuario) > 15 else None
                                 }
                             valor_contrato = float(usuario[11]) if len(usuario) > 11 and usuario[11] is not None else None
-                            # Pendências: dados cadastrais (cargo), setor (departamento), valor de contrato (custo de produtividade)
                             pendencias = []
                             if not (usuario[3] and str(usuario[3]).strip()):
                                 pendencias.append('dados_cadastrais')
@@ -564,6 +563,8 @@ def get_monitored_users():
                                 'dias_trabalho': usuario[9] if len(usuario) > 9 and usuario[9] else '1,2,3,4,5',
                                 'monitoramento_ativo': usuario[10] if len(usuario) > 10 and usuario[10] is not None else True,
                                 'valor_contrato': valor_contrato,
+                                'bitrix_user_id': usuario[12] if len(usuario) > 12 else None,
+                                'foto_url': (usuario[13] or '').strip() or None if len(usuario) > 13 else None,
                                 'departamento': departamento_info,
                                 'pendencias': pendencias
                             })
