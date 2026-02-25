@@ -35,6 +35,7 @@ const UserManagement = () => {
   const [showSystemForm, setShowSystemForm] = useState(false)
   const [showInactiveUsers, setShowInactiveUsers] = useState(false)
   const [inactiveUsers, setInactiveUsers] = useState([])
+  const [syncingPhotos, setSyncingPhotos] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -284,20 +285,42 @@ const UserManagement = () => {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Usuários
         </h1>
-        <button
-          onClick={() => {
-            if (showForm) {
-              resetForm()
-            } else {
-              setEditingUser(null)
-              setFormData({ nome: '', email: '', senha: '', perfil: 'colaborador', cargo: '', departamento_id: '', valor_contrato: '' })
-              setShowForm(true)
-            }
-          }}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          {showForm ? 'Cancelar' : 'Novo usuário'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              setSyncingPhotos(true)
+              try {
+                const { data } = await api.post('/bitrix-sync-photos')
+                setMessage(data?.updated !== undefined ? `Fotos atualizadas: ${data.updated} colaborador(es).` : 'Fotos sincronizadas.')
+                fetchData()
+              } catch (err) {
+                setMessage('Erro ao sincronizar fotos: ' + (err.response?.data?.error || err.message))
+              } finally {
+                setSyncingPhotos(false)
+              }
+              setTimeout(() => setMessage(''), 4000)
+            }}
+            disabled={syncingPhotos}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
+          >
+            {syncingPhotos ? 'Sincronizando…' : 'Sincronizar fotos (Bitrix)'}
+          </button>
+          <button
+            onClick={() => {
+              if (showForm) {
+                resetForm()
+              } else {
+                setEditingUser(null)
+                setFormData({ nome: '', email: '', senha: '', perfil: 'colaborador', cargo: '', departamento_id: '', valor_contrato: '' })
+                setShowForm(true)
+              }
+            }}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            {showForm ? 'Cancelar' : 'Novo usuário'}
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -474,19 +497,25 @@ const UserManagement = () => {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center">
-                        <span className="text-white font-medium text-sm">
-                          {usuario.nome.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
+                    <div className="flex-shrink-0 relative w-10 h-10 rounded-full overflow-hidden bg-indigo-500 flex items-center justify-center">
+                      {usuario.foto_url && (
+                        <img
+                          src={usuario.foto_url}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                      )}
+                      <span className="text-white font-medium text-sm relative z-[0]">
+                        {usuario.nome.charAt(0).toUpperCase()}
+                      </span>
                     </div>
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                         {usuario.nome}
                       </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                        {usuario.email || '—'}
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={usuario.email_display || `${usuario.nome}@grupohi.com.br`}>
+                        {usuario.email_display || usuario.email || `${usuario.nome}@grupohi.com.br`}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
                         {usuario.cargo || 'Sem cargo'}

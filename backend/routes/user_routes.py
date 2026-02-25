@@ -253,6 +253,90 @@ def update_timeman_status():
         return jsonify({'error': str(e)}), 500
 
 
+def _sync_bitrix_photos_by_email():
+    """
+    Sincroniza fotos dos colaboradores a partir do Bitrix24 (user.get).
+    Modelo de URL: https://grupohi.bitrix24.com.br/rest/721611/ek6fo2ern4klo1ua/user.get
+    Resposta: { "result": [ { "ID", "EMAIL", "PERSONAL_PHOTO", ... } ], "next": 50, "total": 250 }
+    Para cada usuário com EMAIL @grupohi.com.br (ou SSO_EMAIL_DOMAIN), encontra usuario_monitorado
+    por nome = parte local do email e grava PERSONAL_PHOTO em foto_url.
+    """
+    base = (Config.BITRIX_WEBHOOK_URL or '').rstrip('/')
+    if not base:
+        return 0, 'BITRIX_WEBHOOK_URL não configurado'
+    domain = (getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br').strip().lower()
+    domain_suffix = f'@{domain}'
+    updated = 0
+    start = 0
+    total = None
+    while True:
+        try:
+            # GET {base}/user.get?start=0 (paginação: next indica próximo start)
+            url = f"{base}/user.get"
+            r = requests.get(url, params={'start': start}, timeout=15)
+            if r.status_code != 200:
+                break
+            data = r.json()
+            if not isinstance(data, dict):
+                break
+            result = data.get('result')
+            if not isinstance(result, list) or len(result) == 0:
+                break
+            if total is None:
+                total = int(data.get('total') or 0)
+            with DatabaseConnection() as db:
+                for u in result:
+                    if not isinstance(u, dict):
+                        continue
+                    email = (u.get('EMAIL') or u.get('email') or '').strip().lower()
+                    if not email.endswith(domain_suffix):
+                        continue
+                    local = email[:-len(domain_suffix)].strip().lower()
+                    if not local:
+                        continue
+                    # PERSONAL_PHOTO = URL da imagem no Bitrix (ex: https://cdn.bitrix24.com.br/...)
+                    photo = (u.get('PERSONAL_PHOTO') or u.get('personal_photo') or '').strip()
+                    if not photo:
+                        continue
+                    bitrix_id = u.get('ID') or u.get('id')
+                    try:
+                        bitrix_id = int(bitrix_id) if bitrix_id is not None else None
+                    except (TypeError, ValueError):
+                        bitrix_id = None
+                    db.cursor.execute('''
+                        UPDATE usuarios_monitorados
+                        SET foto_url = %s, bitrix_user_id = COALESCE(bitrix_user_id, %s), updated_at = CURRENT_TIMESTAMP
+                        WHERE LOWER(TRIM(nome)) = %s;
+                    ''', (photo, bitrix_id, local))
+                    if db.cursor.rowcount:
+                        updated += 1
+            # Paginação: usar "next" se existir, senão start + len(result)
+            next_start = data.get('next')
+            if next_start is not None:
+                try:
+                    start = int(next_start)
+                except (TypeError, ValueError):
+                    start += len(result)
+            else:
+                start += len(result)
+            if total and start >= total:
+                break
+        except Exception as e:
+            print(f"[BITRIX] Erro ao sincronizar fotos: {e}")
+            return updated, str(e)
+    return updated, None
+
+
+@user_bp.route('/bitrix-sync-photos', methods=['POST'])
+@token_required
+def bitrix_sync_photos(current_user):
+    """Sincroniza fotos dos colaboradores a partir do Bitrix (user.get), por email nome@grupohi.com.br."""
+    updated, err = _sync_bitrix_photos_by_email()
+    if err is not None and updated == 0:
+        return jsonify({'error': err, 'updated': 0}), 400
+    return jsonify({'ok': True, 'updated': updated}), 200
+
+
 @user_bp.route('/usuarios-monitorados', methods=['GET'])
 def get_monitored_users():
     """
@@ -581,6 +665,10 @@ def get_monitored_users():
                                 'departamento': departamento_info,
                                 'pendencias': pendencias
                             })
+                            _email = result[-1].get('email')
+                            _nome = result[-1].get('nome', '')
+                            _dom = (getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br').strip().lower()
+                            result[-1]['email_display'] = _email if _email else f"{_nome}@{_dom}"
                         except (IndexError, AttributeError) as e:
                             print(f"Erro ao processar usuário monitorado: {e}")
                             continue
