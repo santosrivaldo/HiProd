@@ -115,19 +115,33 @@ def sso_callback():
         return jsonify({'message': 'SSO não configurado.'}), 500
 
     token_url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+    scope = "openid email profile"
     payload = {
         'client_id': client_id,
         'client_secret': client_secret,
         'code': code,
         'redirect_uri': redirect_uri,
         'grant_type': 'authorization_code',
+        'scope': scope,
     }
     try:
         r = requests.post(token_url, data=payload, headers={'Content-Type': 'application/x-www-form-urlencoded'}, timeout=15)
-        r.raise_for_status()
+        if not r.ok:
+            err_body = r.text[:500] if r.text else ''
+            try:
+                err_json = r.json()
+                err_desc = err_json.get('error_description', err_json.get('error', err_body))
+            except Exception:
+                err_desc = err_body
+            print(f"❌ SSO token exchange failed: {r.status_code} - {err_desc}")
+            print(f"   [Dica] redirect_uri no .env deve ser EXATAMENTE igual ao configurado no Azure (incl. barra final).")
+            front_url = _frontend_url()
+            return redirect(f"{front_url}?sso_error=1")
         data = r.json()
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"❌ SSO token exchange failed: {e}")
+        if hasattr(e, 'response') and e.response is not None and getattr(e.response, 'text', None):
+            print(f"   Response: {e.response.text[:300]}")
         front_url = _frontend_url()
         return redirect(f"{front_url}?sso_error=1")
 
