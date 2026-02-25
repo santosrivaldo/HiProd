@@ -102,11 +102,18 @@ Com a integração Microsoft, o usuário clica em **"Entrar com SSO (Microsoft)"
 
 ### 5.2 Obter Client ID e Client Secret
 
-- **Application (client) ID**: na página do app, em **Visão geral** → copie o valor e use em `SSO_MICROSOFT_CLIENT_ID`.
-- **Client secret**:
+- **Application (client) ID**: na página do app, em **Visão geral** → copie o valor (um GUID) e use em `SSO_MICROSOFT_CLIENT_ID`.
+
+- **Client secret** (atenção para não confundir):
   1. No menu do app, **Certificados e segredos**.
-  2. **Novo segredo do cliente** → descrição (ex. "HiProd") e validade.
-  3. Copie o **Valor** assim que for exibido (não é mostrado de novo) e use em `SSO_MICROSOFT_CLIENT_SECRET`.
+  2. **Novo segredo do cliente** → descrição (ex. "HiProd") e validade → **Adicionar**.
+  3. Na tabela aparecem duas colunas importantes:
+     - **ID do segredo** (Secret ID) — um GUID. **Não use este valor** no `.env`.
+     - **Valor** (Value) — uma string longa (ex.: `abc123~XyZ...`). **Só é exibida uma vez.** Clique em **Copiar** e use **este valor** em `SSO_MICROSOFT_CLIENT_SECRET`.
+  4. Se você não copiou o **Valor** na hora, o Azure não mostra de novo. Crie um **novo** segredo e copie o **Valor**; depois pode excluir o segredo antigo.
+
+> **Erro AADSTS7000215 ("Invalid client secret provided...")**  
+> Significa que está configurado o **ID do segredo** (Secret ID) em vez do **Valor** do segredo. No `.env`, `SSO_MICROSOFT_CLIENT_SECRET` deve ser a string longa (valor), **não** o GUID (ID do segredo).
 
 ### 5.3 Configurar permissões (tokens OpenID)
 
@@ -203,9 +210,10 @@ As causas mais comuns são:
    - Com ou sem barra final: use o **mesmo** nos dois (ex.: `https://hiprod.grupohi.com.br/api/sso/callback` em ambos).
    - Se o backend estiver atrás de um proxy (Nginx, etc.), a URL que a Microsoft chama é a **pública** (a que o usuário usa no navegador ao voltar do login). Essa deve ser a mesma no Azure e no `.env`.
 
-2. **Client secret incorreto ou expirado**  
-   - No Azure: Certificados e segredos → confira se o segredo está ativo e não expirado.  
-   - Gere um novo segredo e atualize `SSO_MICROSOFT_CLIENT_SECRET` no `.env` (sem espaços ao copiar).
+2. **Client secret incorreto ou valor errado (AADSTS7000215)**  
+   - Use o **Valor** do segredo (a string longa), **não** o **ID do segredo** (o GUID). No Azure, em Certificados e segredos, a coluna **Valor** é a que deve ir em `SSO_MICROSOFT_CLIENT_SECRET`; a coluna **ID do segredo** não.  
+   - Se você perdeu o valor, crie um **novo** segredo no Azure e copie o **Valor** assim que aparecer (ele só é mostrado uma vez).  
+   - Confira se o segredo está ativo e não expirado; evite espaços ao colar no `.env`.
 
 3. **Client ID incorreto**  
    - Confira em Azure → Visão geral do app → "Application (client) ID" e compare com `SSO_MICROSOFT_CLIENT_ID`.

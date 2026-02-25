@@ -172,10 +172,13 @@ def get_monitored_users():
 
     if nome_usuario:
         # Verificação de existência/criação: NÃO requer autenticação
-        # Buscar usuário específico ou criar se não existir
+        # Nome normalizado: parte local do e-mail (ex: rivaldo.santos = rivaldo.santos@grupohi.com.br)
+        nome_normalizado = nome_usuario.strip().lower() if nome_usuario else ''
+        if not nome_normalizado:
+            nome_normalizado = nome_usuario.strip()
         try:
             with DatabaseConnection() as db:
-                # Primeiro, tentar encontrar o usuário (independente do status ativo)
+                # Primeiro, tentar encontrar o usuário (busca case-insensitive: rivaldo.santos = Rivaldo.Santos)
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
                            um.escala_trabalho_id, um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
@@ -184,8 +187,8 @@ def get_monitored_users():
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
                     LEFT JOIN escalas_trabalho et ON um.escala_trabalho_id = et.id
-                    WHERE um.nome = %s;
-                ''', (nome_usuario,))
+                    WHERE LOWER(TRIM(um.nome)) = %s;
+                ''', (nome_normalizado,))
 
                 usuario_existente = db.cursor.fetchone()
 
@@ -246,8 +249,8 @@ def get_monitored_users():
                     print(f"✅ Usuário monitorado encontrado: {nome_usuario} (ID: {usuario_existente[0]})")
                     return jsonify(result)
                 else:
-                    # Usuário não existe, criar novo automaticamente
-                    print(f"🔧 Criando novo usuário monitorado: {nome_usuario}")
+                    # Usuário não existe, criar novo automaticamente (nome normalizado = parte local do e-mail)
+                    print(f"🔧 Criando novo usuário monitorado: {nome_normalizado} (conectado a {nome_normalizado}@domínio corporativo)")
                     # Buscar escala padrão
                     db.cursor.execute("SELECT id FROM escalas_trabalho WHERE nome = 'Comercial Padrão' AND ativo = TRUE LIMIT 1;")
                     escala_padrao = db.cursor.fetchone()
@@ -258,14 +261,14 @@ def get_monitored_users():
                             INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho, ativo)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, TRUE)
                             RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-                        ''', (nome_usuario, None, 'Usuário', escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
+                        ''', (nome_normalizado, None, 'Usuário', escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5'))
 
                         novo_usuario = db.cursor.fetchone()
                         print(f"✅ Usuário monitorado criado: {nome_usuario} (ID: {novo_usuario[0]})")
                     except Exception as insert_error:
-                        # Se der erro de duplicação (unique constraint), tentar buscar novamente
+                        # Se der erro de duplicação (unique constraint), tentar buscar novamente por nome normalizado
                         if 'unique' in str(insert_error).lower() or 'duplicate' in str(insert_error).lower():
-                            print(f"⚠️ Usuário já existe (erro de duplicação), buscando novamente: {nome_usuario}")
+                            print(f"⚠️ Usuário já existe (erro de duplicação), buscando novamente: {nome_normalizado}")
                             db.cursor.execute('''
                                 SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
                                        um.escala_trabalho_id, um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
@@ -274,8 +277,8 @@ def get_monitored_users():
                                 FROM usuarios_monitorados um
                                 LEFT JOIN departamentos d ON um.departamento_id = d.id
                                 LEFT JOIN escalas_trabalho et ON um.escala_trabalho_id = et.id
-                                WHERE um.nome = %s;
-                            ''', (nome_usuario,))
+                                WHERE LOWER(TRIM(um.nome)) = %s;
+                            ''', (nome_normalizado,))
                             novo_usuario_row = db.cursor.fetchone()
                             
                             if novo_usuario_row:
@@ -362,7 +365,7 @@ def get_monitored_users():
             # Retornar um usuário básico para manter o agente funcionando
             return jsonify({
                 'id': 0,
-                'nome': nome_usuario,
+                'nome': nome_normalizado,
                 'departamento_id': None,
                 'cargo': 'Usuário',
                 'ativo': True,

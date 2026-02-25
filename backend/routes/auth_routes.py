@@ -6,7 +6,7 @@ import secrets
 import urllib.parse
 import requests
 from flask import Blueprint, request, jsonify, redirect
-from ..auth import generate_jwt_token, token_required, find_user_by_email_or_sso
+from ..auth import generate_jwt_token, token_required, find_user_by_email_or_sso, create_usuario_from_sso_email
 from ..database import DatabaseConnection
 from ..config import Config
 from ..utils import format_datetime_brasilia
@@ -35,6 +35,8 @@ def sso_login():
             return jsonify({'message': 'E-mail é obrigatório para login SSO.'}), 400
 
         usuario = find_user_by_email_or_sso(email)
+        if not usuario:
+            usuario = create_usuario_from_sso_email(email)
         if not usuario:
             print(f"❌ SSO: usuário não encontrado para e-mail: {email}")
             return jsonify({'message': 'Usuário não encontrado. Cadastre-se no painel ou use o e-mail corporativo (ex: nome@grupohi.com.br).'}), 401
@@ -159,6 +161,8 @@ def sso_callback():
         return redirect(f"{front_url}?sso_error=1")
 
     usuario = find_user_by_email_or_sso(email)
+    if not usuario:
+        usuario = create_usuario_from_sso_email(email)
     if not usuario:
         print(f"❌ SSO: usuário não encontrado para: {email}")
         front_url = _frontend_url()

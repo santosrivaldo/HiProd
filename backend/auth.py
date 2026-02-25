@@ -59,6 +59,44 @@ def find_user_by_email_or_sso(email):
     return None
 
 
+def create_usuario_from_sso_email(email):
+    """
+    Cria um usuário do painel (usuarios) no primeiro login SSO, quando o e-mail é do domínio corporativo.
+    Regra: rivaldo.santos@grupohi.com.br -> cria usuario nome=rivaldo.santos, email=..., senha=aleatória (só SSO).
+    Só cria se o domínio for SSO_EMAIL_DOMAIN. Retorna a tupla (id, nome, email, ativo, departamento_id, perfil) ou None.
+    """
+    if not email or '@' not in email:
+        return None
+    email = email.strip().lower()
+    local = _email_local_part(email)
+    domain = email.split('@')[-1].lower()
+    sso_domain = (getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br').strip().lower()
+    if not local or domain != sso_domain:
+        return None
+    try:
+        import bcrypt
+        with DatabaseConnection() as db:
+            db.cursor.execute(
+                'SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, \'colaborador\') FROM usuarios WHERE LOWER(TRIM(nome)) = %s LIMIT 1;',
+                (local,)
+            )
+            if db.cursor.fetchone():
+                return None  # já existe, deixa find_user_by_email_or_sso encontrar na próxima
+            senha_hash = bcrypt.hashpw(secrets.token_urlsafe(32).encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            db.cursor.execute('''
+                INSERT INTO usuarios (nome, senha, email, ativo, perfil)
+                VALUES (%s, %s, %s, TRUE, 'colaborador')
+                RETURNING id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador');
+            ''', (local, senha_hash, email))
+            row = db.cursor.fetchone()
+            if row:
+                print(f"✅ SSO: usuário do painel criado automaticamente: {local} ({email})")
+                return row
+    except Exception as e:
+        print(f"create_usuario_from_sso_email error: {e}")
+    return None
+
+
 def generate_jwt_token(user_id):
     """Gera um token JWT para o usuário"""
     payload = {
