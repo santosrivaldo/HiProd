@@ -48,3 +48,8 @@ class Config:
     SSO_MICROSOFT_TENANT = os.getenv('SSO_MICROSOFT_TENANT', 'common')  # common, ou tenant id
     SSO_REDIRECT_URI = os.getenv('SSO_REDIRECT_URI', '')  # ex: https://hiprod.grupohi.com.br/api/sso/callback
     FRONTEND_URL = os.getenv('FRONTEND_URL', '')  # ex: https://hiprod.grupohi.com.br para redirecionar após SSO
+
+    # Bitrix24 – expediente (Timeman): verificar se usuário está ativo antes de enviar atividades
+    BITRIX_ENABLED = os.getenv('BITRIX_ENABLED', 'false').lower() == 'true'
+    # URL do webhook (ex: https://empresa.bitrix24.com.br/rest/1/SEU_CODIGO) – sem barra no final
+    BITRIX_WEBHOOK_URL = (os.getenv('BITRIX_WEBHOOK_URL') or '').strip()

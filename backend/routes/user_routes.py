@@ -1,10 +1,12 @@
 import uuid
 import psycopg2
 import bcrypt
+import requests
 from flask import Blueprint, request, jsonify
 from ..auth import token_required, agent_required
 from ..database import DatabaseConnection
 from ..utils import format_datetime_brasilia
+from ..config import Config
 
 user_bp = Blueprint('user', __name__)
 
@@ -60,31 +62,115 @@ def _default_timeman_response():
     }
 
 
+def _fetch_bitrix_timeman_status(bitrix_user_id):
+    """
+    Consulta o status do expediente no Bitrix24 (timeman.status).
+    Retorna dict com status, time_start, duration, time_leaks, worked_today ou None em erro.
+    """
+    base = (Config.BITRIX_WEBHOOK_URL or '').rstrip('/')
+    if not base or not bitrix_user_id:
+        return None
+    url = f"{base}/timeman.status"
+    try:
+        r = requests.get(url, params={'USER_ID': int(bitrix_user_id)}, timeout=10)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not isinstance(data, dict):
+            return None
+        result = data.get('result')
+        if result is None:
+            result = data
+        if not isinstance(result, dict):
+            return {'status': 'CLOSED', 'time_start': None, 'duration': '00:00:00', 'time_leaks': '00:00:00', 'worked_today': False}
+        # Bitrix retorna STATUS (OPENED/PAUSED), TIME_START, DURATION, TIME_LEAKS
+        status = (result.get('STATUS') or result.get('status') or 'CLOSED').upper()
+        if status not in ('OPENED', 'PAUSED', 'CLOSED'):
+            status = 'CLOSED' if status in ('EXPIRED', 'CLOSED') else ('PAUSED' if 'PAUSE' in status else 'OPENED')
+        time_start = result.get('TIME_START') or result.get('time_start')
+        duration = result.get('DURATION') or result.get('duration') or '00:00:00'
+        time_leaks = result.get('TIME_LEAKS') or result.get('time_leaks') or '00:00:00'
+        return {
+            'status': status,
+            'time_start': time_start,
+            'duration': duration if isinstance(duration, str) else str(duration or '00:00:00'),
+            'time_leaks': time_leaks if isinstance(time_leaks, str) else str(time_leaks or '00:00:00'),
+            'worked_today': bool(time_start),
+        }
+    except Exception as e:
+        print(f"[BITRIX] Erro ao consultar timeman.status (USER_ID={bitrix_user_id}): {e}")
+        return None
+
+
 @user_bp.route('/timeman-status', methods=['GET'])
 def get_timeman_status():
     """
     Retorna o status do expediente Bitrix (Timeman) do usuário.
-    Usado pelo agent e pelo botão flutuante para: mostrar status na UI e decidir se envia dados.
-    Parâmetros: nome (nome do usuário Windows) ou usuario_monitorado_id (ID do usuário monitorado).
-    Status: OPENED = expediente ativo (agent envia); PAUSED = intervalo (não envia); CLOSED = dia finalizado (não envia).
+    Se BITRIX_ENABLED e BITRIX_WEBHOOK_URL estiverem configurados e o usuário monitorado tiver
+    bitrix_user_id, consulta o status em tempo real na API Bitrix; senão usa o cache em bitrix_timeman_status.
+    Usado pelo agent para: só enviar atividades quando status == OPENED (expediente ativo).
+    Parâmetros: nome (nome do usuário) ou usuario_monitorado_id.
+    Status: OPENED = ativo (envia); PAUSED = intervalo (não envia); CLOSED = dia finalizado (não envia).
     """
     nome = request.args.get('nome')
     usuario_monitorado_id = request.args.get('usuario_monitorado_id', type=int)
     try:
         with DatabaseConnection() as db:
             um_id = None
+            bitrix_user_id = None
             if usuario_monitorado_id:
                 um_id = usuario_monitorado_id
-            elif nome:
                 db.cursor.execute(
-                    'SELECT id FROM usuarios_monitorados WHERE nome = %s LIMIT 1;',
-                    (nome.strip(),)
+                    'SELECT bitrix_user_id FROM usuarios_monitorados WHERE id = %s;',
+                    (um_id,)
+                )
+                row = db.cursor.fetchone()
+                if row and row[0]:
+                    bitrix_user_id = row[0]
+            elif nome:
+                nome_norm = (nome or '').strip().lower() or (nome or '').strip()
+                db.cursor.execute(
+                    'SELECT id, bitrix_user_id FROM usuarios_monitorados WHERE LOWER(TRIM(nome)) = %s LIMIT 1;',
+                    (nome_norm,)
                 )
                 row = db.cursor.fetchone()
                 if row:
-                    um_id = row[0]
+                    um_id, bitrix_user_id = row[0], (row[1] if len(row) > 1 and row[1] else None)
             if not um_id:
                 return jsonify(_default_timeman_response()), 200
+
+            # Se Bitrix está configurado e o usuário tem bitrix_user_id, consultar API Bitrix
+            if Config.BITRIX_ENABLED and Config.BITRIX_WEBHOOK_URL and bitrix_user_id:
+                bitrix_data = _fetch_bitrix_timeman_status(bitrix_user_id)
+                if bitrix_data:
+                    time_start = bitrix_data.get('time_start')
+                    duration = bitrix_data.get('duration', '00:00:00')
+                    time_leaks = bitrix_data.get('time_leaks', '00:00:00')
+                    worked_today = bitrix_data.get('worked_today', False)
+                    # Atualizar cache local
+                    db.cursor.execute('''
+                        INSERT INTO bitrix_timeman_status
+                        (usuario_monitorado_id, status, time_start, duration, time_leaks, worked_today, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (usuario_monitorado_id) DO UPDATE SET
+                            status = EXCLUDED.status,
+                            time_start = EXCLUDED.time_start,
+                            duration = EXCLUDED.duration,
+                            time_leaks = EXCLUDED.time_leaks,
+                            worked_today = EXCLUDED.worked_today,
+                            updated_at = CURRENT_TIMESTAMP;
+                    ''', (um_id, bitrix_data['status'], time_start, duration, time_leaks, worked_today))
+                    return jsonify({
+                        'status': bitrix_data['status'],
+                        'time_start': time_start,
+                        'duration': duration,
+                        'time_leaks': time_leaks,
+                        'worked_today': worked_today,
+                        'updated_at': None,
+                        'source': 'bitrix',
+                    }), 200
+
+            # Fallback: ler do cache (tabela bitrix_timeman_status)
             db.cursor.execute('''
                 SELECT status, time_start, duration, time_leaks, worked_today, updated_at
                 FROM bitrix_timeman_status

@@ -151,7 +151,8 @@ def init_db():
                 ('horario_fim_trabalho', "TIME DEFAULT '18:00:00'"),
                 ('dias_trabalho', "VARCHAR(20) DEFAULT '1,2,3,4,5'"),
                 ('monitoramento_ativo', "BOOLEAN DEFAULT TRUE"),
-                ('valor_contrato', "NUMERIC(12,2) DEFAULT NULL")
+                ('valor_contrato', "NUMERIC(12,2) DEFAULT NULL"),
+                ('bitrix_user_id', "INTEGER DEFAULT NULL"),
             ]
 
             for column_name, column_type in columns_to_add:
