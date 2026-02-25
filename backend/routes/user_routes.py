@@ -13,37 +13,45 @@ user_bp = Blueprint('user', __name__)
 @user_bp.route('/usuarios', methods=['GET'])
 @token_required
 def get_users(current_user):
+    """
+    Lista unificada: usuários do sistema com dados de monitoramento (quando vinculados).
+    Cada pessoa é uma só; a diferença é o nível de acesso (perfil).
+    """
     try:
         with DatabaseConnection() as db:
             db.cursor.execute('''
-                SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at, d.nome as departamento_nome, d.cor as departamento_cor
+                SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at,
+                       COALESCE(u.perfil, 'colaborador') as perfil, u.usuario_monitorado_id,
+                       d.nome as departamento_nome, d.cor as departamento_cor,
+                       um.id as um_id, um.cargo, um.valor_contrato, um.foto_url
                 FROM usuarios u
                 LEFT JOIN departamentos d ON u.departamento_id = d.id
+                LEFT JOIN usuarios_monitorados um ON u.usuario_monitorado_id = um.id
                 WHERE u.ativo = TRUE
                 ORDER BY u.nome;
             ''')
             usuarios = db.cursor.fetchall()
 
             result = []
-            if usuarios:
-                for usuario in usuarios:
-                    # Verificar se temos dados suficientes do departamento
-                    departamento_info = None
-                    if len(usuario) > 6 and usuario[6]:  # departamento_nome existe
-                        departamento_info = {
-                            'nome': usuario[6],
-                            'cor': usuario[7] if len(usuario) > 7 else None
-                        }
-
-                    result.append({
-                        'usuario_id': str(usuario[0]) if usuario[0] else None,
-                        'usuario': usuario[1],
-                        'email': usuario[2],
-                        'departamento_id': usuario[3],
-                        'ativo': usuario[4],
-                        'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
-                        'departamento': departamento_info
-                    })
+            for usuario in usuarios or []:
+                departamento_info = None
+                if len(usuario) > 8 and usuario[8]:
+                    departamento_info = {'nome': usuario[8], 'cor': usuario[9] if len(usuario) > 9 else None}
+                result.append({
+                    'usuario_id': str(usuario[0]) if usuario[0] else None,
+                    'usuario': usuario[1],
+                    'nome': usuario[1],
+                    'email': usuario[2],
+                    'departamento_id': usuario[3],
+                    'ativo': usuario[4],
+                    'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
+                    'perfil': (usuario[6] or 'colaborador').lower(),
+                    'usuario_monitorado_id': usuario[7],
+                    'departamento': departamento_info,
+                    'cargo': usuario[11] if len(usuario) > 11 else None,
+                    'valor_contrato': float(usuario[12]) if len(usuario) > 12 and usuario[12] is not None else None,
+                    'foto_url': (usuario[13] or '').strip() or None if len(usuario) > 13 else None,
+                })
 
             return jsonify(result)
     except Exception as e:
@@ -520,10 +528,12 @@ def get_monitored_users():
                 db.cursor.execute('''
                     SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
                            um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
-                           um.valor_contrato, um.bitrix_user_id, um.foto_url,
-                           d.nome as departamento_nome, d.cor as departamento_cor
+                           um.valor_contrato, um.bitrix_user_id, um.foto_url, um.usuario_id,
+                           d.nome as departamento_nome, d.cor as departamento_cor,
+                           u.id as u_id, u.email as u_email, COALESCE(u.perfil, 'colaborador') as u_perfil
                     FROM usuarios_monitorados um
                     LEFT JOIN departamentos d ON um.departamento_id = d.id
+                    LEFT JOIN usuarios u ON u.id = um.usuario_id
                     WHERE um.ativo = TRUE
                     ORDER BY um.nome;
                 ''')
@@ -534,12 +544,12 @@ def get_monitored_users():
                     for usuario in usuarios_monitorados:
                         try:
                             # Índices: 0=id, 1=nome, 2=departamento_id, 3=cargo, 4=ativo, 5=created_at, 6=updated_at,
-                            # 7=horario_inicio, 8=horario_fim, 9=dias_trabalho, 10=monitoramento_ativo, 11=valor_contrato, 12=bitrix_user_id, 13=foto_url, 14=dept_nome, 15=dept_cor
+                            # 7-11 horario*, 12=bitrix_user_id, 13=foto_url, 14=usuario_id, 15=dept_nome, 16=dept_cor, 17=u_id, 18=u_email, 19=u_perfil
                             departamento_info = None
-                            if len(usuario) > 14 and usuario[14]:
+                            if len(usuario) > 15 and usuario[15]:
                                 departamento_info = {
-                                    'nome': usuario[14],
-                                    'cor': usuario[15] if len(usuario) > 15 else None
+                                    'nome': usuario[15],
+                                    'cor': usuario[16] if len(usuario) > 16 else None
                                 }
                             valor_contrato = float(usuario[11]) if len(usuario) > 11 and usuario[11] is not None else None
                             pendencias = []
@@ -565,6 +575,9 @@ def get_monitored_users():
                                 'valor_contrato': valor_contrato,
                                 'bitrix_user_id': usuario[12] if len(usuario) > 12 else None,
                                 'foto_url': (usuario[13] or '').strip() or None if len(usuario) > 13 else None,
+                                'usuario_id': str(usuario[17]) if len(usuario) > 17 and usuario[17] else None,
+                                'email': (usuario[18] or '').strip() or None if len(usuario) > 18 else None,
+                                'perfil': (usuario[19] or 'colaborador').lower() if len(usuario) > 19 else 'colaborador',
                                 'departamento': departamento_info,
                                 'pendencias': pendencias
                             })
@@ -602,7 +615,6 @@ def create_monitored_user(current_user):
             if departamento_id is not None:
                 try:
                     dept_id = int(departamento_id)
-                    # Verificar se o departamento existe e está ativo
                     db.cursor.execute("SELECT id FROM departamentos WHERE id = %s AND ativo = TRUE;", (dept_id,))
                     if not db.cursor.fetchone():
                         return jsonify({'message': 'Departamento não encontrado ou inativo!'}), 400
@@ -611,31 +623,48 @@ def create_monitored_user(current_user):
             else:
                 dept_id = None
 
-            # Buscar escala padrão
             db.cursor.execute("SELECT id FROM escalas_trabalho WHERE nome = 'Comercial Padrão' AND ativo = TRUE LIMIT 1;")
             escala_padrao = db.cursor.fetchone()
             escala_padrao_id = escala_padrao[0] if escala_padrao else None
 
+            # 1) Criar usuario_monitorado (mesma pessoa que o usuário do sistema)
             db.cursor.execute('''
                 INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho, valor_contrato)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, '08:00:00', '18:00:00', '1,2,3,4,5', %s)
                 RETURNING id, nome, departamento_id, cargo, ativo, created_at, updated_at;
-            ''', (nome, dept_id, cargo, escala_padrao_id, '08:00:00', '18:00:00', '1,2,3,4,5', valor_contrato))
+            ''', (nome, dept_id, cargo, escala_padrao_id, valor_contrato))
+            um = db.cursor.fetchone()
+            um_id = um[0]
 
-            usuario = db.cursor.fetchone()
+            # 2) Criar usuario (login + perfil colaborador) para ser a mesma pessoa
+            from ..config import Config
+            domain = getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br'
+            email_padrao = f"{nome}@{domain}"
+            senha_rand = bcrypt.hashpw(str(uuid.uuid4()).encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            db.cursor.execute('''
+                INSERT INTO usuarios (nome, senha, email, departamento_id, ativo, perfil, usuario_monitorado_id)
+                VALUES (%s, %s, %s, %s, TRUE, 'colaborador', %s)
+                RETURNING id;
+            ''', (nome, senha_rand, email_padrao, dept_id, um_id))
+            u_row = db.cursor.fetchone()
+            u_id = u_row[0]
+            db.cursor.execute('UPDATE usuarios_monitorados SET usuario_id = %s WHERE id = %s;', (u_id, um_id))
+
             return jsonify({
-                'message': 'Usuário monitorado criado com sucesso!',
-                'id': usuario[0],
-                'nome': usuario[1],
-                'cargo': usuario[2],
-                'departamento_id': usuario[3],
-                'ativo': usuario[4],
-                'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
-                'updated_at': format_datetime_brasilia(usuario[6]) if usuario[6] else None
+                'message': 'Usuário criado com sucesso!',
+                'id': um_id,
+                'nome': um[1],
+                'cargo': um[3],
+                'departamento_id': um[2],
+                'ativo': um[4],
+                'usuario_id': str(u_id),
+                'perfil': 'colaborador',
+                'created_at': format_datetime_brasilia(um[5]) if um[5] else None,
+                'updated_at': format_datetime_brasilia(um[6]) if um[6] else None
             }), 201
 
     except psycopg2.IntegrityError:
-        return jsonify({'message': 'Usuário monitorado já existe!'}), 409
+        return jsonify({'message': 'Usuário já existe!'}), 409
     except Exception as e:
         print(f"Erro ao criar usuário monitorado: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
@@ -650,10 +679,11 @@ def update_monitored_user(current_user, user_id):
 
     try:
         with DatabaseConnection() as db:
-            # Verificar se o usuário existe
-            db.cursor.execute('SELECT id FROM usuarios_monitorados WHERE id = %s;', (user_id,))
-            if not db.cursor.fetchone():
-                return jsonify({'message': 'Usuário monitorado não encontrado!'}), 404
+            db.cursor.execute('SELECT id, usuario_id FROM usuarios_monitorados WHERE id = %s;', (user_id,))
+            row = db.cursor.fetchone()
+            if not row:
+                return jsonify({'message': 'Usuário não encontrado!'}), 404
+            u_id_linked = row[1]
 
             update_fields = []
             update_values = []
@@ -715,6 +745,13 @@ def update_monitored_user(current_user, user_id):
                 update_fields.append('valor_contrato = %s')
                 update_values.append(vc)
 
+            if 'perfil' in data and u_id_linked:
+                perfil = (data.get('perfil') or 'colaborador').strip().lower()
+                if perfil in ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'):
+                    db.cursor.execute('UPDATE usuarios SET perfil = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;', (perfil, u_id_linked))
+            if 'email' in data and u_id_linked:
+                db.cursor.execute('UPDATE usuarios SET email = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;', (data.get('email') or '', u_id_linked))
+
             if not update_fields:
                 return jsonify({'message': 'Nenhum campo válido para atualizar!'}), 400
 
@@ -726,10 +763,29 @@ def update_monitored_user(current_user, user_id):
                 WHERE id = %s;
             ''', update_values)
 
-            return jsonify({'message': 'Usuário monitorado atualizado com sucesso!'}), 200
+            # Sincronizar com usuario vinculado (mesma pessoa: nome, departamento, perfil)
+            if u_id_linked and (data.get('nome') is not None or data.get('departamento_id') is not None):
+                u_updates = []
+                u_vals = []
+                if 'nome' in data:
+                    u_updates.append('nome = %s')
+                    u_vals.append(data['nome'].strip())
+                if 'departamento_id' in data:
+                    d = data.get('departamento_id')
+                    try:
+                        d = int(d) if d not in (None, '') else None
+                    except (ValueError, TypeError):
+                        d = None
+                    u_vals.append(d)
+                    u_updates.append('departamento_id = %s')
+                if u_updates:
+                    u_vals.append(u_id_linked)
+                    db.cursor.execute(f"UPDATE usuarios SET {', '.join(u_updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s;", u_vals)
+
+            return jsonify({'message': 'Usuário atualizado com sucesso!'}), 200
 
     except Exception as e:
-        print(f"Erro ao atualizar usuário monitorado: {e}")
+        print(f"Erro ao atualizar usuário: {e}")
         return jsonify({'message': 'Erro interno do servidor!'}), 500
 
 @user_bp.route('/usuarios/<uuid:usuario_id>/departamento', methods=['PATCH'])
@@ -786,28 +842,39 @@ def create_system_user(current_user):
     nome = data['nome'].strip()
     senha = data['senha'].strip()
     email = data.get('email', '').strip() or None
+    perfil = (data.get('perfil') or 'colaborador').strip().lower()
+    if perfil not in ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'):
+        perfil = 'colaborador'
     # SSO: usuários criados com nome no padrão têm email padrão (ex: rivaldo.santos -> rivaldo.santos@grupohi.com.br)
     if not email and nome:
         from ..config import Config
         domain = getattr(Config, 'SSO_EMAIL_DOMAIN', None) or 'grupohi.com.br'
         email = f"{nome}@{domain}"
     departamento_id = data.get('departamento_id')
+    cargo = (data.get('cargo') or '').strip() or None
+    valor_contrato = data.get('valor_contrato')
+    if valor_contrato is not None and valor_contrato != '':
+        try:
+            valor_contrato = float(valor_contrato)
+        except (ValueError, TypeError):
+            valor_contrato = None
+    else:
+        valor_contrato = None
 
     # Validações
     if len(nome) < 3:
         return jsonify({'message': 'Nome deve ter pelo menos 3 caracteres!'}), 400
-    
+
     if len(senha) < 6:
         return jsonify({'message': 'Senha deve ter pelo menos 6 caracteres!'}), 400
 
     try:
         with DatabaseConnection() as db:
-            # Verificar se usuário já existe
-            db.cursor.execute('SELECT id FROM usuarios WHERE nome = %s;', (nome,))
+            db.cursor.execute('SELECT id FROM usuarios WHERE LOWER(TRIM(nome)) = LOWER(TRIM(%s));', (nome,))
             if db.cursor.fetchone():
                 return jsonify({'message': 'Usuário já existe!'}), 409
 
-            # Verificar departamento se fornecido
+            dept_id = None
             if departamento_id:
                 try:
                     dept_id = int(departamento_id)
@@ -816,22 +883,34 @@ def create_system_user(current_user):
                         return jsonify({'message': 'Departamento não encontrado!'}), 400
                 except ValueError:
                     return jsonify({'message': 'ID de departamento inválido!'}), 400
-            else:
-                dept_id = None
 
-            # Hash da senha
-            senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            # Escala padrão para monitorado
+            db.cursor.execute("SELECT id FROM escalas_trabalho WHERE nome = 'Comercial Padrão' AND ativo = TRUE LIMIT 1;")
+            escala_row = db.cursor.fetchone()
+            escala_id = escala_row[0] if escala_row else None
 
-            # Inserir usuário
+            # 1) Criar usuario_monitorado (mesma pessoa; agent usa este)
             db.cursor.execute('''
-                INSERT INTO usuarios (nome, senha, email, departamento_id, ativo)
-                VALUES (%s, %s, %s, %s, TRUE)
+                INSERT INTO usuarios_monitorados (nome, departamento_id, cargo, escala_trabalho_id, horario_inicio_trabalho, horario_fim_trabalho, dias_trabalho, valor_contrato)
+                VALUES (%s, %s, %s, %s, '08:00:00', '18:00:00', '1,2,3,4,5', %s)
+                RETURNING id;
+            ''', (nome, dept_id, cargo, escala_id, valor_contrato))
+            um_row = db.cursor.fetchone()
+            um_id = um_row[0]
+
+            # 2) Criar usuario (login + perfil)
+            senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            db.cursor.execute('''
+                INSERT INTO usuarios (nome, senha, email, departamento_id, ativo, perfil, usuario_monitorado_id)
+                VALUES (%s, %s, %s, %s, TRUE, %s, %s)
                 RETURNING id, nome, email, departamento_id, ativo, created_at;
-            ''', (nome, senha_hash, email, dept_id))
+            ''', (nome, senha_hash, email, dept_id, perfil, um_id))
 
             usuario = db.cursor.fetchone()
 
-            # Buscar dados do departamento se existir
+            # 3) Vincular monitorado -> usuario
+            db.cursor.execute('UPDATE usuarios_monitorados SET usuario_id = %s WHERE id = %s;', (usuario[0], um_id))
+
             departamento_info = None
             if dept_id:
                 db.cursor.execute('SELECT nome, cor FROM departamentos WHERE id = %s;', (dept_id,))
@@ -844,9 +923,14 @@ def create_system_user(current_user):
                 'usuario': {
                     'usuario_id': str(usuario[0]),
                     'usuario': usuario[1],
+                    'nome': usuario[1],
                     'email': usuario[2],
                     'departamento_id': usuario[3],
                     'ativo': usuario[4],
+                    'perfil': perfil,
+                    'usuario_monitorado_id': um_id,
+                    'cargo': cargo,
+                    'valor_contrato': valor_contrato,
                     'created_at': format_datetime_brasilia(usuario[5]),
                     'departamento': departamento_info
                 }
@@ -871,11 +955,11 @@ def update_system_user(current_user, usuario_id):
 
     try:
         with DatabaseConnection() as db:
-            # Verificar se o usuário existe
-            db.cursor.execute('SELECT id, nome FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
+            db.cursor.execute('SELECT id, nome, usuario_monitorado_id FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
             existing_user = db.cursor.fetchone()
             if not existing_user:
                 return jsonify({'message': 'Usuário não encontrado!'}), 404
+            um_id_linked = existing_user[2] if len(existing_user) > 2 else None
 
             update_fields = []
             update_values = []
@@ -927,6 +1011,13 @@ def update_system_user(current_user, usuario_id):
                 update_fields.append('departamento_id = %s')
                 update_values.append(dept_id)
 
+            # Perfil (nível de acesso)
+            if 'perfil' in data:
+                perfil = (data['perfil'] or 'colaborador').strip().lower()
+                if perfil in ('admin', 'head', 'coordenador', 'supervisor', 'colaborador'):
+                    update_fields.append('perfil = %s')
+                    update_values.append(perfil)
+
             # Status ativo
             if 'ativo' in data:
                 update_fields.append('ativo = %s')
@@ -948,7 +1039,27 @@ def update_system_user(current_user, usuario_id):
 
             updated_user = db.cursor.fetchone()
 
-            # Buscar dados do departamento se existir
+            # Sincronizar com usuario_monitorado vinculado (mesma pessoa)
+            if um_id_linked and (data.get('nome') is not None or data.get('departamento_id') is not None or data.get('cargo') is not None or data.get('valor_contrato') is not None):
+                um_updates = []
+                um_vals = []
+                if 'nome' in data:
+                    um_updates.append('nome = %s')
+                    um_vals.append(data['nome'].strip())
+                if 'departamento_id' in data:
+                    um_vals.append(data.get('departamento_id'))
+                    um_updates.append('departamento_id = %s')
+                if 'cargo' in data:
+                    um_updates.append('cargo = %s')
+                    um_vals.append(data.get('cargo'))
+                if 'valor_contrato' in data:
+                    vc = data.get('valor_contrato')
+                    um_vals.append(float(vc) if vc not in (None, '') else None)
+                    um_updates.append('valor_contrato = %s')
+                if um_updates:
+                    um_vals.append(um_id_linked)
+                    db.cursor.execute(f"UPDATE usuarios_monitorados SET {', '.join(um_updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s;", um_vals)
+
             departamento_info = None
             if updated_user[3]:
                 db.cursor.execute('SELECT nome, cor FROM departamentos WHERE id = %s;', (updated_user[3],))
@@ -961,6 +1072,7 @@ def update_system_user(current_user, usuario_id):
                 'usuario': {
                     'usuario_id': str(updated_user[0]),
                     'usuario': updated_user[1],
+                    'nome': updated_user[1],
                     'email': updated_user[2],
                     'departamento_id': updated_user[3],
                     'ativo': updated_user[4],

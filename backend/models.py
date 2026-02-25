@@ -154,6 +154,7 @@ def init_db():
                 ('valor_contrato', "NUMERIC(12,2) DEFAULT NULL"),
                 ('bitrix_user_id', "INTEGER DEFAULT NULL"),
                 ('foto_url', "VARCHAR(500) DEFAULT NULL"),
+                ('usuario_id', "UUID REFERENCES usuarios(id) ON DELETE SET NULL"),
             ]
 
             for column_name, column_type in columns_to_add:
@@ -167,6 +168,16 @@ def init_db():
                     print(f"🔧 Adicionando coluna {column_name} à tabela usuarios_monitorados...")
                     db.cursor.execute(f"ALTER TABLE usuarios_monitorados ADD COLUMN {column_name} {column_type};")
                     print(f"✅ Coluna {column_name} adicionada com sucesso!")
+
+            # Vínculo usuarios <-> usuarios_monitorados (mesma pessoa; diferença = perfil/nível de acesso)
+            db.cursor.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='usuarios' AND column_name='usuario_monitorado_id';
+            """)
+            if not db.cursor.fetchone():
+                print("🔧 Adicionando coluna usuario_monitorado_id à tabela usuarios...")
+                db.cursor.execute("ALTER TABLE usuarios ADD COLUMN usuario_monitorado_id INTEGER REFERENCES usuarios_monitorados(id) ON DELETE SET NULL;")
+                print("✅ Coluna usuario_monitorado_id adicionada em usuarios")
 
             # Coluna perfil na tabela usuarios (tipos de acesso: admin, head, coordenador, supervisor, colaborador)
             db.cursor.execute("""
