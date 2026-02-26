@@ -13,6 +13,43 @@ from ..utils import format_datetime_brasilia
 
 auth_bp = Blueprint('auth', __name__)
 
+# Usuário especial que deve sempre ter perfil admin
+SPECIAL_ADMIN_EMAIL = 'rivaldo.santos@grupohi.com.br'
+SPECIAL_ADMIN_LOGIN = 'rivaldo.santos'
+
+
+def _ensure_special_admin(db, usuario_row):
+    """
+    Garante que o usuário especial (por e-mail/login) tenha perfil 'admin'.
+    usuario_row: tupla (id, nome, email, ativo, departamento_id, perfil, ...)
+    Retorna a tupla possivelmente ajustada (perfil=admin).
+    """
+    try:
+        if not usuario_row:
+            return usuario_row
+        uid = usuario_row[0]
+        nome = (usuario_row[1] or '').strip().lower()
+        email = (usuario_row[2] or '').strip().lower() if len(usuario_row) > 2 else ''
+        perfil_atual = (usuario_row[5] or 'colaborador').strip().lower() if len(usuario_row) > 5 else 'colaborador'
+
+        if perfil_atual == 'admin':
+            return usuario_row
+
+        if email == SPECIAL_ADMIN_EMAIL or nome == SPECIAL_ADMIN_LOGIN:
+            db.cursor.execute(
+                "UPDATE usuarios SET perfil = 'admin', updated_at = CURRENT_TIMESTAMP WHERE id = %s;",
+                (uid,)
+            )
+            # Reconstruir tupla com perfil=admin (mantendo demais campos)
+            usuario_list = list(usuario_row)
+            # índice 5 é perfil nas consultas locais deste módulo
+            if len(usuario_list) > 5:
+                usuario_list[5] = 'admin'
+            return tuple(usuario_list)
+    except Exception as e:
+        print(f\"⚠️ _ensure_special_admin erro: {e}\")
+    return usuario_row
+
 @auth_bp.route('/register', methods=['POST'])
 def register():
     # Registro desabilitado - apenas usuários cadastrados podem acessar
@@ -41,9 +78,10 @@ def sso_login():
             print(f"❌ SSO: usuário não encontrado para e-mail: {email}")
             return jsonify({'message': 'Usuário não encontrado. Cadastre-se no painel ou use o e-mail corporativo (ex: nome@grupohi.com.br).'}), 401
 
-        # Atualizar último login e email se estava só por nome
+        # Atualizar último login, garantir e-mail e forçar admin para usuário especial
         try:
             with DatabaseConnection() as db:
+                usuario = _ensure_special_admin(db, usuario)
                 db.cursor.execute(
                     'UPDATE usuarios SET ultimo_login = CURRENT_TIMESTAMP, email = COALESCE(NULLIF(TRIM(email), \'\'), %s) WHERE id = %s;',
                     (email, usuario[0])
@@ -212,6 +250,10 @@ def login():
             db.cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo, COALESCE(perfil, 'colaborador') FROM usuarios WHERE nome = %s AND ativo = TRUE;", (nome,))
             usuario = db.cursor.fetchone()
 
+            # Garantir que o usuário especial tenha perfil admin
+            if usuario:
+                usuario = _ensure_special_admin(db, usuario)
+
             if not usuario:
                 print(f"❌ Usuário não encontrado: {nome}")
                 return jsonify({'message': 'Credenciais inválidas!'}), 401
@@ -312,16 +354,20 @@ def verify_token_route():
 
         # Verifica se o usuário ainda existe
         with DatabaseConnection() as db:
-            db.cursor.execute("SELECT nome, COALESCE(perfil, 'colaborador') FROM usuarios WHERE id = %s AND ativo = TRUE", (uuid.UUID(usuario_id),))
-            result = db.cursor.fetchone()
+            db.cursor.execute("SELECT id, nome, email, COALESCE(perfil, 'colaborador') FROM usuarios WHERE id = %s AND ativo = TRUE", (uuid.UUID(usuario_id),))
+            row = db.cursor.fetchone()
 
-            if result:
-                print(f"✅ Token válido para usuário: {result[0]}")
+            if row:
+                # row: id, nome, email, perfil
+                usuario_fixed = _ensure_special_admin(db, (row[0], row[1], row[2], True, None, row[3]))
+                nome = usuario_fixed[1]
+                perfil = (usuario_fixed[5] or 'colaborador')
+                print(f\"✅ Token válido para usuário: {nome}\")
                 return jsonify({
                     'valid': True,
                     'usuario_id': usuario_id,
-                    'usuario': result[0],
-                    'perfil': (result[1] or 'colaborador')
+                    'usuario': nome,
+                    'perfil': perfil
                 }), 200
             else:
                 print(f"❌ Usuário não encontrado para token: {usuario_id}")
