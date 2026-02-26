@@ -660,8 +660,9 @@ def get_monitored_users():
                 user_id = verify_jwt_token(token)
                 if user_id:
                     with DatabaseConnection() as db:
+                        # Incluir perfil para que as permissões funcionem corretamente
                         db.cursor.execute('''
-                            SELECT id, nome, email, ativo, departamento_id
+                            SELECT id, nome, email, ativo, departamento_id, COALESCE(perfil, 'colaborador')
                             FROM usuarios
                             WHERE id = %s
                         ''', (user_id,))
