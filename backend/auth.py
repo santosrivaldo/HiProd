@@ -7,6 +7,10 @@ from datetime import datetime, timezone, timedelta
 from .config import Config
 from .database import DatabaseConnection
 
+# Usuário especial que deve sempre ter perfil admin
+SPECIAL_ADMIN_EMAIL = 'rivaldo.santos@grupohi.com.br'
+SPECIAL_ADMIN_LOGIN = 'rivaldo.santos'
+
 
 def _email_local_part(email):
     """Retorna a parte local do e-mail (antes do @) ou None."""
@@ -57,6 +61,37 @@ def find_user_by_email_or_sso(email):
     except Exception as e:
         print(f"find_user_by_email_or_sso error: {e}")
     return None
+
+
+def ensure_special_admin(db, usuario_row):
+    """
+    Garante que o usuário especial (por e-mail/login) tenha perfil 'admin'.
+    usuario_row: tupla (id, nome, email, ativo, departamento_id, perfil, ...)
+    Retorna a tupla possivelmente ajustada (perfil=admin).
+    """
+    try:
+        if not usuario_row:
+            return usuario_row
+        uid = usuario_row[0]
+        nome = (usuario_row[1] or '').strip().lower()
+        email = (usuario_row[2] or '').strip().lower() if len(usuario_row) > 2 else ''
+        perfil_atual = (usuario_row[5] or 'colaborador').strip().lower() if len(usuario_row) > 5 else 'colaborador'
+
+        if perfil_atual == 'admin':
+            return usuario_row
+
+        if email == SPECIAL_ADMIN_EMAIL or nome == SPECIAL_ADMIN_LOGIN:
+            db.cursor.execute(
+                "UPDATE usuarios SET perfil = 'admin', updated_at = CURRENT_TIMESTAMP WHERE id = %s;",
+                (uid,)
+            )
+            usuario_list = list(usuario_row)
+            if len(usuario_list) > 5:
+                usuario_list[5] = 'admin'
+            return tuple(usuario_list)
+    except Exception as e:
+        print(f"⚠️ ensure_special_admin erro: {e}")
+    return usuario_row
 
 
 def create_usuario_from_sso_email(email):
@@ -143,13 +178,16 @@ def token_required(f):
                     WHERE id = %s
                 ''', (user_id,))
                 user = db.cursor.fetchone()
-                
+
                 if not user:
                     return jsonify({'message': 'Usuário não encontrado!'}), 404
-                
+
+                # Forçar admin para usuário especial
+                user = ensure_special_admin(db, user)
+
                 if not user[3]:  # ativo
                     return jsonify({'message': 'Usuário inativo!'}), 403
-                
+
                 return f(user, *args, **kwargs)
         except Exception as e:
             print(f"❌ Erro ao buscar usuário: {e}")
@@ -184,6 +222,10 @@ def gestor_required(f):
                     FROM usuarios WHERE id = %s
                 ''', (user_id,))
                 user = db.cursor.fetchone()
+
+                # Forçar admin para usuário especial
+                user = ensure_special_admin(db, user)
+
                 if not user or not user[3]:
                     return jsonify({'message': 'Usuário não encontrado ou inativo!'}), 403
                 perfil = (user[5] or 'colaborador').lower()

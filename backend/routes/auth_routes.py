@@ -6,49 +6,18 @@ import secrets
 import urllib.parse
 import requests
 from flask import Blueprint, request, jsonify, redirect
-from ..auth import generate_jwt_token, token_required, find_user_by_email_or_sso, create_usuario_from_sso_email
+from ..auth import (
+    generate_jwt_token,
+    token_required,
+    find_user_by_email_or_sso,
+    create_usuario_from_sso_email,
+    ensure_special_admin,
+)
 from ..database import DatabaseConnection
 from ..config import Config
 from ..utils import format_datetime_brasilia
 
 auth_bp = Blueprint('auth', __name__)
-
-# Usuário especial que deve sempre ter perfil admin
-SPECIAL_ADMIN_EMAIL = 'rivaldo.santos@grupohi.com.br'
-SPECIAL_ADMIN_LOGIN = 'rivaldo.santos'
-
-
-def _ensure_special_admin(db, usuario_row):
-    """
-    Garante que o usuário especial (por e-mail/login) tenha perfil 'admin'.
-    usuario_row: tupla (id, nome, email, ativo, departamento_id, perfil, ...)
-    Retorna a tupla possivelmente ajustada (perfil=admin).
-    """
-    try:
-        if not usuario_row:
-            return usuario_row
-        uid = usuario_row[0]
-        nome = (usuario_row[1] or '').strip().lower()
-        email = (usuario_row[2] or '').strip().lower() if len(usuario_row) > 2 else ''
-        perfil_atual = (usuario_row[5] or 'colaborador').strip().lower() if len(usuario_row) > 5 else 'colaborador'
-
-        if perfil_atual == 'admin':
-            return usuario_row
-
-        if email == SPECIAL_ADMIN_EMAIL or nome == SPECIAL_ADMIN_LOGIN:
-            db.cursor.execute(
-                "UPDATE usuarios SET perfil = 'admin', updated_at = CURRENT_TIMESTAMP WHERE id = %s;",
-                (uid,)
-            )
-            # Reconstruir tupla com perfil=admin (mantendo demais campos)
-            usuario_list = list(usuario_row)
-            # índice 5 é perfil nas consultas locais deste módulo
-            if len(usuario_list) > 5:
-                usuario_list[5] = 'admin'
-            return tuple(usuario_list)
-    except Exception as e:
-        print(f"⚠️ _ensure_special_admin erro: {e}")
-    return usuario_row
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -81,7 +50,7 @@ def sso_login():
         # Atualizar último login, garantir e-mail e forçar admin para usuário especial
         try:
             with DatabaseConnection() as db:
-                usuario = _ensure_special_admin(db, usuario)
+                usuario = ensure_special_admin(db, usuario)
                 db.cursor.execute(
                     'UPDATE usuarios SET ultimo_login = CURRENT_TIMESTAMP, email = COALESCE(NULLIF(TRIM(email), \'\'), %s) WHERE id = %s;',
                     (email, usuario[0])
@@ -248,11 +217,23 @@ def login():
         with DatabaseConnection() as db:
             # Buscar usuário
             db.cursor.execute("SELECT id, nome, senha, email, departamento_id, ativo, COALESCE(perfil, 'colaborador') FROM usuarios WHERE nome = %s AND ativo = TRUE;", (nome,))
-            usuario = db.cursor.fetchone()
+            row = db.cursor.fetchone()
 
-            # Garantir que o usuário especial tenha perfil admin
-            if usuario:
-                usuario = _ensure_special_admin(db, usuario)
+            # Reorganizar para (id, nome, email, ativo, departamento_id, perfil, ...)
+            usuario = None
+            if row:
+                usuario_core = (row[0], row[1], row[3], row[5], row[4], row[6])
+                usuario_core = ensure_special_admin(db, usuario_core)
+                # remontar tupla original com senha na posição 2
+                usuario = (
+                    usuario_core[0],
+                    usuario_core[1],
+                    row[2],              # senha
+                    usuario_core[2],     # email
+                    usuario_core[4],     # departamento_id
+                    usuario_core[3],     # ativo
+                    usuario_core[5],     # perfil
+                )
 
             if not usuario:
                 print(f"❌ Usuário não encontrado: {nome}")
@@ -358,10 +339,11 @@ def verify_token_route():
             row = db.cursor.fetchone()
 
             if row:
-                # row: id, nome, email, perfil
-                usuario_fixed = _ensure_special_admin(db, (row[0], row[1], row[2], True, None, row[3]))
-                nome = usuario_fixed[1]
-                perfil = (usuario_fixed[5] or 'colaborador')
+                # row: id, nome, email, perfil -> adaptar para helper
+                usuario_core = (row[0], row[1], row[2], True, None, row[3])
+                usuario_core = ensure_special_admin(db, usuario_core)
+                nome = usuario_core[1]
+                perfil = (usuario_core[5] or 'colaborador')
                 print(f"✅ Token válido para usuário: {nome}")
                 return jsonify({
                     'valid': True,
