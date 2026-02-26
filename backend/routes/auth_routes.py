@@ -47,7 +47,7 @@ def _ensure_special_admin(db, usuario_row):
                 usuario_list[5] = 'admin'
             return tuple(usuario_list)
     except Exception as e:
-        print(f\"⚠️ _ensure_special_admin erro: {e}\")
+        print(f"⚠️ _ensure_special_admin erro: {e}")
     return usuario_row
 
 @auth_bp.route('/register', methods=['POST'])
