@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from ..auth import token_required, agent_required, api_token_required
 from ..database import DatabaseConnection
 from ..utils import classify_activity_with_tags, get_brasilia_now, format_datetime_brasilia
+from ..permissions import get_allowed_usuario_monitorado_ids
 from ..config import Config
 import re
 import base64
@@ -292,7 +293,7 @@ def add_activity(current_user):
 @activity_bp.route('/atividade', methods=['GET'])
 @token_required
 def get_atividades(current_user):
-    """Buscar todas as atividades com filtros opcionais"""
+    """Buscar todas as atividades com filtros opcionais. Filtrado por perfil (colaborador só as suas, supervisor setor, etc.)."""
     try:
         limite = min(request.args.get('limite', 50, type=int), 100)  # Limitar a 100
         pagina = request.args.get('pagina', 1, type=int)
@@ -303,10 +304,18 @@ def get_atividades(current_user):
         data_fim = request.args.get('data_fim')
         usuario_monitorado_id = request.args.get('usuario_monitorado_id')
 
+        allowed_um_ids = get_allowed_usuario_monitorado_ids(current_user)
+        if allowed_um_ids is not None and not allowed_um_ids:
+            return jsonify([]), 200
+
         with DatabaseConnection() as db:
             # Construir a parte WHERE da query
             query_parts = []
             params = []
+
+            if allowed_um_ids is not None:
+                query_parts.append('a.usuario_monitorado_id = ANY(%s)')
+                params.append(allowed_um_ids)
 
             if categoria_filter:
                 query_parts.append('a.categoria = %s')

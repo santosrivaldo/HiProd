@@ -3,6 +3,7 @@ import psycopg2
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..permissions import can_manage_system
 from ..utils import format_datetime_brasilia
 
 department_bp = Blueprint('department', __name__)
@@ -46,6 +47,8 @@ def get_departments(current_user):
 @department_bp.route('/departamentos', methods=['POST'])
 @token_required
 def create_department(current_user):
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode criar departamentos.'}), 403
     data = request.json
 
     if not data or 'nome' not in data:

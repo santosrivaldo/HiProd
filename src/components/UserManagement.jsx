@@ -3,9 +3,11 @@ import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 import { format } from 'date-fns'
 import { formatBrasiliaDate } from '../utils/timezoneUtils'
+import { canManageSystem } from '../utils/permissions'
 
 const UserManagement = () => {
   const { user } = useAuth()
+  const canCreateUser = canManageSystem(user?.perfil)
   const [usuarios, setUsuarios] = useState([])
   const [usuariosMonitorados, setUsuariosMonitorados] = useState([])
   const [departments, setDepartments] = useState([])
@@ -310,6 +312,7 @@ const UserManagement = () => {
           >
             {syncingPhotos ? 'Sincronizando…' : 'Sincronizar Bitrix (fotos, cargos e perfis)'}
           </button>
+          {canCreateUser && (
           <button
             onClick={() => {
               if (showForm) {
@@ -324,6 +327,7 @@ const UserManagement = () => {
           >
             {showForm ? 'Cancelar' : 'Novo usuário'}
           </button>
+          )}
         </div>
       </div>
 

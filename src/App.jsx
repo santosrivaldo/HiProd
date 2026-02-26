@@ -17,6 +17,7 @@ import FacePresencePage from './pages/FacePresencePage'
 import ScreenTimelinePage from './pages/ScreenTimelinePage'
 import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
+import MeuPerfilPage from './pages/MeuPerfilPage'
 import ScreenPreviewPage from './pages/ScreenPreviewPage'
 import DvrPage from './pages/DvrPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
@@ -70,6 +71,7 @@ function AppContent() {
         <Route path="/dvr" element={<DvrPage />} />
         <Route path="/keylog" element={<KeylogSearchPage />} />
         <Route path="/users/:id" element={<UserDetailPage />} />
+        <Route path="/me" element={<MeuPerfilPage />} />
         <Route path="/preview" element={<ScreenPreviewPage />} />
       </Routes>
     </Layout>

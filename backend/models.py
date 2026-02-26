@@ -251,6 +251,17 @@ def init_db():
             ''')
             print("✅ Tabela agent_message_deliveries criada ou já existe")
 
+            # Setores que o perfil Coordenador pode acessar (se vazio, não vê nenhum setor)
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usuario_departamentos_acesso (
+                usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                departamento_id INTEGER NOT NULL REFERENCES departamentos(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (usuario_id, departamento_id)
+            );
+            ''')
+            print("✅ Tabela usuario_departamentos_acesso criada ou já existe")
+
             # Tabela de categorias de aplicações
             db.cursor.execute('''
             CREATE TABLE IF NOT EXISTS categorias_app (

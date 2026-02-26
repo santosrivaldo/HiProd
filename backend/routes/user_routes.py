@@ -5,6 +5,15 @@ import requests
 from flask import Blueprint, request, jsonify
 from ..auth import token_required, agent_required
 from ..database import DatabaseConnection
+from ..permissions import (
+    _perfil as _user_perfil,
+    get_allowed_departamento_ids,
+    get_allowed_usuario_monitorado_ids,
+    can_access_user,
+    can_edit_user,
+    can_manage_system,
+    can_edit_tags,
+)
 from ..utils import format_datetime_brasilia
 from ..config import Config
 
@@ -15,22 +24,54 @@ user_bp = Blueprint('user', __name__)
 def get_users(current_user):
     """
     Lista unificada: usuários do sistema com dados de monitoramento (quando vinculados).
-    Cada pessoa é uma só; a diferença é o nível de acesso (perfil).
+    Filtrado por perfil: Colaborador só vê a si; Supervisor = seu setor; Coordenador = setores permitidos; Head/Admin = todos.
     """
     try:
+        perfil = _user_perfil(current_user)
+        current_id = current_user[0]
         with DatabaseConnection() as db:
-            db.cursor.execute('''
-                SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at,
-                       COALESCE(u.perfil, 'colaborador') as perfil, u.usuario_monitorado_id,
-                       d.nome as departamento_nome, d.cor as departamento_cor,
-                       um.id as um_id, um.cargo, um.valor_contrato, um.foto_url
-                FROM usuarios u
-                LEFT JOIN departamentos d ON u.departamento_id = d.id
-                LEFT JOIN usuarios_monitorados um ON u.usuario_monitorado_id = um.id
-                WHERE u.ativo = TRUE
-                ORDER BY u.nome;
-            ''')
-            usuarios = db.cursor.fetchall()
+            if perfil == 'colaborador':
+                # Colaborador: apenas o próprio usuário
+                db.cursor.execute('''
+                    SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at,
+                           COALESCE(u.perfil, 'colaborador') as perfil, u.usuario_monitorado_id,
+                           d.nome as departamento_nome, d.cor as departamento_cor,
+                           um.id as um_id, um.cargo, um.valor_contrato, um.foto_url
+                    FROM usuarios u
+                    LEFT JOIN departamentos d ON u.departamento_id = d.id
+                    LEFT JOIN usuarios_monitorados um ON u.usuario_monitorado_id = um.id
+                    WHERE u.ativo = TRUE AND u.id = %s
+                    ORDER BY u.nome;
+                ''', (current_id,))
+                usuarios = db.cursor.fetchall()
+            elif get_allowed_departamento_ids(current_user) is None:
+                # Head/Admin/CEO/Gerente: todos
+                db.cursor.execute('''
+                    SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at,
+                           COALESCE(u.perfil, 'colaborador') as perfil, u.usuario_monitorado_id,
+                           d.nome as departamento_nome, d.cor as departamento_cor,
+                           um.id as um_id, um.cargo, um.valor_contrato, um.foto_url
+                    FROM usuarios u
+                    LEFT JOIN departamentos d ON u.departamento_id = d.id
+                    LEFT JOIN usuarios_monitorados um ON u.usuario_monitorado_id = um.id
+                    WHERE u.ativo = TRUE
+                    ORDER BY u.nome;
+                ''')
+            else:
+                # Supervisor ou Coordenador: filtrar por setores permitidos
+                allowed_dept_ids = get_allowed_departamento_ids(current_user)
+                db.cursor.execute('''
+                    SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at,
+                           COALESCE(u.perfil, 'colaborador') as perfil, u.usuario_monitorado_id,
+                           d.nome as departamento_nome, d.cor as departamento_cor,
+                           um.id as um_id, um.cargo, um.valor_contrato, um.foto_url
+                    FROM usuarios u
+                    LEFT JOIN departamentos d ON u.departamento_id = d.id
+                    LEFT JOIN usuarios_monitorados um ON u.usuario_monitorado_id = um.id
+                    WHERE u.ativo = TRUE AND (u.departamento_id = ANY(%s) OR u.id = %s)
+                    ORDER BY u.nome;
+                ''', (allowed_dept_ids or [], current_id))
+                usuarios = db.cursor.fetchall()
 
             result = []
             for usuario in usuarios or []:
@@ -655,22 +696,40 @@ def get_monitored_users():
         if not current_user:
             return jsonify({'message': 'Autenticação necessária para listar todos os usuários monitorados!'}), 401
         
-        # Listar todos os usuários monitorados
+        # Listar todos os usuários monitorados (filtrado por perfil: colaborador só o próprio, supervisor setor, etc.)
         try:
+            allowed_um_ids = get_allowed_usuario_monitorado_ids(current_user)
             with DatabaseConnection() as db:
-                db.cursor.execute('''
-                    SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
-                           um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
-                           um.valor_contrato, um.bitrix_user_id, um.foto_url, um.usuario_id,
-                           d.nome as departamento_nome, d.cor as departamento_cor,
-                           u.id as u_id, u.email as u_email, COALESCE(u.perfil, 'colaborador') as u_perfil
-                    FROM usuarios_monitorados um
-                    LEFT JOIN departamentos d ON um.departamento_id = d.id
-                    LEFT JOIN usuarios u ON u.id = um.usuario_id
-                    WHERE um.ativo = TRUE
-                    ORDER BY um.nome;
-                ''')
-                usuarios_monitorados = db.cursor.fetchall()
+                if allowed_um_ids is None:
+                    db.cursor.execute('''
+                        SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                               um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
+                               um.valor_contrato, um.bitrix_user_id, um.foto_url, um.usuario_id,
+                               d.nome as departamento_nome, d.cor as departamento_cor,
+                               u.id as u_id, u.email as u_email, COALESCE(u.perfil, 'colaborador') as u_perfil
+                        FROM usuarios_monitorados um
+                        LEFT JOIN departamentos d ON um.departamento_id = d.id
+                        LEFT JOIN usuarios u ON u.id = um.usuario_id
+                        WHERE um.ativo = TRUE
+                        ORDER BY um.nome;
+                    ''')
+                    usuarios_monitorados = db.cursor.fetchall()
+                elif allowed_um_ids:
+                    db.cursor.execute('''
+                        SELECT um.id, um.nome, um.departamento_id, um.cargo, um.ativo, um.created_at, um.updated_at,
+                               um.horario_inicio_trabalho, um.horario_fim_trabalho, um.dias_trabalho, um.monitoramento_ativo,
+                               um.valor_contrato, um.bitrix_user_id, um.foto_url, um.usuario_id,
+                               d.nome as departamento_nome, d.cor as departamento_cor,
+                               u.id as u_id, u.email as u_email, COALESCE(u.perfil, 'colaborador') as u_perfil
+                        FROM usuarios_monitorados um
+                        LEFT JOIN departamentos d ON um.departamento_id = d.id
+                        LEFT JOIN usuarios u ON u.id = um.usuario_id
+                        WHERE um.ativo = TRUE AND um.id = ANY(%s)
+                        ORDER BY um.nome;
+                    ''', (allowed_um_ids,))
+                    usuarios_monitorados = db.cursor.fetchall()
+                else:
+                    usuarios_monitorados = []
 
                 result = []
                 if usuarios_monitorados:
@@ -964,7 +1023,9 @@ def update_user_department(current_user, usuario_id):
 @user_bp.route('/usuarios', methods=['POST'])
 @token_required
 def create_system_user(current_user):
-    """Criar novo usuário do sistema"""
+    """Criar novo usuário do sistema (apenas Admin)."""
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode criar usuários do sistema.'}), 403
     data = request.json
 
     if not data:
@@ -1092,10 +1153,12 @@ def update_system_user(current_user, usuario_id):
 
     try:
         with DatabaseConnection() as db:
-            db.cursor.execute('SELECT id, nome, usuario_monitorado_id FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
+            db.cursor.execute('SELECT id, nome, usuario_monitorado_id, departamento_id FROM usuarios WHERE id = %s AND ativo = TRUE;', (usuario_id,))
             existing_user = db.cursor.fetchone()
             if not existing_user:
                 return jsonify({'message': 'Usuário não encontrado!'}), 404
+            if not can_edit_user(current_user, usuario_id, existing_user[3] if len(existing_user) > 3 else None):
+                return jsonify({'message': 'Sem permissão para editar este usuário!'}), 403
             um_id_linked = existing_user[2] if len(existing_user) > 2 else None
 
             update_fields = []
@@ -1197,6 +1260,21 @@ def update_system_user(current_user, usuario_id):
                     um_vals.append(um_id_linked)
                     db.cursor.execute(f"UPDATE usuarios_monitorados SET {', '.join(um_updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = %s;", um_vals)
 
+            # Setores permitidos para Coordenador (apenas Admin pode alterar)
+            if 'departamentos_acesso' in data and can_manage_system(current_user):
+                db.cursor.execute('DELETE FROM usuario_departamentos_acesso WHERE usuario_id = %s;', (usuario_id,))
+                ids = data.get('departamentos_acesso')
+                if isinstance(ids, list) and ids:
+                    for dept_id in ids:
+                        try:
+                            dept_id = int(dept_id)
+                            db.cursor.execute(
+                                'INSERT INTO usuario_departamentos_acesso (usuario_id, departamento_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;',
+                                (usuario_id, dept_id)
+                            )
+                        except (ValueError, TypeError):
+                            pass
+
             departamento_info = None
             if updated_user[3]:
                 db.cursor.execute('SELECT nome, cor FROM departamentos WHERE id = %s;', (updated_user[3],))
@@ -1238,8 +1316,10 @@ def delete_system_user(current_user, usuario_id):
             if not existing_user:
                 return jsonify({'message': 'Usuário não encontrado!'}), 404
 
+            if not can_manage_system(current_user):
+                return jsonify({'message': 'Sem permissão. Apenas Admin pode desativar usuários.'}), 403
             # Verificar se não é o próprio usuário logado
-            if str(current_user['id']) == str(usuario_id):
+            if str(current_user[0]) == str(usuario_id):
                 return jsonify({'message': 'Você não pode deletar sua própria conta!'}), 400
 
             # Soft delete - marcar como inativo
@@ -1376,6 +1456,7 @@ def get_system_user(current_user, usuario_id):
         with DatabaseConnection() as db:
             db.cursor.execute('''
                 SELECT u.id, u.nome, u.email, u.departamento_id, u.ativo, u.created_at, u.updated_at, u.ultimo_login,
+                       COALESCE(u.perfil, 'colaborador') as perfil,
                        d.nome as departamento_nome, d.cor as departamento_cor
                 FROM usuarios u
                 LEFT JOIN departamentos d ON u.departamento_id = d.id
@@ -1386,12 +1467,16 @@ def get_system_user(current_user, usuario_id):
             if not usuario:
                 return jsonify({'message': 'Usuário não encontrado!'}), 404
 
+            if not can_access_user(current_user, usuario_id, usuario[3]):
+                return jsonify({'message': 'Sem permissão para acessar este usuário!'}), 403
+
             departamento_info = None
-            if len(usuario) > 8 and usuario[8]:
+            if len(usuario) > 9 and usuario[9]:
                 departamento_info = {
-                    'nome': usuario[8],
-                    'cor': usuario[9] if len(usuario) > 9 else None
+                    'nome': usuario[9],
+                    'cor': usuario[10] if len(usuario) > 10 else None
                 }
+            perfil = (usuario[8] or 'colaborador').lower() if len(usuario) > 8 else 'colaborador'
 
             result = {
                 'usuario_id': str(usuario[0]),
@@ -1402,8 +1487,12 @@ def get_system_user(current_user, usuario_id):
                 'created_at': format_datetime_brasilia(usuario[5]) if usuario[5] else None,
                 'updated_at': format_datetime_brasilia(usuario[6]) if usuario[6] else None,
                 'ultimo_login': format_datetime_brasilia(usuario[7]) if usuario[7] else None,
+                'perfil': perfil,
                 'departamento': departamento_info
             }
+            if perfil == 'coordenador':
+                db.cursor.execute('SELECT departamento_id FROM usuario_departamentos_acesso WHERE usuario_id = %s;', (usuario_id,))
+                result['departamentos_acesso'] = [r[0] for r in db.cursor.fetchall()]
 
             return jsonify(result)
     except Exception as e:

@@ -5,6 +5,7 @@ import io
 from flask import Blueprint, request, jsonify
 from ..auth import token_required
 from ..database import DatabaseConnection
+from ..permissions import can_edit_tags
 from ..utils import format_datetime_brasilia
 
 tag_bp = Blueprint('tag', __name__)
@@ -77,6 +78,8 @@ def get_tags(current_user):
 @tag_bp.route('/tags', methods=['POST'])
 @token_required
 def create_tag(current_user):
+    if not can_edit_tags(current_user):
+        return jsonify({'message': 'Sem permissão para criar tags. Acesso restrito a Head e Admin.'}), 403
     data = request.json
 
     if not data or 'nome' not in data or 'produtividade' not in data:
@@ -149,6 +152,8 @@ def create_tag(current_user):
 @tag_bp.route('/tags/<int:tag_id>', methods=['PUT'])
 @token_required
 def update_tag(current_user, tag_id):
+    if not can_edit_tags(current_user):
+        return jsonify({'message': 'Sem permissão para editar tags. Acesso restrito a Head e Admin.'}), 403
     data = request.json
 
     if not data:
@@ -244,6 +249,8 @@ def update_tag(current_user, tag_id):
 @tag_bp.route('/tags/<int:tag_id>', methods=['DELETE'])
 @token_required
 def delete_tag(current_user, tag_id):
+    if not can_edit_tags(current_user):
+        return jsonify({'message': 'Sem permissão para excluir tags. Acesso restrito a Head e Admin.'}), 403
     try:
         with DatabaseConnection() as db:
             # Verificar se a tag existe

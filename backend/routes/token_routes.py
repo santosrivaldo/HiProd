@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from ..auth import token_required, generate_api_token
 from ..database import DatabaseConnection
+from ..permissions import can_manage_system
 from ..utils import format_datetime_brasilia
 from datetime import datetime, timedelta, timezone
 
@@ -9,7 +10,9 @@ token_bp = Blueprint('token', __name__)
 @token_bp.route('/api-tokens', methods=['GET'])
 @token_required
 def get_tokens(current_user):
-    """Lista todos os tokens de API"""
+    """Lista todos os tokens de API (apenas Admin)."""
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode gerenciar tokens de API.'}), 403
     try:
         with DatabaseConnection() as db:
             db.cursor.execute('''
@@ -67,7 +70,9 @@ def get_tokens(current_user):
 @token_bp.route('/api-tokens', methods=['POST'])
 @token_required
 def create_token(current_user):
-    """Cria um novo token de API"""
+    """Cria um novo token de API (apenas Admin)."""
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode criar tokens de API.'}), 403
     try:
         data = request.get_json()
         
@@ -157,7 +162,9 @@ def create_token(current_user):
 @token_bp.route('/api-tokens/<int:token_id>', methods=['PUT'])
 @token_required
 def update_token(current_user, token_id):
-    """Atualiza um token de API"""
+    """Atualiza um token de API (apenas Admin)."""
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode editar tokens de API.'}), 403
     try:
         data = request.get_json()
         
@@ -267,7 +274,9 @@ def update_token(current_user, token_id):
 @token_bp.route('/api-tokens/<int:token_id>', methods=['DELETE'])
 @token_required
 def delete_token(current_user, token_id):
-    """Exclui um token de API"""
+    """Exclui um token de API (apenas Admin)."""
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode excluir tokens de API.'}), 403
     try:
         with DatabaseConnection() as db:
             # Verificar se token existe
@@ -292,7 +301,9 @@ def delete_token(current_user, token_id):
 @token_bp.route('/api-tokens/<int:token_id>/toggle', methods=['POST'])
 @token_required
 def toggle_token(current_user, token_id):
-    """Ativa ou desativa um token de API"""
+    """Ativa ou desativa um token de API (apenas Admin)."""
+    if not can_manage_system(current_user):
+        return jsonify({'message': 'Sem permissão. Apenas Admin pode alterar tokens de API.'}), 403
     try:
         with DatabaseConnection() as db:
             # Verificar se token existe

@@ -227,11 +227,10 @@ class AgentBuilder:
             shutil.rmtree(release_dir)
         release_dir.mkdir()
         
-        # Copiar executável principal
+        # Copiar executável principal (onefile: um único .exe)
         exe_name = "HiProd-Agent.exe" if platform.system() == "Windows" else "HiProd-Agent"
         exe_source = self.dist_dir / exe_name
         exe_dest = release_dir / exe_name
-        
         if exe_source.exists():
             shutil.copy2(exe_source, exe_dest)
             print(f"[OK] Executavel copiado: {exe_dest}")
@@ -285,9 +284,11 @@ class AgentBuilder:
    - Execute `{exe_name}` para iniciar o agent.
 
 3. **Iniciar junto com o Windows (RECOMENDADO):**
-   - Execute: iniciar_com_windows_instalar.bat
+   - Execute: iniciar_com_windows_instalar.bat (a partir desta pasta, onde está o .exe)
    - Não precisa ser Administrador.
    - O agent será iniciado automaticamente quando você fizer logon.
+   - IMPORTANTE: Não copie apenas o HiProd-Agent.exe para a pasta Inicialização do Windows.
+     Use sempre o script .bat nesta pasta; ele configura o registro para iniciar o agent corretamente.
    - Para remover: execute iniciar_com_windows_desinstalar.bat
 
 4. **Instalação como Serviço (Opcional, se preferir):**

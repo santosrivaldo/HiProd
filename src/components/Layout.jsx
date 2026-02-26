@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import {
@@ -15,6 +15,7 @@ import {
   KeyIcon,
   FilmIcon,
   SignalIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import Dashboard from "./Dashboard";
 import ActivityManagement from "./ActivityManagement";
@@ -23,8 +24,9 @@ import UserManagement from "./UserManagement";
 import Settings from "./Settings";
 import WorkScheduleManagement from "./WorkScheduleManagement";
 import { useNavigate, useLocation } from "react-router-dom";
+import { isColaborador, canListUsers, canSeeSystemMenu } from "../utils/permissions";
 
-const navigationGroups = [
+const baseNavigationGroups = [
   {
     label: "Início",
     items: [
@@ -45,18 +47,30 @@ const navigationGroups = [
     label: "Cadastros",
     items: [
       { name: "Tags", icon: ClipboardDocumentListIcon, component: "tags", path: "/tags" },
-      { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users", path: "/users" },
+      { name: "Meu perfil", icon: UserCircleIcon, component: "me", path: "/me" },
+      { name: "Usuários", icon: ClipboardDocumentListIcon, component: "users", path: "/users", requireListUsers: true },
       { name: "Escalas", icon: ClockIcon, component: "schedules", path: "/schedules" },
     ],
   },
   {
     label: "Sistema",
     items: [
-      { name: "Tokens API", icon: KeyIcon, component: "tokens", path: "/tokens" },
-      { name: "Configurações", icon: Cog6ToothIcon, component: "settings", path: "/settings" },
+      { name: "Tokens API", icon: KeyIcon, component: "tokens", path: "/tokens", requireSystem: true },
+      { name: "Configurações", icon: Cog6ToothIcon, component: "settings", path: "/settings", requireSystem: true },
     ],
   },
 ];
+
+function getNavigationGroups(perfil) {
+  return baseNavigationGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (item.requireSystem && !canSeeSystemMenu(perfil)) return false;
+      if (item.requireListUsers && !canListUsers(perfil)) return false;
+      return true;
+    }),
+  })).filter((group) => group.items.length > 0);
+}
 
 export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -65,6 +79,11 @@ export default function Layout({ children }) {
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const navigationGroups = useMemo(
+    () => getNavigationGroups(user?.perfil),
+    [user?.perfil]
+  );
 
   const isActive = (item) =>
     location.pathname === item.path || currentView === item.component;

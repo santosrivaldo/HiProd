@@ -3,9 +3,11 @@ import { useAuth } from "../contexts/AuthContext";
 import api from "../services/api";
 import { PrinterIcon, ArrowDownTrayIcon, ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 import { exportToCSV, printData } from "../utils/exportUtils";
+import { canEditTags } from "../utils/permissions";
 
 const TagManagement = () => {
   const { user } = useAuth();
+  const allowEditTags = canEditTags(user?.perfil);
   const [tags, setTags] = useState([]);
   const [filteredTags, setFilteredTags] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -412,12 +414,14 @@ const TagManagement = () => {
             <PrinterIcon className="h-4 w-4 mr-2" />
             Imprimir
           </button>
+          {allowEditTags && (
           <button
             onClick={() => setShowForm(!showForm)}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
             {showForm ? "Cancelar" : "Nova Tag"}
           </button>
+          )}
         </div>
       </div>
 
@@ -508,7 +512,7 @@ const TagManagement = () => {
         </div>
       </div>
 
-      {showForm && (
+      {showForm && allowEditTags && (
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             {editingTag ? "Editar Tag" : "Nova Tag"}
@@ -765,7 +769,7 @@ const TagManagement = () => {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {editingTag === tag.id ? (
+                    {editingTag === tag.id && allowEditTags ? (
                       <select
                         value={editForm.produtividade}
                         onChange={(e) =>
@@ -780,7 +784,7 @@ const TagManagement = () => {
                         <option value="nonproductive">Não Produtiva</option>
                         <option value="neutral">Neutra</option>
                       </select>
-                    ) : (
+                    ) : allowEditTags ? (
                       <button
                         onClick={async () => {
                           const newProductivity =
@@ -820,6 +824,20 @@ const TagManagement = () => {
                             ? "Não Produtiva"
                             : "Neutra"}
                       </button>
+                    ) : (
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        tag.produtividade === "productive"
+                          ? "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+                          : tag.produtividade === "nonproductive"
+                            ? "bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100"
+                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100"
+                      }`}>
+                        {tag.produtividade === "productive"
+                          ? "Produtiva"
+                          : tag.produtividade === "nonproductive"
+                            ? "Não Produtiva"
+                            : "Neutra"}
+                      </span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
@@ -827,7 +845,7 @@ const TagManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     <div className="flex flex-wrap gap-2">
-                      {editingTag === tag.id ? (
+                      {editingTag === tag.id && allowEditTags ? (
                         <div className="space-y-2 w-full">
                           {editForm.palavras_chave.map((palavra, idx) => (
                             <div key={idx} className="flex items-center gap-2">
@@ -915,35 +933,45 @@ const TagManagement = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.put(`/tags/${tag.id}`, {
-                            ativo: !tag.ativo,
-                          });
-                          fetchData();
-                          setMessage(
-                            `Tag ${!tag.ativo ? "ativada" : "desativada"} com sucesso!`,
-                          );
-                          setTimeout(() => setMessage(""), 3000);
-                        } catch (error) {
-                          console.error("Erro ao alterar status:", error);
-                          setMessage("Erro ao alterar status da tag");
-                          setTimeout(() => setMessage(""), 3000);
-                        }
-                      }}
-                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full cursor-pointer hover:opacity-80 transition-opacity ${
+                    {allowEditTags ? (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.put(`/tags/${tag.id}`, {
+                              ativo: !tag.ativo,
+                            });
+                            fetchData();
+                            setMessage(
+                              `Tag ${!tag.ativo ? "ativada" : "desativada"} com sucesso!`,
+                            );
+                            setTimeout(() => setMessage(""), 3000);
+                          } catch (error) {
+                            console.error("Erro ao alterar status:", error);
+                            setMessage("Erro ao alterar status da tag");
+                            setTimeout(() => setMessage(""), 3000);
+                          }
+                        }}
+                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full cursor-pointer hover:opacity-80 transition-opacity ${
+                          tag.ativo
+                            ? "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+                            : "bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100"
+                        }`}
+                      >
+                        {tag.ativo ? "Ativo" : "Inativo"}
+                      </button>
+                    ) : (
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         tag.ativo
                           ? "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
                           : "bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100"
-                      }`}
-                    >
-                      {tag.ativo ? "Ativo" : "Inativo"}
-                    </button>
+                      }`}>
+                        {tag.ativo ? "Ativo" : "Inativo"}
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center space-x-2">
-                      {editingTag === tag.id ? (
+                      {editingTag === tag.id && allowEditTags ? (
                         <>
                           <button
                             onClick={handleSaveEdit}
@@ -961,19 +989,23 @@ const TagManagement = () => {
                         </>
                       ) : (
                         <>
-                          <button
-                            onClick={() => handleEdit(tag)}
-                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => handleDelete(tag.id)}
-                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                            disabled={loading}
-                          >
-                            Excluir
-                          </button>
+                          {allowEditTags && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(tag)}
+                                className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => handleDelete(tag.id)}
+                                className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                disabled={loading}
+                              >
+                                Excluir
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
