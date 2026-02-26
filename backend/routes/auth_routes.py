@@ -362,7 +362,7 @@ def verify_token_route():
                 usuario_fixed = _ensure_special_admin(db, (row[0], row[1], row[2], True, None, row[3]))
                 nome = usuario_fixed[1]
                 perfil = (usuario_fixed[5] or 'colaborador')
-                print(f\"✅ Token válido para usuário: {nome}\")
+                print(f"✅ Token válido para usuário: {nome}")
                 return jsonify({
                     'valid': True,
                     'usuario_id': usuario_id,
