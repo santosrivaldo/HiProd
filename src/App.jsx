@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Login from './components/Login'
-import Dashboard from './components/Dashboard'
 import Layout from './components/Layout'
 import { useAuth } from './contexts/AuthContext'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -17,6 +16,7 @@ import FacePresencePage from './pages/FacePresencePage'
 import ScreenTimelinePage from './pages/ScreenTimelinePage'
 import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
+import RoleHomePage from './pages/RoleHomePage'
 import MeuPerfilPage from './pages/MeuPerfilPage'
 import ScreenPreviewPage from './pages/ScreenPreviewPage'
 import DvrPage from './pages/DvrPage'
@@ -58,7 +58,7 @@ function AppContent() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<RoleHomePage />} />
         <Route path="/users" element={<UserManagement />} />
         <Route path="/tags" element={<TagManagement />} />
         <Route path="/activities" element={<ActivityManagement />} />
