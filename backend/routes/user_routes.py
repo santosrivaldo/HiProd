@@ -935,10 +935,14 @@ def update_monitored_user(current_user, user_id):
                 update_fields.append('valor_contrato = %s')
                 update_values.append(vc)
 
-            if 'perfil' in data and u_id_linked:
+            # Atualizar perfil do usuário vinculado somente se for admin
+            if 'perfil' in data and u_id_linked and can_manage_system(current_user):
                 perfil = (data.get('perfil') or 'colaborador').strip().lower()
                 if perfil in PERFIS_VALIDOS:
-                    db.cursor.execute('UPDATE usuarios SET perfil = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;', (perfil, u_id_linked))
+                    db.cursor.execute(
+                        'UPDATE usuarios SET perfil = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;',
+                        (perfil, u_id_linked)
+                    )
             if 'email' in data and u_id_linked:
                 db.cursor.execute('UPDATE usuarios SET email = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;', (data.get('email') or '', u_id_linked))
 
@@ -1205,8 +1209,8 @@ def update_system_user(current_user, usuario_id):
                 update_fields.append('departamento_id = %s')
                 update_values.append(dept_id)
 
-            # Perfil (nível de acesso)
-            if 'perfil' in data:
+            # Perfil (nível de acesso) – só pode ser alterado por admin
+            if 'perfil' in data and can_manage_system(current_user):
                 perfil = (data['perfil'] or 'colaborador').strip().lower()
                 if perfil in PERFIS_VALIDOS:
                     update_fields.append('perfil = %s')
