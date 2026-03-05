@@ -111,7 +111,12 @@ def _get_or_create_user_folder(usuario_monitorado_id: int) -> Optional[str]:
         "parents": [root_folder_id],
     }
     try:
-        folder = service.files().create(body=folder_metadata, fields="id").execute()
+        # supportsAllDrives=True permite criar pasta dentro de Drive compartilhado (evita 403 de cota)
+        folder = (
+            service.files()
+            .create(body=folder_metadata, fields="id", supportsAllDrives=True)
+            .execute()
+        )
     except Exception as exc:
         logging.exception("Erro ao criar pasta do usuário no Drive: %s", exc)
         return None
@@ -164,11 +169,17 @@ def upload_image_for_user(
     media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype=mime_type, resumable=False)
 
     try:
-        created = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id",
-        ).execute()
+        # supportsAllDrives=True para upload em pasta dentro de Drive compartilhado
+        created = (
+            service.files()
+            .create(
+                body=file_metadata,
+                media_body=media,
+                fields="id",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
         return created.get("id")
     except Exception as exc:
         logging.exception("Erro ao fazer upload de imagem para o Drive: %s", exc)
@@ -188,8 +199,12 @@ def download_image(file_id: str) -> Optional[Tuple[bytes, str]]:
         return None
 
     try:
-        # Primeiro buscar o mimetype
-        metadata = service.files().get(fileId=file_id, fields="mimeType").execute()
+        # supportsAllDrives=True para arquivos em Drive compartilhado
+        metadata = (
+            service.files()
+            .get(fileId=file_id, fields="mimeType", supportsAllDrives=True)
+            .execute()
+        )
         mime_type = metadata.get("mimeType", "image/jpeg")
 
         request = service.files().get_media(fileId=file_id)

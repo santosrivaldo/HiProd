@@ -44,7 +44,8 @@ def main():
     }
 
     flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-    creds = flow.run_console()
+    # Algumas versões da lib não possuem run_console; usar run_local_server
+    creds = flow.run_local_server(port=0, prompt="consent")
 
     print("\n===== COPIE ESTES VALORES PARA O .env =====")
     print(f"GDRIVE_CLIENT_ID={client_id}")
