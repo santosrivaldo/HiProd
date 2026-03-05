@@ -7,6 +7,7 @@ from ..utils import classify_activity_with_tags, get_brasilia_now, format_dateti
 from ..permissions import get_allowed_usuario_monitorado_ids
 from ..config import Config
 from ..google_drive_service import upload_image_for_user, download_image
+from ..drive_upload_queue import enqueue_frame, start_background_worker, _ensure_queue_dir
 import re
 import base64
 import os
@@ -836,6 +837,7 @@ def add_screen_frames(current_user):
         if not files or not any(f and f.filename for f in files):
             return jsonify({'message': 'Envie pelo menos um frame em "frames" ou "frames[]"!'}), 400
 
+        queue_dir = _ensure_queue_dir()
         saved = []
         with DatabaseConnection() as db:
             for monitor_index, f in enumerate(files):
@@ -846,26 +848,27 @@ def add_screen_frames(current_user):
                     continue
                 content_type = _mimetype_from_filename(f.filename)
 
-                # Sempre salvar frames no Google Drive, sem gravar blob no banco
-                filename = f"frame_{usuario_monitorado_id}_{captured_at_utc.strftime('%Y%m%d%H%M%S')}_m{monitor_index}{os.path.splitext(f.filename)[1] or '.jpg'}"
-                drive_file_id = upload_image_for_user(
-                    usuario_monitorado_id=usuario_monitorado_id,
-                    image_bytes=image_bytes,
-                    filename=filename,
-                    mime_type=content_type,
-                )
-                if not drive_file_id:
-                    print("⚠️ Falha ao enviar frame para o Drive. Frame será ignorado (não armazenar no banco).")
+                # Gravar em arquivo temporário e enfileirar para upload em background
+                temp_name = f"queue_{uuid.uuid4().hex}_{monitor_index}{os.path.splitext(f.filename)[1] or '.jpg'}"
+                temp_path = os.path.join(queue_dir, temp_name)
+                try:
+                    with open(temp_path, "wb") as out:
+                        out.write(image_bytes)
+                except Exception as e:
+                    print(f"⚠️ Erro ao gravar arquivo da fila: {e}")
                     continue
 
                 db.cursor.execute('''
                     INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type, drive_file_id)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id;
-                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, drive_file_id))
+                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, None))
                 row_id = db.cursor.fetchone()[0]
+                enqueue_frame(screen_frame_id=row_id, file_path=temp_path, content_type=content_type)
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
-        print(f"📥 Screen frames: {len(saved)} frames salvos (DB) para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
+
+        start_background_worker()
+        print(f"📥 Screen frames: {len(saved)} frames enfileirados para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
         return jsonify({
             'message': 'Frames recebidos com sucesso!',
             'count': len(saved),
@@ -915,23 +918,24 @@ def list_screen_frames(current_user):
                 params.append(end_time)
             params.append(limit)
             db.cursor.execute(f'''
-                SELECT id, captured_at, monitor_index, file_path
+                SELECT id, captured_at, monitor_index, file_path, drive_file_id
                 FROM screen_frames
                 {where}
                 {order_clause};
             ''', params)
             rows = db.cursor.fetchall()
 
-        # Retornar captured_at sempre em Brasília, ISO com -03:00 (DB guarda UTC)
+        # Retornar captured_at sempre em Brasília; drive_ready = True quando já está no Drive (permite exibir ou mostrar "carregando")
         frames = []
         for r in rows:
-            frame_id, captured_at, monitor_index, file_path = r
+            frame_id, captured_at, monitor_index, file_path, drive_file_id = r
             captured_at_brasilia = format_datetime_brasilia(captured_at) if captured_at else None
             frames.append({
                 'id': frame_id,
                 'captured_at': captured_at_brasilia or (captured_at.isoformat() if hasattr(captured_at, 'isoformat') else str(captured_at)),
                 'monitor_index': monitor_index,
-                'url': f"/api/screen-frames/{frame_id}/image"
+                'url': f"/api/screen-frames/{frame_id}/image",
+                'drive_ready': bool(drive_file_id),
             })
         return jsonify({'frames': frames, 'count': len(frames)})
     except Exception as e:
@@ -955,6 +959,15 @@ def get_screen_frame_image(current_user, frame_id):
         if not row:
             return jsonify({'message': 'Frame não encontrado!'}), 404
         image_data, content_type, file_path, drive_file_id = row
+
+        # Frame ainda na fila de upload (drive_file_id vazio) — retornar 202 para o front exibir "carregando"
+        if not drive_file_id and Config.GDRIVE_ENABLED:
+            return Response(
+                '{"status":"pending","message":"Frame ainda está sendo enviado ao Drive."}',
+                status=202,
+                mimetype='application/json',
+                headers={'X-Drive-Status': 'pending', 'Cache-Control': 'no-store'},
+            )
 
         # Priorizar imagem armazenada no Google Drive
         if drive_file_id and Config.GDRIVE_ENABLED:

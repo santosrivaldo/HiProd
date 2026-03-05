@@ -485,6 +485,25 @@ def init_db():
             ''')
             print("✅ Tabela screen_frames criada")
 
+            # Fila de upload para o Google Drive (frames gravados em arquivo temporário até o worker enviar)
+            print("📋 Criando tabela drive_upload_queue...")
+            db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS drive_upload_queue (
+                id SERIAL PRIMARY KEY,
+                screen_frame_id INTEGER NOT NULL REFERENCES screen_frames(id) ON DELETE CASCADE,
+                file_path VARCHAR(512) NOT NULL,
+                content_type VARCHAR(50) DEFAULT 'image/jpeg',
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                drive_file_id VARCHAR(128),
+                error_message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            ''')
+            db.cursor.execute('CREATE INDEX IF NOT EXISTS idx_drive_upload_queue_status ON drive_upload_queue(status);')
+            db.cursor.execute('CREATE INDEX IF NOT EXISTS idx_drive_upload_queue_created ON drive_upload_queue(created_at);')
+            print("✅ Tabela drive_upload_queue criada")
+
             # Tabela de keylog (texto digitado por usuário monitorado, para busca e alinhamento com timeline)
             print("📋 Criando tabela keylog_entries...")
             db.cursor.execute('''

@@ -49,6 +49,11 @@ class Config:
     GDRIVE_REFRESH_TOKEN = os.getenv('GDRIVE_REFRESH_TOKEN', '').strip()
     # Pasta raiz onde serão criadas as pastas por usuário (white label por cliente pode usar outra raiz)
     GDRIVE_ROOT_FOLDER_ID = os.getenv('GDRIVE_ROOT_FOLDER_ID', '').strip()
+    # Pasta temporária para fila de upload (arquivos são removidos após envio ao Drive)
+    GDRIVE_UPLOAD_QUEUE_DIR = os.getenv(
+        'GDRIVE_UPLOAD_QUEUE_DIR',
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'drive_queue')
+    ).strip()
 
     # SSO: domínio de e-mail corporativo (nome do usuário = parte local do e-mail)
     # Ex.: rivaldo.santos -> rivaldo.santos@grupohi.com.br

@@ -99,6 +99,7 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
       }
       const res = await api.get(`/screen-frames?${params.toString()}`)
       setFrames(res.data?.frames ?? [])
+      setImageUrls([])
     } catch (e) {
       console.error(e)
       setError(e.response?.data?.message || 'Erro ao carregar frames')
@@ -137,24 +138,35 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
     setCurrentIndex(best)
   }, [initialAt, framesBySecondFiltered])
 
-  const fetchImageUrls = useCallback(async (frameIds) => {
+  const fetchImageUrls = useCallback(async (frameIds, framesMeta = []) => {
     if (!frameIds?.length) {
       setImageUrls([])
       return
     }
     const urls = []
-    for (const frameId of frameIds) {
+    for (let i = 0; i < frameIds.length; i++) {
+      const frameId = frameIds[i]
+      const meta = framesMeta[i]
       if (imageCache.current[frameId]) {
         urls.push(imageCache.current[frameId])
         continue
       }
+      if (meta?.drive_ready === false) {
+        urls.push(null)
+        continue
+      }
       try {
-        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob' })
+        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob', validateStatus: (s) => s === 200 || s === 202 })
+        if (res.status === 202) {
+          urls.push(null)
+          continue
+        }
         const url = URL.createObjectURL(res.data)
         imageCache.current[frameId] = url
         urls.push(url)
       } catch (e) {
-        console.error('Erro ao carregar imagem', e)
+        if (e.response?.status === 202) urls.push(null)
+        else console.error('Erro ao carregar imagem', e)
       }
     }
     setImageUrls(urls)
@@ -162,8 +174,9 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
 
   useEffect(() => {
     const slot = framesBySecondFiltered[currentIndex]
-    const ids = slot?.items?.length ? slot.items.map((f) => f.id).filter(Boolean) : []
-    if (ids.length) fetchImageUrls(ids)
+    const items = slot?.items ?? []
+    const ids = items.map((f) => f.id).filter(Boolean)
+    if (ids.length) fetchImageUrls(ids, items)
     else setImageUrls([])
   }, [currentIndex, framesBySecondFiltered, fetchImageUrls])
 
@@ -272,13 +285,17 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
                     }}
                   >
                     {imageUrls.map((url, i) => (
-                      <div key={i} className="flex-1 min-w-0 flex justify-center">
-                        <img
-                          src={url}
-                          alt={`Tela ${i + 1}`}
-                          className="max-w-full w-auto h-auto object-contain max-h-[70vh]"
-                          draggable={false}
-                        />
+                      <div key={i} className="flex-1 min-w-0 flex justify-center items-center min-h-[120px]">
+                        {url ? (
+                          <img
+                            src={url}
+                            alt={`Tela ${i + 1}`}
+                            className="max-w-full w-auto h-auto object-contain max-h-[70vh]"
+                            draggable={false}
+                          />
+                        ) : (
+                          <span className="text-gray-500 text-sm animate-pulse">Carregando frame…</span>
+                        )}
                       </div>
                     ))}
                   </div>

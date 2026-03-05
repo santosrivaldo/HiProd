@@ -115,9 +115,16 @@ export default function ScreenTimelinePage() {
     setCurrentIndex(0)
     setSelectedMonitorIndex(0)
     try {
-      const res = await api.get(
-        `/screen-frames?usuario_monitorado_id=${selectedUser}&date=${selectedDate}&limit=2000`
-      )
+      const params = new URLSearchParams({
+        usuario_monitorado_id: selectedUser,
+        date: selectedDate,
+        limit: '2000',
+      })
+      if (filterStartTime && filterEndTime && (filterStartTime !== '00:00' || filterEndTime !== '23:59')) {
+        params.set('start_time', filterStartTime.length >= 5 ? filterStartTime.slice(0, 5) : filterStartTime)
+        params.set('end_time', filterEndTime.length >= 5 ? filterEndTime.slice(0, 5) : filterEndTime)
+      }
+      const res = await api.get(`/screen-frames?${params.toString()}`)
       const list = res.data?.frames ?? []
       setFrames(list)
     } catch (e) {
@@ -127,7 +134,7 @@ export default function ScreenTimelinePage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedUser, selectedDate])
+  }, [selectedUser, selectedDate, filterStartTime, filterEndTime])
 
   const loadAtividades = useCallback(async () => {
     if (!selectedUser || !selectedDate) return
@@ -153,24 +160,38 @@ export default function ScreenTimelinePage() {
     }
   }, [selectedUser])
 
-  const fetchImageUrls = useCallback(async (frameIds) => {
+  const fetchImageUrls = useCallback(async (frameIds, framesMeta = []) => {
     if (!frameIds?.length) {
       setImageUrls([])
       return
     }
     const urls = []
-    for (const frameId of frameIds) {
+    for (let i = 0; i < frameIds.length; i++) {
+      const frameId = frameIds[i]
+      const meta = framesMeta[i]
       if (imageCache.current[frameId]) {
         urls.push(imageCache.current[frameId])
         continue
       }
+      if (meta?.drive_ready === false) {
+        urls.push(null)
+        continue
+      }
       try {
-        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob' })
+        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob', validateStatus: (s) => s === 200 || s === 202 })
+        if (res.status === 202) {
+          urls.push(null)
+          continue
+        }
         const url = URL.createObjectURL(res.data)
         imageCache.current[frameId] = url
         urls.push(url)
       } catch (e) {
-        console.error('Erro ao carregar imagem', e)
+        if (e.response?.status === 202) {
+          urls.push(null)
+        } else {
+          console.error('Erro ao carregar imagem', e)
+        }
       }
     }
     setImageUrls(urls)
@@ -226,7 +247,7 @@ export default function ScreenTimelinePage() {
         : [slot.items[Math.min(selectedMonitorIndex, slot.items.length - 1)]]
       : []
     const ids = toShow.map((f) => f.id).filter(Boolean)
-    if (ids.length) fetchImageUrls(ids)
+    if (ids.length) fetchImageUrls(ids, toShow)
     else setImageUrls([])
   }, [currentIndex, viewMode, selectedMonitorIndex, framesBySecondFiltered, fetchImageUrls])
 
@@ -392,13 +413,20 @@ export default function ScreenTimelinePage() {
                 }`}
               >
                 {imageUrls.map((url, i) => (
-                  <div key={i} className="flex-1 min-w-0 flex justify-center">
-                    <img
-                      src={url}
-                      alt={imageUrls.length === 2 ? `Tela ${i + 1}` : 'Frame'}
-                      className="max-w-full max-h-[80vh] w-auto h-auto object-contain"
-                      style={{ maxHeight: '70vh' }}
-                    />
+                  <div key={i} className="flex-1 min-w-0 flex justify-center items-center min-h-[200px]">
+                    {url ? (
+                      <img
+                        src={url}
+                        alt={imageUrls.length === 2 ? `Tela ${i + 1}` : 'Frame'}
+                        className="max-w-full max-h-[80vh] w-auto h-auto object-contain"
+                        style={{ maxHeight: '70vh' }}
+                      />
+                    ) : (
+                      <div className="text-gray-400 text-sm flex flex-col items-center gap-2">
+                        <span className="animate-pulse">Carregando frame…</span>
+                        <span className="text-xs">(enviando ao Drive)</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

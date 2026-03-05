@@ -17,6 +17,7 @@ from backend.routes.legacy_routes import legacy_bp
 from backend.routes.token_routes import token_bp
 from backend.routes.api_v1_routes import api_v1_bp
 from backend.routes.agent_messages_routes import agent_messages_bp
+from backend.drive_upload_queue import start_background_worker
 
 app = Flask(__name__)
 CORS(app)
@@ -83,6 +84,10 @@ if __name__ == '__main__':
 
         # Inicializar pool de conexões
         init_connection_pool()
+
+        # Fila de upload para o Drive: worker em background
+        if Config.GDRIVE_ENABLED:
+            start_background_worker()
 
         host = os.getenv('FLASK_HOST', '0.0.0.0')
         port = int(os.getenv('FLASK_PORT', '8000'))
