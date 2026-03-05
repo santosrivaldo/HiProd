@@ -864,6 +864,7 @@ def add_screen_frames(current_user):
                     RETURNING id;
                 ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, None))
                 row_id = db.cursor.fetchone()[0]
+                db.conn.commit()
                 enqueue_frame(screen_frame_id=row_id, file_path=temp_path, content_type=content_type)
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
 
