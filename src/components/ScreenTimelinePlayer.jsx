@@ -27,7 +27,7 @@ const slotTimeMinutes = (slotTime) => {
  * Player de timeline de telas (embed). Recebe userId, date, opcionalmente initialAt e filtro por horário.
  * Usado na página de detalhes do usuário para exibir o frame no horário do processo.
  */
-export default function ScreenTimelinePlayer({ userId, date, initialAt = null, filterStartTime = '00:00', filterEndTime = '23:59', onClose, compact = true }) {
+export default function ScreenTimelinePlayer({ userId, date, initialAt = null, filterStartTime = '00:00', filterEndTime = '23:59', imageSource = 'auto', onClose, compact = true }) {
   const [frames, setFrames] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -143,26 +143,32 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
       setImageUrls([])
       return
     }
+    const fromDrive = imageSource === 'drive'
+    const cacheKey = fromDrive ? 'drive' : 'auto'
     const urls = []
     for (let i = 0; i < frameIds.length; i++) {
       const frameId = frameIds[i]
       const meta = framesMeta[i]
-      if (imageCache.current[frameId]) {
-        urls.push(imageCache.current[frameId])
+      const cached = imageCache.current[`${frameId}_${cacheKey}`]
+      if (cached) {
+        urls.push(cached)
         continue
       }
-      if (meta?.drive_ready === false) {
+      if (!fromDrive && meta?.drive_ready === false) {
         urls.push(null)
         continue
       }
       try {
-        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob', validateStatus: (s) => s === 200 || s === 202 })
+        const urlPath = fromDrive
+          ? `/screen-frames/${frameId}/image?source=drive`
+          : `/screen-frames/${frameId}/image`
+        const res = await api.get(urlPath, { responseType: 'blob', validateStatus: (s) => s === 200 || s === 202 })
         if (res.status === 202) {
           urls.push(null)
           continue
         }
         const url = URL.createObjectURL(res.data)
-        imageCache.current[frameId] = url
+        imageCache.current[`${frameId}_${cacheKey}`] = url
         urls.push(url)
       } catch (e) {
         if (e.response?.status === 202) urls.push(null)
@@ -170,7 +176,11 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
       }
     }
     setImageUrls(urls)
-  }, [])
+  }, [imageSource])
+
+  useEffect(() => {
+    setImageUrls([])
+  }, [imageSource])
 
   useEffect(() => {
     const slot = framesBySecondFiltered[currentIndex]
@@ -294,7 +304,9 @@ export default function ScreenTimelinePlayer({ userId, date, initialAt = null, f
                             draggable={false}
                           />
                         ) : (
-                          <span className="text-gray-500 text-sm animate-pulse">Carregando frame…</span>
+                          <span className="text-gray-500 text-sm animate-pulse">
+                            {imageSource === 'drive' ? 'Carregando do Google Drive…' : 'Carregando frame…'}
+                          </span>
                         )}
                       </div>
                     ))}
