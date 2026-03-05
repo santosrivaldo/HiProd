@@ -134,7 +134,7 @@ def process_queue() -> int:
             if drive_file_id:
                 db.cursor.execute(
                     """
-                    UPDATE screen_frames SET drive_file_id = %s WHERE id = %s;
+                    UPDATE screen_frames SET drive_file_id = %s, file_path = NULL WHERE id = %s;
                     """,
                     (drive_file_id, screen_frame_id),
                 )
@@ -156,9 +156,54 @@ def process_queue() -> int:
     return processed
 
 
+def enqueue_cache_older_than_hours(hours: int = 2) -> int:
+    """
+    Coloca na fila do Drive todos os frames que estão no cache local há mais de `hours` horas.
+    Retorna quantos foram enfileirados.
+    """
+    if not Config.GDRIVE_ENABLED:
+        return 0
+    limit_time = datetime.now(BRASILIA_TZ) - timedelta(hours=hours)
+    with DatabaseConnection() as db:
+        db.cursor.execute(
+            """
+            SELECT sf.id, sf.file_path, sf.content_type
+            FROM screen_frames sf
+            WHERE sf.file_path IS NOT NULL AND sf.file_path != ''
+              AND sf.drive_file_id IS NULL
+              AND (sf.captured_at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo' < %s
+              AND NOT EXISTS (
+                SELECT 1 FROM drive_upload_queue q
+                WHERE q.screen_frame_id = sf.id AND q.status IN ('pending', 'processing')
+              )
+            ORDER BY sf.captured_at ASC
+            LIMIT 500;
+            """,
+            (limit_time,),
+        )
+        rows = db.cursor.fetchall()
+    enqueued = 0
+    for row in rows:
+        frame_id, file_path, content_type = row
+        if file_path and os.path.isfile(file_path):
+            enqueue_frame(frame_id, file_path, content_type or "image/jpeg")
+            enqueued += 1
+        else:
+            with DatabaseConnection() as db:
+                db.cursor.execute(
+                    "UPDATE screen_frames SET file_path = NULL WHERE id = %s;",
+                    (frame_id,),
+                )
+    if enqueued > 0:
+        logging.info("Enfileirados %s frames do cache (mais antigos que %s h) para o Drive.", enqueued, hours)
+    return enqueued
+
+
 def _worker_loop() -> None:
+    cache_hours = getattr(Config, 'GDRIVE_CACHE_HOURS', 2)
     while not _worker_stop.is_set():
         try:
+            enqueue_cache_older_than_hours(cache_hours)
             process_queue()
         except Exception as e:
             logging.exception("Erro no worker da fila do Drive: %s", e)

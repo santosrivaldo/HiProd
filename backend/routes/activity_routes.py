@@ -957,8 +957,10 @@ def list_screen_frames(current_user):
 @activity_bp.route('/screen-frames/<int:frame_id>/image', methods=['GET'])
 @token_required
 def get_screen_frame_image(current_user, frame_id):
-    """Serve a imagem de um frame (do banco ou do disco para registros legados)."""
+    """Serve a imagem de um frame (do banco, cache local ou Google Drive). source=drive força carregar só do Drive."""
     try:
+        source_drive = request.args.get('source', '').strip().lower() == 'drive'
+
         with DatabaseConnection() as db:
             db.cursor.execute(
                 'SELECT image_data, content_type, file_path, drive_file_id FROM screen_frames WHERE id = %s;',
@@ -969,8 +971,8 @@ def get_screen_frame_image(current_user, frame_id):
             return jsonify({'message': 'Frame não encontrado!'}), 404
         image_data, content_type, file_path, drive_file_id = row
 
-        # Se está no cache do dia (file_path existe no disco), servir do cache
-        if file_path and os.path.isfile(file_path):
+        # Se está no cache local e não forçou source=drive, servir do cache
+        if not source_drive and file_path and os.path.isfile(file_path):
             mimetype = (content_type or 'image/jpeg').strip() or 'image/jpeg'
             return send_file(file_path, mimetype=mimetype, max_age=3600)
 

@@ -61,6 +61,8 @@ class Config:
     ).strip()
     # Horário (Brasília) para rodar o job de envio do dia anterior ao Drive (ex: 1 = 01:00)
     GDRIVE_MIDNIGHT_UPLOAD_HOUR = int(os.getenv('GDRIVE_MIDNIGHT_UPLOAD_HOUR', '1'))
+    # Cache local no servidor: frames ficam em disco só por N horas; depois vão para a fila do Drive
+    GDRIVE_CACHE_HOURS = int(os.getenv('GDRIVE_CACHE_HOURS', '2'))
 
     # SSO: domínio de e-mail corporativo (nome do usuário = parte local do e-mail)
     # Ex.: rivaldo.santos -> rivaldo.santos@grupohi.com.br

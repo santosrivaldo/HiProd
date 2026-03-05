@@ -27,6 +27,7 @@ export default function ScreenTimelinePage() {
   const [selectedMonitorIndex, setSelectedMonitorIndex] = useState(0) // qual tela exibir no modo "uma tela" (0 = primeira, 1 = segunda)
   const [filterStartTime, setFilterStartTime] = useState('00:00') // HH:mm
   const [filterEndTime, setFilterEndTime] = useState('23:59') // HH:mm
+  const [imageSource, setImageSource] = useState('auto') // 'auto' = cache + Drive, 'drive' = só Google Drive
   const [error, setError] = useState(null)
   const [atividades, setAtividades] = useState([])
   const [showAtividades, setShowAtividades] = useState(true)
@@ -165,26 +166,32 @@ export default function ScreenTimelinePage() {
       setImageUrls([])
       return
     }
+    const fromDrive = imageSource === 'drive'
+    const cacheKey = fromDrive ? 'drive' : 'auto'
     const urls = []
     for (let i = 0; i < frameIds.length; i++) {
       const frameId = frameIds[i]
       const meta = framesMeta[i]
-      if (imageCache.current[frameId]) {
-        urls.push(imageCache.current[frameId])
+      const cached = imageCache.current[`${frameId}_${cacheKey}`]
+      if (cached) {
+        urls.push(cached)
         continue
       }
-      if (meta?.drive_ready === false) {
+      if (!fromDrive && meta?.drive_ready === false) {
         urls.push(null)
         continue
       }
       try {
-        const res = await api.get(`/screen-frames/${frameId}/image`, { responseType: 'blob', validateStatus: (s) => s === 200 || s === 202 })
+        const urlPath = fromDrive
+          ? `/screen-frames/${frameId}/image?source=drive`
+          : `/screen-frames/${frameId}/image`
+        const res = await api.get(urlPath, { responseType: 'blob', validateStatus: (s) => s === 200 || s === 202 })
         if (res.status === 202) {
           urls.push(null)
           continue
         }
         const url = URL.createObjectURL(res.data)
-        imageCache.current[frameId] = url
+        imageCache.current[`${frameId}_${cacheKey}`] = url
         urls.push(url)
       } catch (e) {
         if (e.response?.status === 202) {
@@ -195,7 +202,7 @@ export default function ScreenTimelinePage() {
       }
     }
     setImageUrls(urls)
-  }, [])
+  }, [imageSource])
 
   useEffect(() => {
     loadUsers()
@@ -271,10 +278,15 @@ export default function ScreenTimelinePage() {
   const goPrev = () => setCurrentIndex((i) => Math.max(0, i - 1))
   const goNext = () => setCurrentIndex((i) => Math.min(framesBySecondFiltered.length - 1, i + 1))
 
+  // Limpar cache de imagens ao trocar fonte para forçar novo carregamento
+  useEffect(() => {
+    setImageUrls([])
+  }, [imageSource])
+
   // Limpar object URLs ao desmontar
   useEffect(() => {
     return () => {
-      Object.values(imageCache.current).forEach((url) => URL.revokeObjectURL(url))
+      Object.values(imageCache.current).forEach((url) => typeof url === 'string' && url.startsWith('blob:') && URL.revokeObjectURL(url))
       imageCache.current = {}
     }
   }, [])
@@ -331,6 +343,21 @@ export default function ScreenTimelinePage() {
               onChange={(e) => setFilterEndTime(e.target.value)}
               className="glass-input text-gray-900 dark:text-white px-3 py-2 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Fonte das imagens</label>
+            <select
+              value={imageSource}
+              onChange={(e) => setImageSource(e.target.value)}
+              className="glass-input text-gray-900 dark:text-white px-3 py-2 min-w-[180px] focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-400"
+              title="Automático: cache local (últimas 2h) ou Drive. Google Drive: sempre carrega do Drive (pode levar mais tempo)."
+            >
+              <option value="auto">Automático (cache + Drive)</option>
+              <option value="drive">Google Drive</option>
+            </select>
+            {imageSource === 'drive' && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Carregamento do período pelo Drive; aguarde o loading.</p>
+            )}
           </div>
           <button
             onClick={loadFrames}
@@ -423,8 +450,12 @@ export default function ScreenTimelinePage() {
                       />
                     ) : (
                       <div className="text-gray-400 text-sm flex flex-col items-center gap-2">
-                        <span className="animate-pulse">Carregando frame…</span>
-                        <span className="text-xs">(enviando ao Drive)</span>
+                        <span className="animate-pulse">
+                          {imageSource === 'drive' ? 'Carregando do Google Drive…' : 'Carregando frame…'}
+                        </span>
+                        {imageSource !== 'drive' && (
+                          <span className="text-xs">(enviando ao Drive)</span>
+                        )}
                       </div>
                     )}
                   </div>
