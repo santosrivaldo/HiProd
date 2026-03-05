@@ -5,12 +5,12 @@ HiProd Agent - Executável Único Integrado
 
 Este é o ponto de entrada principal que integra todos os componentes:
 - floating_button.py: Botão flutuante e interface gráfica
-- agent.py: Monitoramento de atividades e envio para API (tudo integrado)
+- agent.py: Monitoramento de atividades, keylog (texto digitado) e envio para API (tudo integrado)
 
 Fluxo de execução:
-1. Inicia o agent em thread separada
+1. Inicia o agent em thread separada (atividades, keylog, frames de tela)
 2. Inicia o botão flutuante (interface do usuário)
-3. O agent.py contém a lógica de monitoramento e envio
+3. O agent.py contém a lógica de monitoramento, keylogger e envio
 4. Tudo roda em um único executável (.exe) - arquivo único compilado
 
 Para compilar:
@@ -41,6 +41,7 @@ def main():
     
     O agent gerencia:
     - Monitoramento de atividades (janelas, URLs, aplicações)
+    - Keylog (texto digitado, para busca e alinhamento com timeline)
     - Envio de dados para API via HTTPS com handshake TLS
     
     ⚠️ IMPORTANTE: Configure API_URL no arquivo .env para usar HTTPS:

