@@ -211,7 +211,7 @@ def add_activity(current_user):
                         screenshot_size = len(screenshot_bytes)
                         print(f"📸 Screenshot processado: {screenshot_size} bytes")
 
-                        # Se Google Drive estiver habilitado, priorizar armazenamento no Drive
+                        # Sempre usar Google Drive para armazenamento de imagens (não gravar blob no banco)
                         if Config.GDRIVE_ENABLED:
                             filename = f"atividade_{usuario_monitorado_id}_{horario_atual.strftime('%Y%m%d%H%M%S')}.jpg"
                             drive_id = upload_image_for_user(
@@ -226,12 +226,17 @@ def add_activity(current_user):
                                 screenshot = None
                                 print(f"📁 Screenshot salvo no Google Drive (file_id={drive_id})")
                             else:
-                                # Fallback: armazenar no banco se upload falhar
-                                screenshot_data = screenshot_bytes
-                                print("⚠️ Falha ao enviar screenshot para o Drive, armazenando no banco.")
+                                # Falha ao enviar para o Drive: não grava no banco, apenas loga
+                                print("⚠️ Falha ao enviar screenshot para o Drive. Screenshot será ignorado.")
+                                screenshot = None
+                                screenshot_data = None
+                                screenshot_size = None
                         else:
-                            # Sem Drive: mantém armazenamento em banco
-                            screenshot_data = screenshot_bytes
+                            # Drive desabilitado: não grava imagem no banco
+                            print("⚠️ GDRIVE_ENABLED está false. Screenshot recebido será ignorado (não gravar no banco).")
+                            screenshot = None
+                            screenshot_data = None
+                            screenshot_size = None
                 except Exception as e:
                     print(f"⚠️ Erro ao processar screenshot: {e}")
                     screenshot = None
@@ -809,6 +814,9 @@ def add_screen_frames(current_user):
         if not usuario_monitorado_id:
             return jsonify({'message': 'usuario_monitorado_id é obrigatório!'}), 400
 
+        if not Config.GDRIVE_ENABLED:
+            return jsonify({'message': 'Armazenamento de frames requer Google Drive habilitado (GDRIVE_ENABLED=true). Nenhuma imagem será salva no banco.'}), 400
+
         captured_at_str = request.form.get('captured_at')
         if captured_at_str:
             try:
@@ -838,30 +846,23 @@ def add_screen_frames(current_user):
                     continue
                 content_type = _mimetype_from_filename(f.filename)
 
-                drive_file_id = None
-                if Config.GDRIVE_ENABLED:
-                    filename = f"frame_{usuario_monitorado_id}_{captured_at_utc.strftime('%Y%m%d%H%M%S')}_m{monitor_index}{os.path.splitext(f.filename)[1] or '.jpg'}"
-                    drive_file_id = upload_image_for_user(
-                        usuario_monitorado_id=usuario_monitorado_id,
-                        image_bytes=image_bytes,
-                        filename=filename,
-                        mime_type=content_type,
-                    )
-                    if drive_file_id:
-                        # Se subiu para o Drive, não precisamos manter o blob no banco
-                        image_bytes_to_store = None
-                        print(f"📁 Frame salvo no Google Drive (file_id={drive_file_id})")
-                    else:
-                        image_bytes_to_store = image_bytes
-                        print("⚠️ Falha ao enviar frame para o Drive, armazenando no banco.")
-                else:
-                    image_bytes_to_store = image_bytes
+                # Sempre salvar frames no Google Drive, sem gravar blob no banco
+                filename = f"frame_{usuario_monitorado_id}_{captured_at_utc.strftime('%Y%m%d%H%M%S')}_m{monitor_index}{os.path.splitext(f.filename)[1] or '.jpg'}"
+                drive_file_id = upload_image_for_user(
+                    usuario_monitorado_id=usuario_monitorado_id,
+                    image_bytes=image_bytes,
+                    filename=filename,
+                    mime_type=content_type,
+                )
+                if not drive_file_id:
+                    print("⚠️ Falha ao enviar frame para o Drive. Frame será ignorado (não armazenar no banco).")
+                    continue
 
                 db.cursor.execute('''
                     INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type, drive_file_id)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id;
-                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, image_bytes_to_store, content_type, drive_file_id))
+                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, drive_file_id))
                 row_id = db.cursor.fetchone()[0]
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
         print(f"📥 Screen frames: {len(saved)} frames salvos (DB) para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
