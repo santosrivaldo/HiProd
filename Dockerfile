@@ -7,15 +7,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps for psycopg2 e SSL (certificados)
+# System deps para psycopg2 e SSL (certificados para HTTPS com Google APIs)
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
      build-essential \
      libpq-dev \
      curl \
      ca-certificates \
+     openssl \
   && update-ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+# Garantir que Python/httplib2 usem o bundle de CAs do sistema
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 # Install Python deps
 COPY requirements.txt ./
