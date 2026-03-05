@@ -139,6 +139,7 @@ def init_db():
                 departamento_id INTEGER REFERENCES departamentos(id),
                 cargo VARCHAR(100),
                 ativo BOOLEAN DEFAULT TRUE,
+                google_drive_folder_id VARCHAR(128) DEFAULT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -155,6 +156,7 @@ def init_db():
                 ('bitrix_user_id', "INTEGER DEFAULT NULL"),
                 ('foto_url', "VARCHAR(500) DEFAULT NULL"),
                 ('usuario_id', "UUID REFERENCES usuarios(id) ON DELETE SET NULL"),
+                ('google_drive_folder_id', "VARCHAR(128) DEFAULT NULL"),
             ]
 
             for column_name, column_type in columns_to_add:
@@ -384,7 +386,8 @@ def init_db():
                 ('screenshot', "TEXT"),
                 ('screenshot_data', "BYTEA"),
                 ('screenshot_size', "INTEGER"),
-                ('screenshot_format', "VARCHAR(10) DEFAULT 'JPEG'")
+                ('screenshot_format', "VARCHAR(10) DEFAULT 'JPEG'"),
+                ('screenshot_drive_file_id', "VARCHAR(128)")
             ]
 
             for col, coltype in screenshot_columns:
@@ -448,6 +451,7 @@ def init_db():
                 file_path VARCHAR(512),
                 image_data BYTEA,
                 content_type VARCHAR(50) DEFAULT 'image/jpeg',
+                drive_file_id VARCHAR(128),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (usuario_monitorado_id) REFERENCES usuarios_monitorados (id) ON DELETE CASCADE
             );
@@ -470,6 +474,9 @@ def init_db():
               END IF;
               IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='screen_frames' AND column_name='content_type') THEN
                 ALTER TABLE screen_frames ADD COLUMN content_type VARCHAR(50) DEFAULT 'image/jpeg';
+              END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='screen_frames' AND column_name='drive_file_id') THEN
+                ALTER TABLE screen_frames ADD COLUMN drive_file_id VARCHAR(128);
               END IF;
             END $$;
             ''')

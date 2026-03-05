@@ -6,6 +6,7 @@ from ..database import DatabaseConnection
 from ..utils import classify_activity_with_tags, get_brasilia_now, format_datetime_brasilia
 from ..permissions import get_allowed_usuario_monitorado_ids
 from ..config import Config
+from ..google_drive_service import upload_image_for_user, download_image
 import re
 import base64
 import os
@@ -194,6 +195,7 @@ def add_activity(current_user):
             screenshot_size = None
             screenshot_format = 'JPEG'
             screenshot = data.get('screenshot')
+            screenshot_drive_file_id = None
             
             if screenshot:
                 try:
@@ -206,9 +208,30 @@ def add_activity(current_user):
                         screenshot_data = None
                         screenshot_size = None
                     else:
-                        screenshot_data = screenshot_bytes
                         screenshot_size = len(screenshot_bytes)
                         print(f"📸 Screenshot processado: {screenshot_size} bytes")
+
+                        # Se Google Drive estiver habilitado, priorizar armazenamento no Drive
+                        if Config.GDRIVE_ENABLED:
+                            filename = f"atividade_{usuario_monitorado_id}_{horario_atual.strftime('%Y%m%d%H%M%S')}.jpg"
+                            drive_id = upload_image_for_user(
+                                usuario_monitorado_id=usuario_monitorado_id,
+                                image_bytes=screenshot_bytes,
+                                filename=filename,
+                                mime_type=f"image/{screenshot_format.lower() if screenshot_format else 'jpeg'}",
+                            )
+                            if drive_id:
+                                screenshot_drive_file_id = drive_id
+                                screenshot_data = None
+                                screenshot = None
+                                print(f"📁 Screenshot salvo no Google Drive (file_id={drive_id})")
+                            else:
+                                # Fallback: armazenar no banco se upload falhar
+                                screenshot_data = screenshot_bytes
+                                print("⚠️ Falha ao enviar screenshot para o Drive, armazenando no banco.")
+                        else:
+                            # Sem Drive: mantém armazenamento em banco
+                            screenshot_data = screenshot_bytes
                 except Exception as e:
                     print(f"⚠️ Erro ao processar screenshot: {e}")
                     screenshot = None
@@ -234,14 +257,14 @@ def add_activity(current_user):
                 INSERT INTO atividades
                 (usuario_monitorado_id, ociosidade, active_window, titulo_janela, categoria, produtividade,
                  horario, duracao, ip_address, user_agent, domain, application, face_presence_time,
-                 screenshot, screenshot_data, screenshot_size, screenshot_format)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 screenshot, screenshot_data, screenshot_size, screenshot_format, screenshot_drive_file_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id;
             ''', (
                 usuario_monitorado_id, ociosidade, active_window, titulo_janela,
                 'pending', 'neutral', horario_atual,
                 duracao, ip_address, user_agent, domain, application, face_presence_time,
-                screenshot, screenshot_data, screenshot_size, screenshot_format
+                screenshot, screenshot_data, screenshot_size, screenshot_format, screenshot_drive_file_id
             ))
 
             activity_id = db.cursor.fetchone()[0]
@@ -373,7 +396,7 @@ def get_atividades(current_user):
                         MAX(a.domain) as domain,
                         MAX(a.application) as application,
                         DATE(a.horario) as data_atividade,
-                        MAX(CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END)::boolean as has_screenshot,
+                        MAX(CASE WHEN a.screenshot IS NOT NULL OR a.screenshot_drive_file_id IS NOT NULL THEN 1 ELSE 0 END)::boolean as has_screenshot,
                         MAX(a.screenshot_size) as screenshot_size,
                         MAX(a.face_presence_time) as face_presence_time
                     FROM atividades a
@@ -400,7 +423,7 @@ def get_atividades(current_user):
                         COALESCE(a.duracao, 10) as duracao_total,
                         a.domain,
                         a.application,
-                        CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
+                        CASE WHEN a.screenshot IS NOT NULL OR a.screenshot_drive_file_id IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
                         a.screenshot_size,
                         a.face_presence_time
                     FROM atividades a
@@ -657,9 +680,9 @@ def get_screenshot(current_user, activity_id):
         with DatabaseConnection() as db:
             # Buscar screenshot da atividade
             db.cursor.execute('''
-                SELECT screenshot_data, screenshot_format, screenshot_size, screenshot
+                SELECT screenshot_data, screenshot_format, screenshot_size, screenshot, screenshot_drive_file_id
                 FROM atividades 
-                WHERE id = %s AND (screenshot_data IS NOT NULL OR screenshot IS NOT NULL)
+                WHERE id = %s AND (screenshot_data IS NOT NULL OR screenshot IS NOT NULL OR screenshot_drive_file_id IS NOT NULL)
             ''', (activity_id,))
             
             result = db.cursor.fetchone()
@@ -667,7 +690,21 @@ def get_screenshot(current_user, activity_id):
             if not result:
                 return jsonify({'error': 'Screenshot não encontrado'}), 404
             
-            screenshot_data, screenshot_format, screenshot_size, screenshot_b64 = result
+            screenshot_data, screenshot_format, screenshot_size, screenshot_b64, screenshot_drive_file_id = result
+
+            # Priorizar dados vindos do Google Drive
+            if screenshot_drive_file_id and Config.GDRIVE_ENABLED:
+                drive_result = download_image(screenshot_drive_file_id)
+                if drive_result:
+                    image_bytes, mime_type = drive_result
+                    return Response(
+                        image_bytes,
+                        mimetype=mime_type,
+                        headers={
+                            'Content-Length': str(len(image_bytes)),
+                            'Cache-Control': 'public, max-age=3600'
+                        }
+                    )
             
             # Se temos dados binários, usar eles
             if screenshot_data:
@@ -801,11 +838,30 @@ def add_screen_frames(current_user):
                     continue
                 content_type = _mimetype_from_filename(f.filename)
 
+                drive_file_id = None
+                if Config.GDRIVE_ENABLED:
+                    filename = f"frame_{usuario_monitorado_id}_{captured_at_utc.strftime('%Y%m%d%H%M%S')}_m{monitor_index}{os.path.splitext(f.filename)[1] or '.jpg'}"
+                    drive_file_id = upload_image_for_user(
+                        usuario_monitorado_id=usuario_monitorado_id,
+                        image_bytes=image_bytes,
+                        filename=filename,
+                        mime_type=content_type,
+                    )
+                    if drive_file_id:
+                        # Se subiu para o Drive, não precisamos manter o blob no banco
+                        image_bytes_to_store = None
+                        print(f"📁 Frame salvo no Google Drive (file_id={drive_file_id})")
+                    else:
+                        image_bytes_to_store = image_bytes
+                        print("⚠️ Falha ao enviar frame para o Drive, armazenando no banco.")
+                else:
+                    image_bytes_to_store = image_bytes
+
                 db.cursor.execute('''
-                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type, drive_file_id)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id;
-                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, image_bytes, content_type))
+                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, image_bytes_to_store, content_type, drive_file_id))
                 row_id = db.cursor.fetchone()[0]
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
         print(f"📥 Screen frames: {len(saved)} frames salvos (DB) para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
@@ -891,13 +947,23 @@ def get_screen_frame_image(current_user, frame_id):
     try:
         with DatabaseConnection() as db:
             db.cursor.execute(
-                'SELECT image_data, content_type, file_path FROM screen_frames WHERE id = %s;',
+                'SELECT image_data, content_type, file_path, drive_file_id FROM screen_frames WHERE id = %s;',
                 (frame_id,)
             )
             row = db.cursor.fetchone()
         if not row:
             return jsonify({'message': 'Frame não encontrado!'}), 404
-        image_data, content_type, file_path = row
+        image_data, content_type, file_path, drive_file_id = row
+
+        # Priorizar imagem armazenada no Google Drive
+        if drive_file_id and Config.GDRIVE_ENABLED:
+            drive_result = download_image(drive_file_id)
+            if drive_result:
+                from io import BytesIO
+                image_bytes, mime_type = drive_result
+                mimetype = (mime_type or 'image/jpeg').strip() or 'image/jpeg'
+                return send_file(BytesIO(image_bytes), mimetype=mimetype, max_age=3600)
+
         if image_data:
             from io import BytesIO
             mimetype = (content_type or 'image/jpeg').strip() or 'image/jpeg'
@@ -1479,7 +1545,7 @@ def get_atividades_by_token():
                     a.application,
                     a.ip_address,
                     a.user_agent,
-                    CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
+                    CASE WHEN a.screenshot IS NOT NULL OR a.screenshot_drive_file_id IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
                     a.screenshot_size,
                     a.face_presence_time,
                     a.created_at,

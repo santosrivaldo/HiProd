@@ -34,8 +34,15 @@ class Config:
     # Token de API padrão do sistema (gerado automaticamente)
     SYSTEM_API_TOKEN = None  # Será gerado na primeira inicialização
 
-    # Pasta para upload de frames de tela (timeline)
+    # Pasta para upload de frames de tela (timeline) - legado
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'screen_frames'))
+
+    # Google Drive - armazenamento de imagens (screenshots e timeline)
+    GDRIVE_ENABLED = os.getenv('GDRIVE_ENABLED', 'false').lower() == 'true'
+    # Caminho para o arquivo JSON da service account
+    GDRIVE_SERVICE_ACCOUNT_FILE = os.getenv('GDRIVE_SERVICE_ACCOUNT_FILE', '').strip()
+    # Pasta raiz onde serão criadas as pastas por usuário (white label por cliente pode usar outra raiz)
+    GDRIVE_ROOT_FOLDER_ID = os.getenv('GDRIVE_ROOT_FOLDER_ID', '').strip()
 
     # SSO: domínio de e-mail corporativo (nome do usuário = parte local do e-mail)
     # Ex.: rivaldo.santos -> rivaldo.santos@grupohi.com.br
