@@ -1,6 +1,8 @@
 import io
 import logging
 import os
+import ssl
+import time
 from typing import Optional, Tuple
 
 from google.oauth2 import service_account, credentials as oauth_credentials
@@ -12,7 +14,21 @@ from .database import DatabaseConnection
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
+# Retentativas em falhas intermitentes de SSL/rede
+_MAX_DRIVE_RETRIES = 3
+_DRIVE_RETRY_DELAY_SEC = 2
+
 _drive_service = None
+
+
+def _is_retryable_error(exc: BaseException) -> bool:
+    """Erros de SSL ou rede que vale a pena tentar de novo."""
+    if isinstance(exc, ssl.SSLError):
+        return True
+    msg = str(exc).lower()
+    if "record layer failure" in msg or "ssl" in msg or "connection" in msg:
+        return True
+    return False
 
 
 def _build_credentials():
@@ -166,24 +182,40 @@ def upload_image_for_user(
         "parents": [folder_id],
     }
 
-    media = MediaIoBaseUpload(io.BytesIO(image_bytes), mimetype=mime_type, resumable=False)
-
-    try:
-        # supportsAllDrives=True para upload em pasta dentro de Drive compartilhado
-        created = (
-            service.files()
-            .create(
-                body=file_metadata,
-                media_body=media,
-                fields="id",
-                supportsAllDrives=True,
+    last_error = None
+    for attempt in range(1, _MAX_DRIVE_RETRIES + 1):
+        try:
+            # Nova mídia a cada tentativa (stream é consumido)
+            media = MediaIoBaseUpload(
+                io.BytesIO(image_bytes), mimetype=mime_type, resumable=False
             )
-            .execute()
-        )
-        return created.get("id")
-    except Exception as exc:
-        logging.exception("Erro ao fazer upload de imagem para o Drive: %s", exc)
-        return None
+            created = (
+                service.files()
+                .create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id",
+                    supportsAllDrives=True,
+                )
+                .execute()
+            )
+            return created.get("id")
+        except Exception as exc:
+            last_error = exc
+            if attempt < _MAX_DRIVE_RETRIES and _is_retryable_error(exc):
+                logging.warning(
+                    "Falha SSL/rede no upload para o Drive (tentativa %s/%s), repetindo em %ss: %s",
+                    attempt,
+                    _MAX_DRIVE_RETRIES,
+                    _DRIVE_RETRY_DELAY_SEC,
+                    exc,
+                )
+                time.sleep(_DRIVE_RETRY_DELAY_SEC)
+            else:
+                break
+
+    logging.exception("Erro ao fazer upload de imagem para o Drive: %s", last_error)
+    return None
 
 
 def download_image(file_id: str) -> Optional[Tuple[bytes, str]]:
