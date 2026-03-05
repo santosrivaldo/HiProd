@@ -156,7 +156,6 @@ def buscar_atividades_impl(token_data, *args, **kwargs):
                         a.user_agent,
                         CASE WHEN a.screenshot IS NOT NULL THEN 1 ELSE 0 END::boolean as has_screenshot,
                         a.screenshot_size,
-                        a.face_presence_time,
                         a.created_at,
                         a.updated_at
                     FROM atividades a
@@ -194,9 +193,8 @@ def buscar_atividades_impl(token_data, *args, **kwargs):
                         'user_agent': row[14],
                         'has_screenshot': bool(row[15]) if row[15] is not None else False,
                         'screenshot_size': int(row[16]) if row[16] is not None else None,
-                        'face_presence_time': int(row[17]) if row[17] is not None else None,
-                        'created_at': row[18].isoformat() if row[18] else None,
-                        'updated_at': row[19].isoformat() if row[19] else None
+                        'created_at': row[17].isoformat() if row[17] else None,
+                        'updated_at': row[18].isoformat() if row[18] else None
                     })
                 except (IndexError, TypeError, AttributeError) as row_error:
                     print(f"⚠️ Erro ao processar linha: {row_error}")

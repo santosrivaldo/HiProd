@@ -105,7 +105,6 @@ class AgentBuilder:
             return False
         
         # Verificar se os arquivos principais existem
-        # NOTA: face_detection.py está integrado em agent.py; lock_screen foi removido (opcional)
         main_file = self.agent_dir / "main.py"
         agent_file = self.agent_dir / "agent.py"
         
@@ -114,17 +113,6 @@ class AgentBuilder:
             return False
         if not agent_file.exists():
             self.print_error("Arquivo agent.py nao encontrado!")
-            return False
-        
-        # Verificar se agent.py contém o código de detecção facial integrado
-        try:
-            with open(agent_file, 'r', encoding='utf-8') as f:
-                agent_content = f.read()
-                if 'FACE_DETECTION_AVAILABLE' not in agent_content:
-                    self.print_error("Arquivo agent.py nao contem codigo de deteccao facial integrado!")
-                    return False
-        except Exception as e:
-            self.print_error(f"Erro ao verificar agent.py: {e}")
             return False
         
         self.print_success("Todos os pre-requisitos atendidos")

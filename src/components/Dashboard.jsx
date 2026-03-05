@@ -247,8 +247,7 @@ export default function Dashboard() {
         nonproductive: 0,
         neutral: 0,
         idle: 0,
-        total: 0,
-        facePresence: 0
+        total: 0
       }
 
       filteredActivities.forEach(activity => {
@@ -267,11 +266,6 @@ export default function Dashboard() {
           } else {
             summary.neutral += duration
           }
-        }
-        
-        // Adicionar tempo de presenÃ§a facial ao summary
-        if (activity.face_presence_time) {
-          summary.facePresence += activity.face_presence_time
         }
       })
 
@@ -387,8 +381,6 @@ export default function Dashboard() {
 
       // Processar estatÃ­sticas por usuÃ¡rio
       const userStatsMap = {}
-      const presenceStatsMap = {} // EstatÃ­sticas de presenÃ§a facial
-      
       filteredActivities.forEach(activity => {
         if (!activity?.usuario_monitorado_id) return
         
@@ -429,35 +421,9 @@ export default function Dashboard() {
             userStatsMap[userId].neutral += duration
           }
         }
-        
-        // Processar dados de presenÃ§a facial
-        if (activity.face_presence_time !== null && activity.face_presence_time !== undefined) {
-          if (!presenceStatsMap[userId]) {
-            presenceStatsMap[userId] = {
-              nome: userName,
-              totalPresenceTime: 0,
-              activitiesWithPresence: 0,
-              maxPresenceTime: 0
-            }
-          }
-          const presenceTime = parseInt(activity.face_presence_time) || 0
-          presenceStatsMap[userId].totalPresenceTime = Math.max(
-            presenceStatsMap[userId].totalPresenceTime,
-            presenceTime
-          )
-          presenceStatsMap[userId].maxPresenceTime = Math.max(
-            presenceStatsMap[userId].maxPresenceTime,
-            presenceTime
-          )
-          presenceStatsMap[userId].activitiesWithPresence += 1
-        }
       })
 
       const userStats = Object.values(userStatsMap)
-      const presenceStats = Object.values(presenceStatsMap)
-      
-      // Calcular tempo total de presenÃ§a no summary
-      const totalPresenceTime = presenceStats.reduce((sum, stat) => sum + stat.maxPresenceTime, 0)
 
       // Atividades recentes
       const recentActivities = filteredActivities
@@ -539,8 +505,6 @@ export default function Dashboard() {
         domainData,
         applicationData,
         hourlyData,
-        presenceStats,
-        totalPresenceTime,
         rawActivities: activities,
         filteredActivities,
         timeByApplication,
@@ -677,8 +641,6 @@ export default function Dashboard() {
     domainData = [],
     applicationData = [],
     hourlyData = [],
-    presenceStats = [],
-    totalPresenceTime = 0,
     timeByApplication = [],
     userTimelineMap = {},
     groupOptions = []

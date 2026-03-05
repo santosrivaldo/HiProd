@@ -12,7 +12,6 @@ import WorkScheduleManagement from './components/WorkScheduleManagement'
 import Settings from './components/Settings'
 import TokenManagement from './components/TokenManagement'
 import ScreenshotPage from './pages/ScreenshotPage'
-import FacePresencePage from './pages/FacePresencePage'
 import ScreenTimelinePage from './pages/ScreenTimelinePage'
 import KeylogSearchPage from './pages/KeylogSearchPage'
 import UserDetailPage from './pages/UserDetailPage'
@@ -66,7 +65,6 @@ function AppContent() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/tokens" element={<TokenManagement />} />
         <Route path="/screenshots/:activityId" element={<ScreenshotPage />} />
-        <Route path="/face-presence" element={<FacePresencePage />} />
         <Route path="/timeline" element={<ScreenTimelinePage />} />
         <Route path="/dvr" element={<DvrPage />} />
         <Route path="/keylog" element={<KeylogSearchPage />} />

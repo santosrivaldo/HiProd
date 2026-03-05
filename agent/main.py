@@ -5,12 +5,12 @@ HiProd Agent - Executável Único Integrado
 
 Este é o ponto de entrada principal que integra todos os componentes:
 - floating_button.py: Botão flutuante e interface gráfica
-- agent.py: Monitoramento de atividades, envio para API e detecção facial (tudo integrado)
+- agent.py: Monitoramento de atividades e envio para API (tudo integrado)
 
 Fluxo de execução:
 1. Inicia o agent em thread separada
 2. Inicia o botão flutuante (interface do usuário)
-3. O agent.py contém todo o código de detecção facial integrado
+3. O agent.py contém a lógica de monitoramento e envio
 4. Tudo roda em um único executável (.exe) - arquivo único compilado
 
 Para compilar:
@@ -42,7 +42,6 @@ def main():
     O agent gerencia:
     - Monitoramento de atividades (janelas, URLs, aplicações)
     - Envio de dados para API via HTTPS com handshake TLS
-    - Detecção facial e rastreamento de presença
     
     ⚠️ IMPORTANTE: Configure API_URL no arquivo .env para usar HTTPS:
     API_URL=https://hiprod.grupohi.com.br

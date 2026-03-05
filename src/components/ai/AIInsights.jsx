@@ -102,22 +102,7 @@ export default function AIInsights({ data, onAnalyze }) {
       }
     }
 
-    // Insight 5: Presença Facial
-    if (data.summary.facePresence > 0) {
-      const presencePercent = (data.summary.facePresence / total) * 100
-      if (presencePercent < 50) {
-        insights.push({
-          type: 'info',
-          icon: InformationCircleIcon,
-          title: 'Presença Facial',
-          message: `Apenas ${presencePercent.toFixed(1)}% do tempo teve presença facial detectada. Verifique se a câmera está funcionando corretamente.`,
-          action: 'Verificar câmera',
-          priority: 'low'
-        })
-      }
-    }
-
-    // Insight 6: Horários
+    // Insight 5: Horários
     if (data.hourlyData && data.hourlyData.length > 0) {
       const peakHour = data.hourlyData.reduce((max, h) => 
         (h.productive || 0) > (max.productive || 0) ? h : max

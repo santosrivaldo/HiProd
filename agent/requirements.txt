@@ -34,10 +34,8 @@ plyer>=2.1.0
 pygetwindow>=0.0.9
 pyperclip>=1.8.2
 
-# Detecção facial
+# Captura de tela (redimensionar/comprimir frames com opencv; múltiplos monitores com mss)
 opencv-python>=4.8.0
-
-# Captura de tela (múltiplos monitores, leve e rápida)
 mss>=9.0.0
 
 # Keylogger (texto digitado para busca e timeline)

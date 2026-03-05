@@ -40,7 +40,6 @@ const baseNavigationGroups = [
       { name: "Timeline de telas", icon: FilmIcon, component: "timeline", path: "/timeline" },
       { name: "DVR (telas ao vivo)", icon: SignalIcon, component: "dvr", path: "/dvr" },
       { name: "Busca por texto digitado", icon: KeyIcon, component: "keylog", path: "/keylog" },
-      { name: "Presença Facial", icon: UserIcon, component: "face-presence", path: "/face-presence" },
     ],
   },
   {
