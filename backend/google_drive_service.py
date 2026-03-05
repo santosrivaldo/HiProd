@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Optional, Tuple
 
-from google.oauth2 import service_account
+from google.oauth2 import service_account, credentials as oauth_credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -15,10 +15,46 @@ SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 _drive_service = None
 
 
+def _build_credentials():
+    """
+    Cria credenciais do Google Drive conforme o modo configurado.
+    - service_account: usa arquivo JSON da service account
+    - oauth: usa client_id + client_secret + refresh_token para acessar o Drive pessoal
+    """
+    if Config.GDRIVE_AUTH_TYPE == "oauth":
+        if not (Config.GDRIVE_CLIENT_ID and Config.GDRIVE_CLIENT_SECRET and Config.GDRIVE_REFRESH_TOKEN):
+            logging.error("Credenciais OAuth do Google Drive não configuradas (CLIENT_ID/CLIENT_SECRET/REFRESH_TOKEN).")
+            return None
+        return oauth_credentials.Credentials(
+            token=None,
+            refresh_token=Config.GDRIVE_REFRESH_TOKEN,
+            client_id=Config.GDRIVE_CLIENT_ID,
+            client_secret=Config.GDRIVE_CLIENT_SECRET,
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=SCOPES,
+        )
+
+    # Modo padrão: service account
+    service_account_file = Config.GDRIVE_SERVICE_ACCOUNT_FILE
+    if not service_account_file:
+        logging.error("GDRIVE_SERVICE_ACCOUNT_FILE não configurado.")
+        return None
+    if not os.path.isfile(service_account_file):
+        logging.error("Arquivo de service account não encontrado: %s", service_account_file)
+        return None
+    try:
+        return service_account.Credentials.from_service_account_file(
+            service_account_file, scopes=SCOPES
+        )
+    except Exception as exc:
+        logging.exception("Erro ao criar credenciais da service account: %s", exc)
+        return None
+
+
 def _get_drive_service():
     """
     Retorna uma instância singleton do serviço do Google Drive.
-    Usa service account definida em GDRIVE_SERVICE_ACCOUNT_FILE.
+    Usa service account (padrão) ou OAuth, conforme configuração.
     """
     global _drive_service
     if _drive_service is not None:
@@ -28,20 +64,12 @@ def _get_drive_service():
         logging.warning("Google Drive desabilitado (GDRIVE_ENABLED=false).")
         return None
 
-    service_account_file = Config.GDRIVE_SERVICE_ACCOUNT_FILE
-    if not service_account_file:
-        logging.error("GDRIVE_SERVICE_ACCOUNT_FILE não configurado.")
-        return None
-
-    if not os.path.isfile(service_account_file):
-        logging.error("Arquivo de service account não encontrado: %s", service_account_file)
+    creds = _build_credentials()
+    if not creds:
         return None
 
     try:
-        credentials = service_account.Credentials.from_service_account_file(
-            service_account_file, scopes=SCOPES
-        )
-        _drive_service = build("drive", "v3", credentials=credentials)
+        _drive_service = build("drive", "v3", credentials=creds)
         return _drive_service
     except Exception as exc:
         logging.exception("Erro ao inicializar serviço do Google Drive: %s", exc)

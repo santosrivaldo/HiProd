@@ -39,8 +39,14 @@ class Config:
 
     # Google Drive - armazenamento de imagens (screenshots e timeline)
     GDRIVE_ENABLED = os.getenv('GDRIVE_ENABLED', 'false').lower() == 'true'
-    # Caminho para o arquivo JSON da service account
+    # Tipo de autenticação: 'service_account' ou 'oauth'
+    GDRIVE_AUTH_TYPE = os.getenv('GDRIVE_AUTH_TYPE', 'service_account').strip().lower()
+    # Caminho para o arquivo JSON da service account (modo service_account)
     GDRIVE_SERVICE_ACCOUNT_FILE = os.getenv('GDRIVE_SERVICE_ACCOUNT_FILE', '').strip()
+    # Credenciais OAuth (modo oauth) para usar o Drive da conta rivaldo.santos@...
+    GDRIVE_CLIENT_ID = os.getenv('GDRIVE_CLIENT_ID', '').strip()
+    GDRIVE_CLIENT_SECRET = os.getenv('GDRIVE_CLIENT_SECRET', '').strip()
+    GDRIVE_REFRESH_TOKEN = os.getenv('GDRIVE_REFRESH_TOKEN', '').strip()
     # Pasta raiz onde serão criadas as pastas por usuário (white label por cliente pode usar outra raiz)
     GDRIVE_ROOT_FOLDER_ID = os.getenv('GDRIVE_ROOT_FOLDER_ID', '').strip()
 
