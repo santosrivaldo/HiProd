@@ -7,7 +7,7 @@ from ..utils import classify_activity_with_tags, get_brasilia_now, format_dateti
 from ..permissions import get_allowed_usuario_monitorado_ids
 from ..config import Config
 from ..google_drive_service import upload_image_for_user, download_image
-from ..drive_upload_queue import enqueue_frame, start_background_worker, _ensure_queue_dir
+from ..drive_upload_queue import start_background_worker, _ensure_queue_dir
 import re
 import base64
 import os
@@ -864,8 +864,10 @@ def add_screen_frames(current_user):
                     RETURNING id;
                 ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, None))
                 row_id = db.cursor.fetchone()[0]
-                db.conn.commit()
-                enqueue_frame(screen_frame_id=row_id, file_path=temp_path, content_type=content_type)
+                db.cursor.execute('''
+                    INSERT INTO drive_upload_queue (screen_frame_id, file_path, content_type, status)
+                    VALUES (%s, %s, %s, 'pending');
+                ''', (row_id, temp_path, content_type))
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
 
         start_background_worker()
