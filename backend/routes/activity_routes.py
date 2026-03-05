@@ -7,7 +7,11 @@ from ..utils import classify_activity_with_tags, get_brasilia_now, format_dateti
 from ..permissions import get_allowed_usuario_monitorado_ids
 from ..config import Config
 from ..google_drive_service import upload_image_for_user, download_image
-from ..drive_upload_queue import start_background_worker, _ensure_queue_dir
+from ..drive_upload_queue import (
+    start_background_worker,
+    start_midnight_worker,
+    get_day_cache_file_path,
+)
 import re
 import base64
 import os
@@ -837,7 +841,12 @@ def add_screen_frames(current_user):
         if not files or not any(f and f.filename for f in files):
             return jsonify({'message': 'Envie pelo menos um frame em "frames" ou "frames[]"!'}), 400
 
-        queue_dir = _ensure_queue_dir()
+        # Data em Brasília para cache compacto por dia (YYYY-MM-DD/usuario_id)
+        from zoneinfo import ZoneInfo
+        brasilia = ZoneInfo("America/Sao_Paulo")
+        captured_br = captured_at_utc.replace(tzinfo=ZoneInfo("UTC")).astimezone(brasilia)
+        date_brasilia_str = captured_br.strftime("%Y-%m-%d")
+
         saved = []
         with DatabaseConnection() as db:
             for monitor_index, f in enumerate(files):
@@ -847,31 +856,26 @@ def add_screen_frames(current_user):
                 if not image_bytes:
                     continue
                 content_type = _mimetype_from_filename(f.filename)
-
-                # Gravar em arquivo temporário e enfileirar para upload em background
-                temp_name = f"queue_{uuid.uuid4().hex}_{monitor_index}{os.path.splitext(f.filename)[1] or '.jpg'}"
-                temp_path = os.path.join(queue_dir, temp_name)
+                ext = os.path.splitext(f.filename)[1] or ".jpg"
+                unique_name = f"{uuid.uuid4().hex}_{monitor_index}{ext}"
+                cache_path = get_day_cache_file_path(date_brasilia_str, usuario_monitorado_id, unique_name)
                 try:
-                    with open(temp_path, "wb") as out:
+                    with open(cache_path, "wb") as out:
                         out.write(image_bytes)
                 except Exception as e:
-                    print(f"⚠️ Erro ao gravar arquivo da fila: {e}")
+                    print(f"⚠️ Erro ao gravar cache do dia: {e}")
                     continue
 
                 db.cursor.execute('''
-                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type, drive_file_id)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO screen_frames (usuario_monitorado_id, captured_at, monitor_index, image_data, content_type, drive_file_id, file_path)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id;
-                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, None))
+                ''', (usuario_monitorado_id, captured_at_utc, monitor_index, None, content_type, None, cache_path))
                 row_id = db.cursor.fetchone()[0]
-                db.cursor.execute('''
-                    INSERT INTO drive_upload_queue (screen_frame_id, file_path, content_type, status)
-                    VALUES (%s, %s, %s, 'pending');
-                ''', (row_id, temp_path, content_type))
                 saved.append({'id': row_id, 'monitor_index': monitor_index})
 
-        start_background_worker()
-        print(f"📥 Screen frames: {len(saved)} frames enfileirados para usuario_monitorado_id={usuario_monitorado_id} em {captured_at}")
+        start_midnight_worker()
+        print(f"📥 Screen frames: {len(saved)} frames em cache do dia ({date_brasilia_str}) para usuario_monitorado_id={usuario_monitorado_id}")
         return jsonify({
             'message': 'Frames recebidos com sucesso!',
             'count': len(saved),
@@ -933,12 +937,14 @@ def list_screen_frames(current_user):
         for r in rows:
             frame_id, captured_at, monitor_index, file_path, drive_file_id = r
             captured_at_brasilia = format_datetime_brasilia(captured_at) if captured_at else None
+            _full = file_path if (file_path and os.path.isabs(file_path)) else (os.path.join(_ensure_screen_frames_dir(), file_path or '') if file_path else '')
+            drive_ready = bool(drive_file_id) or (bool(_full) and os.path.isfile(_full))
             frames.append({
                 'id': frame_id,
                 'captured_at': captured_at_brasilia or (captured_at.isoformat() if hasattr(captured_at, 'isoformat') else str(captured_at)),
                 'monitor_index': monitor_index,
                 'url': f"/api/screen-frames/{frame_id}/image",
-                'drive_ready': bool(drive_file_id),
+                'drive_ready': drive_ready,
             })
         return jsonify({'frames': frames, 'count': len(frames)})
     except Exception as e:
@@ -963,7 +969,12 @@ def get_screen_frame_image(current_user, frame_id):
             return jsonify({'message': 'Frame não encontrado!'}), 404
         image_data, content_type, file_path, drive_file_id = row
 
-        # Frame ainda na fila de upload (drive_file_id vazio) — retornar 202 para o front exibir "carregando"
+        # Se está no cache do dia (file_path existe no disco), servir do cache
+        if file_path and os.path.isfile(file_path):
+            mimetype = (content_type or 'image/jpeg').strip() or 'image/jpeg'
+            return send_file(file_path, mimetype=mimetype, max_age=3600)
+
+        # Sem cache e sem Drive (frame ainda não disponível)
         if not drive_file_id and Config.GDRIVE_ENABLED:
             return Response(
                 '{"status":"pending","message":"Frame ainda está sendo enviado ao Drive."}',
@@ -986,10 +997,10 @@ def get_screen_frame_image(current_user, frame_id):
             mimetype = (content_type or 'image/jpeg').strip() or 'image/jpeg'
             return send_file(BytesIO(image_data), mimetype=mimetype, max_age=3600)
         if file_path:
-            upload_base = _ensure_screen_frames_dir()
-            full_path = os.path.join(upload_base, file_path)
+            full_path = file_path if os.path.isabs(file_path) else os.path.join(_ensure_screen_frames_dir(), file_path)
             if os.path.isfile(full_path):
-                return send_file(full_path, mimetype='image/jpeg', max_age=3600)
+                mimetype = (content_type or 'image/jpeg').strip() or 'image/jpeg'
+                return send_file(full_path, mimetype=mimetype, max_age=3600)
         return jsonify({'message': 'Arquivo de frame não encontrado!'}), 404
     except Exception as e:
         print(f"❌ Erro ao servir frame {frame_id}: {e}")

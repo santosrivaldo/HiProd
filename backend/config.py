@@ -54,6 +54,13 @@ class Config:
         'GDRIVE_UPLOAD_QUEUE_DIR',
         os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'drive_queue')
     ).strip()
+    # Cache compacto por dia no servidor: YYYY-MM-DD/usuario_id/arquivos. De madrugada envia ao Drive e apaga.
+    GDRIVE_DAY_CACHE_DIR = os.getenv(
+        'GDRIVE_DAY_CACHE_DIR',
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads', 'drive_day_cache')
+    ).strip()
+    # Horário (Brasília) para rodar o job de envio do dia anterior ao Drive (ex: 1 = 01:00)
+    GDRIVE_MIDNIGHT_UPLOAD_HOUR = int(os.getenv('GDRIVE_MIDNIGHT_UPLOAD_HOUR', '1'))
 
     # SSO: domínio de e-mail corporativo (nome do usuário = parte local do e-mail)
     # Ex.: rivaldo.santos -> rivaldo.santos@grupohi.com.br
